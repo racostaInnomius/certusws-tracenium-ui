@@ -28,7 +28,7 @@ import {
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
-import { remediateBatch, getRemediationsBatch, downloadRemediationArtifact } from "../../api/patchManagement";
+import { remediateBatch, getRemediationsBatch } from "../../api/patchManagement";
 import { listFrom } from "../../api/shape";
 import { bulkFixPlan, bulkFixSummary, batchFinished } from "./bulkFixPlan";
 import { outcomeColors, outcomeTone } from "../patch-management/outcomeTone";
@@ -65,6 +65,10 @@ export default function BulkFixDialog({
   // Pedir el escaneo al acabar (capacidad `jobs`): así se VE si los fixes
   // cerraron sus hallazgos, en vez de esperar al ciclo programado.
   canRescan = false,
+  // macOS: añadir a la política macOS de la organización y bajar su perfil.
+  // null = sin permiso de Device Management.
+  onAddToMacPolicy = null,
+  onDownloadMacProfile = null,
   onClose,
   onChanged,         // el llamante recarga la ficha cuando algo se ha lanzado
   notify,
@@ -74,6 +78,7 @@ export default function BulkFixDialog({
   const [mode, setMode] = React.useState(null);       // 'dry_run' | 'apply'
   const [items, setItems] = React.useState([]);        // remediaciones del lote
   const [skipped, setSkipped] = React.useState([]);
+  const [addingToPolicy, setAddingToPolicy] = React.useState(false);
   const titleOf = React.useMemo(() => {
     const m = new Map();
     for (const f of findings ?? []) if (f?.checkId && !m.has(f.checkId)) m.set(f.checkId, f.title || f.checkId);
@@ -145,26 +150,39 @@ export default function BulkFixDialog({
           </Typography>
 
           {plan.profile.length ? (
-            <Alert
-              severity="info"
-              action={
-                <Button
-                  size="small"
-                  onClick={async () => {
-                    try {
-                      const name = await downloadRemediationArtifact({ checkIds: plan.profileCheckIds, format: "mobileconfig" });
-                      notify?.({ severity: "success", message: name ? `Downloaded ${name}.` : "Profile exported." });
-                    } catch (e) {
-                      notify?.({ severity: "error", message: e?.body?.message || e?.message || "Could not export the profile." });
-                    }
-                  }}
-                  sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
-                >
-                  Download one profile
-                </Button>
-              }
-            >
-              {`${plan.profile.length} of the selected findings are settings macOS only enforces through a configuration profile. Download them as one .mobileconfig: upload it to your MDM, or open it on the Mac and approve it in System Settings › Privacy & Security › Profiles.`}
+            <Alert severity="info">
+              <Typography sx={{ fontSize: TEXT.sm }}>
+                {`${plan.profile.length} of the selected findings are settings macOS only enforces through a configuration profile. They go into the organization's macOS policy, and Macs get them with the organization's profile — installed by hand or from your MDM.`}
+              </Typography>
+              {onAddToMacPolicy ? (
+                <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={addingToPolicy}
+                    onClick={async () => {
+                      setAddingToPolicy(true);
+                      try {
+                        await onAddToMacPolicy(plan.profileIntents);
+                      } finally {
+                        setAddingToPolicy(false);
+                      }
+                    }}
+                    sx={{ textTransform: "none", fontWeight: 700 }}
+                  >
+                    {`Add ${plan.profileIntents.length} setting${plan.profileIntents.length === 1 ? "" : "s"} to the macOS policy`}
+                  </Button>
+                  {onDownloadMacProfile ? (
+                    <Button size="small" onClick={() => onDownloadMacProfile()} sx={{ textTransform: "none", fontWeight: 700 }}>
+                      Download the organization's profile
+                    </Button>
+                  ) : null}
+                </Stack>
+              ) : (
+                <Typography sx={{ fontSize: TEXT.xs, mt: 0.5 }}>
+                  Someone with Device Management access can add them to the organization's macOS policy.
+                </Typography>
+              )}
             </Alert>
           ) : null}
 

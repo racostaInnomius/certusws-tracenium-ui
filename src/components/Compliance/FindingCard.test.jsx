@@ -283,14 +283,29 @@ describe("FindingCard (Sprint 4 — one-click fix)", () => {
     expect(screen.queryByText("GPO script")).toBeNull();
   });
 
-  it("macOS sólo-perfil: chip propio (no «Not automated») y Export .mobileconfig", () => {
-    const onExportFix = vi.fn();
-    const plan = { auto: false, handlerId: null, guard: "macOS only enforces this setting through a configuration profile", artifact: "mobileconfig", gpoManaged: false };
-    renderWith({ status: "fail", agentRemediable: false, remediationPlan: plan }, { onRemediate: vi.fn(), onExportFix });
+  it("macOS sólo-perfil: chip propio (no «Not automated») y «Add to macOS policy», sin export suelto", () => {
+    const onAddToPolicy = vi.fn();
+    const plan = {
+      auto: false,
+      handlerId: null,
+      guard: "macOS only enforces this setting through a configuration profile",
+      artifact: "mobileconfig",
+      gpoManaged: false,
+      profileIntents: [{ key: "macos.sharing.allowAirDrop", value: false }],
+    };
+    renderWith({ status: "fail", agentRemediable: false, remediationPlan: plan }, { onRemediate: vi.fn(), onExportFix: vi.fn(), onAddToPolicy });
     expect(screen.getByText("Needs a configuration profile")).toBeInTheDocument();
     expect(screen.queryByText(/^Not automated/)).toBeNull();
-    screen.getByText("Export .mobileconfig").click();
-    expect(onExportFix).toHaveBeenCalledWith(expect.anything(), "mobileconfig");
+    expect(screen.queryByText("Export .mobileconfig")).toBeNull();
+    screen.getByText("Add to macOS policy").click();
+    expect(onAddToPolicy).toHaveBeenCalledWith(expect.objectContaining({ remediationPlan: plan }));
+  });
+
+  it("sin permiso de Device Management: el chip, pero no el botón", () => {
+    const plan = { auto: false, handlerId: null, guard: "x", artifact: "mobileconfig", profileIntents: [{ key: "macos.sharing.allowAirDrop", value: false }] };
+    renderWith({ status: "fail", agentRemediable: false, remediationPlan: plan }, { onRemediate: vi.fn(), onExportFix: vi.fn() });
+    expect(screen.getByText("Needs a configuration profile")).toBeInTheDocument();
+    expect(screen.queryByText("Add to macOS policy")).toBeNull();
   });
 
   it("en un equipo de dominio con clave bajo Policies avisa, y sólo entonces", () => {

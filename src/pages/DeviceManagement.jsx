@@ -17,8 +17,9 @@
 
 import * as React from "react";
 import Grid from "@mui/material/Grid";
-import { Alert, Box, Button, Chip, Divider, Tab, Tabs, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Divider, Tab, Tabs, Tooltip, Typography } from "@mui/material";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import PhonelinkSetupOutlinedIcon from "@mui/icons-material/PhonelinkSetupOutlined";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
@@ -42,6 +43,7 @@ import { useConfirm } from "../components/common/ConfirmDialog";
 import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
 import {
+  downloadMacosOrganizationProfile,
   getTenantPolicy,
   patchTenantPolicyDomain,
   pushTenantPolicy,
@@ -591,6 +593,45 @@ export default function DeviceManagement({ onNavigate }) {
                       ? "Guardando…"
                       : `Guardar política de ${platform === "macos" ? "macOS" : "iOS"}`}
                   </Button>
+                  {/* El perfil de la organización sale de la política GUARDADA:
+                      es el mismo fichero que entregará el MDM (ADR-0002).
+                      Hasta entonces se instala a mano o por el MDM del
+                      cliente. Identificador fijo: uno nuevo reemplaza al
+                      anterior. */}
+                  {platform === "macos" ? (
+                    <Tooltip
+                      arrow
+                      title={
+                        isDirty
+                          ? "Save the policy first: the profile is built from the saved macOS policy."
+                          : "Download the organization's configuration profile with the settings above. Upload it to your MDM, or open it on the Mac and approve it in System Settings › Privacy & Security › Profiles. A newer version replaces the old one."
+                      }
+                    >
+                      <span>
+                        <Button
+                          variant="outlined"
+                          startIcon={<DownloadOutlinedIcon />}
+                          disabled={isDirty || loading || !tenantId}
+                          onClick={async () => {
+                            try {
+                              const name = await downloadMacosOrganizationProfile(tenantId);
+                              showSnack(`Downloaded ${name || "the organization's profile"}`, "success");
+                            } catch (e) {
+                              showSnack(
+                                e?.status === 404
+                                  ? "The macOS policy has no settings a profile can deliver yet."
+                                  : e?.body?.message || e?.message || "Could not download the profile.",
+                                e?.status === 404 ? "info" : "error"
+                              );
+                            }
+                          }}
+                          sx={{ textTransform: "none", fontWeight: 700 }}
+                        >
+                          Download profile
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  ) : null}
                   {isDirty ? (
                     <Typography
                       variant="caption"

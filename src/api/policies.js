@@ -1,4 +1,5 @@
-import { httpDeleteJson, httpGetJson, httpPatchJson, httpPostJson, httpPutJson } from "./http";
+import { httpDeleteJson, httpGetBlob, httpGetJson, httpPatchJson, httpPostJson, httpPutJson } from "./http";
+import { saveBlob } from "../utils/browserState";
 
 const BASE = "/api/v1/policies";
 
@@ -178,4 +179,20 @@ export async function patchDevicePolicyDomain(deviceId, domain, slice, opts) {
     slice,
     buildPutHeaders(opts)
   );
+}
+
+// Añade ajustes a la política MDM de una plataforma sin tocar el resto: el
+// «Add to macOS policy» de un hallazgo que sólo cumple un perfil. El merge y
+// el candado de versión los hace el servidor. Devuelve { added, unchanged }.
+export async function addMdmIntents(tenantId, platform, intents) {
+  return httpPostJson(`${BASE}/tenants/${encodeURIComponent(tenantId)}/mdm/${encodeURIComponent(platform)}/intents`, { intents });
+}
+
+// El perfil de configuración de la organización para macOS, generado de su
+// política. Blob con cabeceras (tenant), no un <a href>. Instalar uno nuevo
+// reemplaza al anterior: el identificador es fijo por organización.
+export async function downloadMacosOrganizationProfile(tenantId) {
+  const { blob, filename } = await httpGetBlob(`${BASE}/tenants/${encodeURIComponent(tenantId)}/mdm/macos/profile`);
+  saveBlob(blob, filename || "macos-settings.mobileconfig");
+  return filename;
 }

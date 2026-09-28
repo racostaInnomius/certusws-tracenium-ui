@@ -83,7 +83,7 @@ import { useConfirm } from "../components/common/ConfirmDialog";
 // chips on the category breakdown, "auto-fix available" hints on
 // findings, and a set-to-auto quick action that patches the security
 // policy domain without leaving the Posture tab.
-import { getTenantPolicy, patchTenantPolicyDomain } from "../api/policies";
+import { addMdmIntents, downloadMacosOrganizationProfile, getTenantPolicy, patchTenantPolicyDomain } from "../api/policies";
 // Sprint 4 — one-click fix from the finding card (crosswalk-gated).
 import { downloadRemediationArtifact } from "../api/patchManagement";
 import FindingDetailDrawer from "../components/patch-management/FindingDetailDrawer";
@@ -728,6 +728,50 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   const [toast, setToast] = React.useState(null);
   const showToast = React.useCallback((t) => setToast(t), []);
   const hideToast = React.useCallback(() => setToast(null), []);
+
+  // ── macOS: lo que sólo cumple un perfil ─────────────────────────────
+  //
+  // No se exporta suelto: el ajuste se AÑADE a la política macOS de la
+  // organización (Device Management) y lo entrega su perfil — el mismo
+  // fichero que entregará el MDM. Editar esa política es Device Management,
+  // así que sin esa capacidad no hay botón (el chip lo explica).
+  const canManageMdm = isActiveMember && Boolean(myPermissions?.has("device_management"));
+  const handleDownloadMacProfile = React.useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      const name = await downloadMacosOrganizationProfile(tenantId);
+      showToast({
+        severity: "success",
+        message: `Downloaded ${name || "the organization's profile"}. Upload it to your MDM, or open it on the Mac and approve it in System Settings › Privacy & Security › Profiles. A newer version replaces the old one.`,
+      });
+    } catch (e) {
+      showToast({
+        severity: e?.status === 404 ? "info" : "error",
+        message: e?.status === 404 ? "The organization's macOS policy has no settings a profile can deliver yet." : e?.body?.message || e?.message || "Could not download the profile.",
+      });
+    }
+  }, [tenantId, showToast]);
+  const handleAddToMacPolicy = React.useCallback(
+    async (intents) => {
+      if (!tenantId || !Array.isArray(intents) || intents.length === 0) return null;
+      try {
+        const res = await addMdmIntents(tenantId, "macos", intents);
+        const n = res?.added?.length ?? 0;
+        showToast({
+          severity: "success",
+          message: n
+            ? `Added ${n} setting${n === 1 ? "" : "s"} to the organization's macOS policy. Macs get ${n === 1 ? "it" : "them"} with the organization's profile.`
+            : "Already in the organization's macOS policy. Macs get it with the organization's profile.",
+          action: { label: "Download profile", onClick: handleDownloadMacProfile },
+        });
+        return res;
+      } catch (e) {
+        showToast({ severity: "error", message: e?.body?.message || e?.message || "Could not update the macOS policy." });
+        return null;
+      }
+    },
+    [tenantId, showToast, handleDownloadMacProfile]
+  );
   // El drawer de remediación (simular → aplicar) para los dos «Fix» de esta
   // página: el de flota y el de un equipo.
   const [fixTarget, setFixTarget] = React.useState(null);
@@ -2163,6 +2207,8 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           onOpenBaselines={() => setTab("baselines")}
           onRemediateFinding={canManage ? handleRemediateFinding : null}
           onExportFix={canRemediate ? handleExportFix : null}
+          onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
+          onDownloadMacProfile={canManageMdm ? handleDownloadMacProfile : null}
           // Deshacer un fix: los mismos gates que aplicarlo.
           canRevert={canRemediate}
           // «Rescan now» crea un job: la capacidad `jobs`, como en Jobs.
@@ -2232,6 +2278,21 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             severity={toast.severity}
             variant="filled"
             sx={{ minWidth: 320 }}
+            action={
+              toast.action ? (
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => {
+                    hideToast();
+                    toast.action.onClick();
+                  }}
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                >
+                  {toast.action.label}
+                </Button>
+              ) : undefined
+            }
           >
             {toast.message}
           </Alert>

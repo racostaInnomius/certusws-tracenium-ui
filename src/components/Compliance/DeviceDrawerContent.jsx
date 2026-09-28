@@ -100,7 +100,15 @@ export default function DeviceDrawerContent({
   // y el permiso): sin él la sección sólo enseña qué cambió Tracenium.
   canRevert = false,
   // «Rescan now» lanza un job (facts_snapshot): lo decide la capacidad `jobs`.
-  canRescan = false
+  canRescan = false,
+  // macOS, lo que sólo cumple un perfil: añadirlo a la política macOS de la
+  // organización y descargar su perfil (Device Management). null = sin permiso.
+  onAddToMacPolicy = null,
+  onDownloadMacProfile = null,
+  // El fix como fichero (.reg/.inf/.cmd/.sh). ⚠️ La página lo pasaba desde
+  // el 08-sep y la ficha no lo recogía: los botones de exportar de la
+  // tarjeta nunca llegaban a verse fuera de sus tests.
+  onExportFix = null
 }) {
   const device = data?.device;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
@@ -708,6 +716,10 @@ export default function DeviceDrawerContent({
                         onToggleSelected={
                           canManage && f.id ? () => toggleSelected(f.id) : null
                         }
+                        onExportFix={onExportFix}
+                        onAddToPolicy={
+                          onAddToMacPolicy ? (finding) => onAddToMacPolicy(finding?.remediationPlan?.profileIntents ?? []) : null
+                        }
                       />
                     ))}
                   </Stack>
@@ -752,6 +764,8 @@ export default function DeviceDrawerContent({
           hostname={device?.hostname ?? null}
           canManage={canManage}
           canRescan={canRescan}
+          onAddToMacPolicy={onAddToMacPolicy}
+          onDownloadMacProfile={onDownloadMacProfile}
           notify={onToast}
           onChanged={onRequestRefetch}
           onClose={() => setBulkFixOpen(false)}

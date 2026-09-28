@@ -99,6 +99,9 @@ export default function FindingCard({
   // Remediación genérica (2026-09): el fix como fichero (.reg/.inf/GPO) y
   // el aviso de dominio. `onExportFix(finding, format)`; null = sin PMP.
   onExportFix = null,
+  // macOS: añade las intenciones del plan a la política macOS de la
+  // organización (Device Management). null = quien mira no puede editarla.
+  onAddToPolicy = null,
   partOfDomain = null,
   canExplain = false
 }) {
@@ -489,7 +492,10 @@ export default function FindingCard({
             {/* macOS: lo que sólo cumple un perfil no es un riesgo, es un
                 cómo — su propio chip, con el motivo en la ayuda. */}
             {finding.status === "fail" && !finding.agentRemediable && !finding.remediationPlan?.auto && finding.remediationPlan?.artifact === "mobileconfig" && !finding.remediationPlan?.handlerId ? (
-              <Tooltip title={`${finding.remediationPlan.guard || "macOS only enforces this setting through a configuration profile."} Written locally it would look fixed without changing anything.`} arrow>
+              <Tooltip
+                title={`${finding.remediationPlan.guard || "macOS only enforces this setting through a configuration profile."} Written locally it would look fixed without changing anything.${onAddToPolicy ? "" : " Someone with Device Management access can add it to the organization's macOS policy."}`}
+                arrow
+              >
                 <Chip
                   size="small"
                   label="Needs a configuration profile"
@@ -514,10 +520,28 @@ export default function FindingCard({
                 </Button>
               </Tooltip>
             ) : null}
+            {/* macOS: lo que sólo cumple un perfil no se exporta suelto — se
+                añade a la política macOS y lo entrega el perfil de la
+                organización (el mismo que entregará el MDM). */}
+            {!readOnly && onAddToPolicy && finding.status === "fail" && finding.remediationPlan?.artifact === "mobileconfig" && finding.remediationPlan?.profileIntents?.length ? (
+              <Tooltip
+                title="Adds this setting to the organization's macOS policy (Device Management). Macs get it with the organization's configuration profile — installed by hand or from your MDM."
+                arrow
+              >
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => onAddToPolicy(finding)}
+                  sx={{ textTransform: "none" }}
+                >
+                  Add to macOS policy
+                </Button>
+              </Tooltip>
+            ) : null}
             {/* Business (PMP): el fix como fichero. Es lo que perdura en un
                 equipo de dominio (la GPO) y lo que se revisa antes de tocar
                 una clave con guarda. */}
-            {!readOnly && onExportFix && finding.status === "fail" && finding.remediationPlan?.artifact ? (
+            {!readOnly && onExportFix && finding.status === "fail" && finding.remediationPlan?.artifact && finding.remediationPlan.artifact !== "mobileconfig" ? (
               <Tooltip
                 title={
                   finding.remediationPlan.artifact === "reg"
@@ -526,9 +550,7 @@ export default function FindingCard({
                       ? "Download a secedit .inf template with the account/security policy value this check expects."
                       : finding.remediationPlan.artifact === "sh"
                         ? "Download a shell script (run with root privileges, safe to run twice) with the change this check expects. Guarded changes come commented out, with the reason."
-                        : finding.remediationPlan.artifact === "mobileconfig"
-                          ? "Download a configuration profile with the setting this check expects. Upload it to your MDM, or on a Mac without one open it and approve it in System Settings › Privacy & Security › Profiles."
-                          : "Download a .cmd script with the auditpol /set command for this audit subcategory."
+                        : "Download a .cmd script with the auditpol /set command for this audit subcategory."
                 }
                 arrow
               >

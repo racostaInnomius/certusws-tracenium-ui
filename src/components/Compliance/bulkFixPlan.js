@@ -12,7 +12,7 @@
 
 /**
  * @param {Array} findings hallazgos seleccionados, tal y como los pinta la ficha
- * @returns {{applicable: Array, guarded: Array, profile: Array, manual: Array, notFailing: Array, checkIds: string[], profileCheckIds: string[]}}
+ * @returns {{applicable: Array, guarded: Array, profile: Array, manual: Array, notFailing: Array, checkIds: string[], profileIntents: Array<{key: string, value: any}>}}
  */
 export function bulkFixPlan(findings) {
   const applicable = [];
@@ -46,7 +46,9 @@ export function bulkFixPlan(findings) {
     manual,
     notFailing,
     checkIds: [...new Set(applicable.map((f) => f.checkId))],
-    profileCheckIds: [...new Set(profile.map((f) => f.checkId))],
+    // Las intenciones de la política macOS que cumplen los de perfil, sin
+    // repetir clave (la última gana: todas vienen del mismo catálogo).
+    profileIntents: [...new Map(profile.flatMap((f) => f.remediationPlan?.profileIntents ?? []).map((i) => [i.key, i])).values()],
   };
 }
 
