@@ -12,11 +12,12 @@
 
 /**
  * @param {Array} findings hallazgos seleccionados, tal y como los pinta la ficha
- * @returns {{applicable: Array, guarded: Array, manual: Array, notFailing: Array, checkIds: string[]}}
+ * @returns {{applicable: Array, guarded: Array, profile: Array, manual: Array, notFailing: Array, checkIds: string[], profileCheckIds: string[]}}
  */
 export function bulkFixPlan(findings) {
   const applicable = [];
   const guarded = [];
+  const profile = [];
   const manual = [];
   const notFailing = [];
 
@@ -27,6 +28,11 @@ export function bulkFixPlan(findings) {
     // trabajo en un equipo que no lo necesita.
     if (f.status !== "fail") { notFailing.push(f); continue; }
     if (f.agentRemediable) { applicable.push(f); continue; }
+    // macOS: lo que sólo cumple un perfil de configuración. No es una
+    // guarda (no hay riesgo que sopesar): es otro camino, el .mobileconfig,
+    // y se puede exportar junto para todos.
+    const rp = f.remediationPlan;
+    if (rp && !rp.auto && !rp.handlerId && rp.artifact === "mobileconfig") { profile.push(f); continue; }
     // Guardado: hay plan y artefacto (.reg/.inf), pero no botón — lo aplica
     // una persona que ha leído por qué.
     if (f.remediationPlan?.guard) { guarded.push(f); continue; }
@@ -36,9 +42,11 @@ export function bulkFixPlan(findings) {
   return {
     applicable,
     guarded,
+    profile,
     manual,
     notFailing,
     checkIds: [...new Set(applicable.map((f) => f.checkId))],
+    profileCheckIds: [...new Set(profile.map((f) => f.checkId))],
   };
 }
 
@@ -47,6 +55,7 @@ export function bulkFixSummary(plan) {
   const bits = [];
   if (plan.applicable.length) bits.push(`${plan.applicable.length} can be applied from here`);
   if (plan.guarded.length) bits.push(`${plan.guarded.length} export as a file (guarded)`);
+  if (plan.profile?.length) bits.push(`${plan.profile.length} need a configuration profile`);
   if (plan.manual.length) bits.push(`${plan.manual.length} need a person`);
   if (plan.notFailing.length) bits.push(`${plan.notFailing.length} no longer failing`);
   return bits.join(" · ");

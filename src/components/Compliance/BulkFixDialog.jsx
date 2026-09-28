@@ -28,7 +28,7 @@ import {
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
-import { remediateBatch, getRemediationsBatch } from "../../api/patchManagement";
+import { remediateBatch, getRemediationsBatch, downloadRemediationArtifact } from "../../api/patchManagement";
 import { listFrom } from "../../api/shape";
 import { bulkFixPlan, bulkFixSummary, batchFinished } from "./bulkFixPlan";
 import { outcomeColors, outcomeTone } from "../patch-management/outcomeTone";
@@ -143,6 +143,30 @@ export default function BulkFixDialog({
           <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} data-testid="bulk-fix-summary">
             {bulkFixSummary(plan) || "Nothing selected."}
           </Typography>
+
+          {plan.profile.length ? (
+            <Alert
+              severity="info"
+              action={
+                <Button
+                  size="small"
+                  onClick={async () => {
+                    try {
+                      const name = await downloadRemediationArtifact({ checkIds: plan.profileCheckIds, format: "mobileconfig" });
+                      notify?.({ severity: "success", message: name ? `Downloaded ${name}.` : "Profile exported." });
+                    } catch (e) {
+                      notify?.({ severity: "error", message: e?.body?.message || e?.message || "Could not export the profile." });
+                    }
+                  }}
+                  sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                >
+                  Download one profile
+                </Button>
+              }
+            >
+              {`${plan.profile.length} of the selected findings are settings macOS only enforces through a configuration profile. Download them as one .mobileconfig: upload it to your MDM, or open it on the Mac and approve it in System Settings › Privacy & Security › Profiles.`}
+            </Alert>
+          ) : null}
 
           {plan.guarded.length || plan.manual.length ? (
             <Alert severity="info">

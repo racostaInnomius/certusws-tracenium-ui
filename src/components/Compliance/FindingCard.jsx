@@ -486,7 +486,17 @@ export default function FindingCard({
             ) : null}
             {/* Sin botón de fix: se dice POR QUÉ (la guarda) en vez de
                 dejar un hueco. La persona tiene el .reg abajo si quiere. */}
-            {finding.status === "fail" && !finding.agentRemediable && finding.remediationPlan?.guard ? (
+            {/* macOS: lo que sólo cumple un perfil no es un riesgo, es un
+                cómo — su propio chip, con el motivo en la ayuda. */}
+            {finding.status === "fail" && !finding.agentRemediable && !finding.remediationPlan?.auto && finding.remediationPlan?.artifact === "mobileconfig" && !finding.remediationPlan?.handlerId ? (
+              <Tooltip title={`${finding.remediationPlan.guard || "macOS only enforces this setting through a configuration profile."} Written locally it would look fixed without changing anything.`} arrow>
+                <Chip
+                  size="small"
+                  label="Needs a configuration profile"
+                  sx={{ height: 24, fontSize: TEXT.xs, bgcolor: BRAND.alert?.infoSoft, color: BRAND.alert?.infoText, cursor: "help" }}
+                />
+              </Tooltip>
+            ) : finding.status === "fail" && !finding.agentRemediable && finding.remediationPlan?.guard ? (
               <Tooltip title="This value is not written by the agent on its own: the change can lock people out or break authentication. Export the fix and apply it deliberately." arrow>
                 <Chip
                   size="small"
@@ -515,8 +525,10 @@ export default function FindingCard({
                     : finding.remediationPlan.artifact === "inf"
                       ? "Download a secedit .inf template with the account/security policy value this check expects."
                       : finding.remediationPlan.artifact === "sh"
-                        ? "Download a bash script (run as root, safe to run twice) with the kernel, module, audit-rule or config change this check expects. Guarded changes come commented out, with the reason."
-                        : "Download a .cmd script with the auditpol /set command for this audit subcategory."
+                        ? "Download a shell script (run with root privileges, safe to run twice) with the change this check expects. Guarded changes come commented out, with the reason."
+                        : finding.remediationPlan.artifact === "mobileconfig"
+                          ? "Download a configuration profile with the setting this check expects. Upload it to your MDM, or on a Mac without one open it and approve it in System Settings › Privacy & Security › Profiles."
+                          : "Download a .cmd script with the auditpol /set command for this audit subcategory."
                 }
                 arrow
               >

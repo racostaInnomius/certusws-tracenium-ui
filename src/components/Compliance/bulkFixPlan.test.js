@@ -20,6 +20,18 @@ describe("bulkFixPlan", () => {
     expect(plan.manual.map((x) => x.checkId)).toEqual(["c"]);
   });
 
+  it("macOS: lo que sólo cumple un perfil va aparte, no con los guardados", () => {
+    const profile = { auto: false, handlerId: null, guard: "macOS only enforces this setting through a configuration profile", artifact: "mobileconfig" };
+    const plan = bulkFixPlan([
+      f({ checkId: "a", agentRemediable: false, remediationPlan: profile }),
+      f({ checkId: "b", agentRemediable: false, remediationPlan: { auto: false, handlerId: null, guard: "turns off Screen Sharing", artifact: "sh" } }),
+      f({ checkId: "a", agentRemediable: false, remediationPlan: profile }),
+    ]);
+    expect(plan.profileCheckIds).toEqual(["a"]);
+    expect(plan.guarded.map((x) => x.checkId)).toEqual(["b"]);
+    expect(bulkFixSummary(plan)).toBe("1 export as a file (guarded) · 2 need a configuration profile");
+  });
+
   it("⚠️ lo que ya no falla se queda fuera, aunque tenga handler", () => {
     // Escribirle el valor a un equipo que ya cumple es trabajo inútil en un
     // equipo de alguien, y ensucia el historial de remediaciones.
