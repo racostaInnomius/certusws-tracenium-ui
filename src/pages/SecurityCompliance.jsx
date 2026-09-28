@@ -858,7 +858,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             e?.status === 403
               ? "Patch Management plugin is not enabled for this tenant."
               : e?.status === 404
-                ? "This check has no registry or security-policy value to export."
+                ? "This check has no setting Tracenium can write to export."
                 : e?.body?.message || e?.message || "Failed to export the fix.",
         });
       }

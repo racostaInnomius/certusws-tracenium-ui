@@ -514,7 +514,9 @@ export default function FindingCard({
                     ? "Download a .reg file with the value this check expects, to import by hand or push through your own tooling."
                     : finding.remediationPlan.artifact === "inf"
                       ? "Download a secedit .inf template with the account/security policy value this check expects."
-                      : "Download a .cmd script with the auditpol /set command for this audit subcategory."
+                      : finding.remediationPlan.artifact === "sh"
+                        ? "Download a bash script (run as root, safe to run twice) with the kernel, module, audit-rule or config change this check expects. Guarded changes come commented out, with the reason."
+                        : "Download a .cmd script with the auditpol /set command for this audit subcategory."
                 }
                 arrow
               >

@@ -93,8 +93,8 @@ export async function remediate(payload) {
   return httpPostJson(`${BASE}/remediate`, payload);
 }
 
-// El fix como fichero (.reg de registro, .inf de secedit, script de GPO)
-// para uno o varios checks. Blob con cabeceras (tenant), como los runs de
+// El fix como fichero (.reg de registro, .inf de secedit, .cmd de auditpol,
+// script de GPO, .sh de Linux) para uno o varios checks. Blob con cabeceras (tenant), como los runs de
 // Reports: el endpoint lleva el mismo gate que remediar.
 export async function downloadRemediationArtifact({ checkIds, format = "reg", gpoName } = {}) {
   const ids = (Array.isArray(checkIds) ? checkIds : [checkIds]).filter(Boolean);

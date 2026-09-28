@@ -275,6 +275,14 @@ describe("FindingCard (Sprint 4 — one-click fix)", () => {
     expect(screen.queryByText("GPO script")).toBeNull();
   });
 
+  it("Linux exporta .sh y no ofrece script de GPO", () => {
+    const onExportFix = vi.fn();
+    renderWith({ status: "fail", agentRemediable: true, remediationPlan: { auto: true, guard: null, artifact: "sh", gpoManaged: false } }, { onRemediate: vi.fn(), onExportFix });
+    screen.getByText("Export .sh").click();
+    expect(onExportFix).toHaveBeenCalledWith(expect.anything(), "sh");
+    expect(screen.queryByText("GPO script")).toBeNull();
+  });
+
   it("en un equipo de dominio con clave bajo Policies avisa, y sólo entonces", () => {
     const plan = { auto: true, guard: null, artifact: "reg", gpoManaged: true };
     renderWith({ status: "fail", agentRemediable: true, remediationPlan: plan }, { onRemediate: vi.fn(), partOfDomain: true });
