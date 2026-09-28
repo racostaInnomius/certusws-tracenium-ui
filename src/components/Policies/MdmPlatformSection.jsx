@@ -23,11 +23,11 @@ import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 // Etiquetas legibles para los grupos derivados de la clave.
 const GROUP_LABELS = {
-  desktop: "Escritorio",
-  screen: "Pantalla y bloqueo",
-  apps: "Aplicaciones",
-  softwareUpdate: "Actualizaciones",
-  passcode: "Código de acceso",
+  desktop: "Desktop",
+  screen: "Screen & lock",
+  apps: "Apps",
+  softwareUpdate: "Software updates",
+  passcode: "Passcode",
   general: "General",
 };
 
@@ -72,12 +72,12 @@ function SupervisionChip() {
   return (
     <Tooltip
       arrow
-      title="Solo surte efecto en equipos supervisados (ABM/ADE). En equipos enrolados sin supervisión se guarda pero no se aplica."
+      title="Only applies to supervised devices (Apple Business Manager). On devices enrolled without supervision it is saved but not applied."
     >
       <Chip
         size="small"
         icon={<ShieldOutlinedIcon sx={{ fontSize: ICON.sm }} />}
-        label="Requiere supervisión"
+        label="Supervised only"
         sx={{
           height: 20,
           fontSize: TEXT.xs,
@@ -110,9 +110,9 @@ function SettingControl({ setting, value, onChange, readOnly }) {
         helperText={setting.description}
         fullWidth
       >
-        <MenuItem value="unset">Sin definir (default del sistema)</MenuItem>
-        <MenuItem value="on">Activado</MenuItem>
-        <MenuItem value="off">Desactivado</MenuItem>
+        <MenuItem value="unset">Not set (system default)</MenuItem>
+        <MenuItem value="on">On</MenuItem>
+        <MenuItem value="off">Off</MenuItem>
       </TextField>
     );
   }
@@ -123,14 +123,14 @@ function SettingControl({ setting, value, onChange, readOnly }) {
         size="small"
         type="number"
         label={setting.label || setting.key}
-        placeholder="sin definir"
+        placeholder="not set"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
         disabled={readOnly}
         inputProps={{ min: spec.min, max: spec.max }}
         helperText={
           setting.description ||
-          (spec.min !== undefined ? `Entre ${spec.min} y ${spec.max}. Vacío = sin definir.` : undefined)
+          (spec.min !== undefined ? `${spec.min}–${spec.max}. Blank = not set.` : undefined)
         }
         fullWidth
       />
@@ -149,7 +149,7 @@ function SettingControl({ setting, value, onChange, readOnly }) {
         helperText={setting.description}
         fullWidth
       >
-        <MenuItem value="">Sin definir</MenuItem>
+        <MenuItem value="">Not set</MenuItem>
         {(spec.values || []).map((v) => (
           <MenuItem key={v} value={v}>
             {v}
@@ -164,7 +164,7 @@ function SettingControl({ setting, value, onChange, readOnly }) {
     <TextField
       size="small"
       label={setting.label || setting.key}
-      placeholder="sin definir"
+      placeholder="not set"
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
       disabled={readOnly}
@@ -201,7 +201,7 @@ export default function MdmPlatformSection({
   if (!groups.length) {
     return (
       <Typography variant="body2" sx={{ color: BRAND.gray }}>
-        No hay ajustes en el catálogo para esta plataforma todavía.
+        No settings for this platform in the catalog yet.
       </Typography>
     );
   }
@@ -211,13 +211,12 @@ export default function MdmPlatformSection({
       {configuredSupervisionKeys.length > 0 && unsupervisedCount > 0 ? (
         <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
           <strong>
-            {configuredSupervisionKeys.length} ajuste
-            {configuredSupervisionKeys.length === 1 ? "" : "s"} no se aplicará
-            {configuredSupervisionKeys.length === 1 ? "" : "n"} en {unsupervisedCount} equipo
-            {unsupervisedCount === 1 ? "" : "s"}
-          </strong>{" "}
-          sin supervisión: {configuredSupervisionKeys.join(", ")}. Se guardan, pero solo
-          surten efecto en equipos supervisados (ABM/ADE).
+            {configuredSupervisionKeys.length} setting
+            {configuredSupervisionKeys.length === 1 ? "" : "s"} won&apos;t apply on {unsupervisedCount}{" "}
+            unsupervised device{unsupervisedCount === 1 ? "" : "s"}
+          </strong>
+          : {configuredSupervisionKeys.join(", ")}. They are saved, but only take effect on
+          supervised devices (Apple Business Manager).
         </Alert>
       ) : null}
 

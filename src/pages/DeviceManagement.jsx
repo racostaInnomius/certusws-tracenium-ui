@@ -1,35 +1,42 @@
 // src/pages/DeviceManagement.jsx
 //
-// Enterprise device management — MDM/MAM. Promoted out of the old
-// Policies page (where it was one card among a dozen) into a top-level
-// surface, because this is where first-party MDM will land: Tracenium
-// issues its own device management rather than assuming every customer
-// already runs Jamf/Intune.
+// MDM / MAM — gestión de equipos Apple por MDM y de la app de Tracenium (MAM).
 //
-// Today it authors the MAM slice (`policyJson.mam`, consumed by the
-// T-iOS / T-Android managed clients) and shows the mobile fleet. Per-
-// device actions (lock / selective wipe / alert / locate) live on the
-// device itself in Asset Management — they're per-device commands, not
-// tenant policy, and they already have a home there.
+// Rediseño en pestañas (plan MDM/MAM, 16-sep-2026; primera parte hecha el
+// 28-sep): misma piel que Patch Management o Crypto Discovery — cabecera,
+// `PageTabs` con icono y estado en la URL (`?mdmTab=`):
+//   - Overview: qué funciona hoy (lo dice `/api/v1/mdm/status`) y las cifras.
+//   - Devices: equipos por MDM y por la app, con su detalle.
+//   - Enrollment: dar de alta un Mac/iPhone/iPad por su número de serie.
+//   - Policies: la política de la app (MAM) y los ajustes macOS / iOS.
+// «Apple setup» (certificado de push) no se pinta hasta que exista: lo no
+// construido no aparece en el producto; su estado se dice en Overview.
 //
-// Writes through the domain-scoped PATCH: a save here cannot touch the
-// agent-config or security blocks.
+// Las políticas se escriben por el PATCH de dominio: guardar aquí no puede
+// tocar los bloques de configuración del agente ni de seguridad.
 
 import * as React from "react";
-import Grid from "@mui/material/Grid";
-import { Alert, Box, Button, Chip, Divider, Tab, Tabs, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Tab, Tabs, Tooltip, Typography } from "@mui/material";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import PhonelinkSetupOutlinedIcon from "@mui/icons-material/PhonelinkSetupOutlined";
-import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
-import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
+import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
+import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
+import AddLinkOutlinedIcon from "@mui/icons-material/AddLinkOutlined";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
+import PageTabs from "../components/common/PageTabs";
+import MdmOverviewTab from "../components/DeviceManagement/MdmOverviewTab";
+import MdmDevicesTab from "../components/DeviceManagement/MdmDevicesTab";
+import MdmEnrollmentTab from "../components/DeviceManagement/MdmEnrollmentTab";
+import { getMdmStatus, listMdmDevices, listMdmEnrollments } from "../api/mdm";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 // No hay un tipo "mdm" en el catálogo de informes, y no se inventa uno aquí:
 // la clave tiene que existir en `REPORT_REGISTRY` o Reports avisa de que no
@@ -67,24 +74,19 @@ function isMobileRow(d) {
   return MOBILE_PLATFORMS.has(p);
 }
 
-// Roadmap for the first-party MDM. Static and deliberately honest —
-// these are NOT built. Shown so operators (and us) can see where this
-// surface is heading instead of wondering why "Device Management" only
-// manages an app policy.
-const MDM_ROADMAP = [
-  {
-    title: "Servidor MDM + enrolamiento",
-    body: "Protocolo MDM de Apple, perfiles de configuración firmados e identidad por dispositivo (ACME + attestation). Es lo que convierte la intención de arriba en algo que el sistema impone.",
-  },
-  {
-    title: "Actualizaciones vía DDM",
-    body: "Apple eliminó la gestión de actualizaciones por MDM clásico en OS 27, así que este dominio va por Declarative Device Management desde el inicio.",
-  },
-  {
-    title: "Supervisión (ABM / ADE)",
-    body: "Enrolamiento sin fricción desde la compra y gestión no removible. Los equipos ya desplegados se enrolan sin supervisión y migran en cada reimagen.",
-  },
-];
+const TABS = ["overview", "devices", "enrollment", "policies"];
+const tabA11y = (key) => ({ id: `mdm-tab-${key}`, "aria-controls": `mdm-tabpanel-${key}` });
+
+function TabPanel({ value, tab, children }) {
+  if (value !== tab) return null;
+  return (
+    <Box role="tabpanel" id={`mdm-tabpanel-${tab}`} aria-labelledby={`mdm-tab-${tab}`}>
+      {children}
+    </Box>
+  );
+}
+
+const EMPTY_MDM = { access: "unknown", status: null, devices: [], enrollments: [] };
 
 export default function DeviceManagement({ onNavigate }) {
   const { auth } = useAuthContext();
@@ -126,6 +128,17 @@ export default function DeviceManagement({ onNavigate }) {
 
   const capabilitiesLoading = isActiveMember && myPermissions === null;
   const canManage = isActiveMember && Boolean(myPermissions?.has("device_management"));
+  // La API de MDM (`/api/v1/mdm`) va montada con la capacidad `enrollment`,
+  // no con `device_management`: sin ella no se llama, en vez de pintar un 403.
+  const canEnroll = isActiveMember && Boolean(myPermissions?.has("enrollment"));
+
+  const [tab, setTab] = React.useState(() => {
+    const requested = getSearchParam("mdmTab", "");
+    return TABS.includes(requested) ? requested : "overview";
+  });
+  React.useEffect(() => {
+    updateSearchParams({ mdmTab: tab === "overview" ? null : tab });
+  }, [tab]);
   // ⚠️ No es `canManage`: aquello es la capacidad `device_management` y esto es
   // el ROL. `global.fleet-health` declara `minRole: ["ADMIN","OWNER"]`, así que
   // a quien gestione dispositivos sin ser administrador le saldría una puerta
@@ -146,6 +159,7 @@ export default function DeviceManagement({ onNavigate }) {
   const [loadedMdm, setLoadedMdm] = React.useState({ macos: "{}", ios: "{}" });
   const [savingMdm, setSavingMdm] = React.useState(null); // plataforma en curso
   const [devices, setDevices] = React.useState([]);
+  const [mdm, setMdm] = React.useState(EMPTY_MDM);
   const [loading, setLoading] = React.useState(true);
   // Ver el comentario homólogo en SecurityBaselines: "no pude leerla" y
   // "todavía no hay" colapsaban en el mismo null, y ese null desarma el
@@ -159,6 +173,31 @@ export default function DeviceManagement({ onNavigate }) {
     setSnackbar({ open: true, message, severity });
   }, []);
 
+  // Estado, equipos y altas de MDM. Cada fuente por su lado: que falle una no
+  // deja las otras en blanco. Un 403 es falta de capacidad, no un error.
+  const loadMdm = React.useCallback(
+    async ({ fresh = false } = {}) => {
+      if (!tenantId) return;
+      if (!canEnroll) {
+        setMdm({ ...EMPTY_MDM, access: "forbidden" });
+        return;
+      }
+      const [st, dv, en] = await Promise.allSettled([
+        getMdmStatus({ fresh }),
+        listMdmDevices({ fresh }),
+        listMdmEnrollments({ fresh }),
+      ]);
+      const forbidden = [st, dv, en].some((r) => r.status === "rejected" && r.reason?.status === 403);
+      setMdm({
+        access: forbidden ? "forbidden" : [st, dv, en].some((r) => r.status === "rejected") ? "error" : "ok",
+        status: st.status === "fulfilled" && st.value?.enrollment ? st.value : null,
+        devices: dv.status === "fulfilled" && Array.isArray(dv.value?.devices) ? dv.value.devices : [],
+        enrollments: en.status === "fulfilled" && Array.isArray(en.value?.enrollments) ? en.value.enrollments : [],
+      });
+    },
+    [canEnroll, tenantId]
+  );
+
   const load = React.useCallback(async () => {
     if (!canManage || !tenantId) return;
     try {
@@ -170,6 +209,7 @@ export default function DeviceManagement({ onNavigate }) {
         ),
         // Todas las páginas: con la llamada pelada son 25 equipos.
         listAllKnownDevices().catch(() => ({ items: [] })),
+        loadMdm(),
       ]);
       const env = extractPolicyEnvelope(policyRes);
       const policy = env.raw ?? {};
@@ -191,11 +231,14 @@ export default function DeviceManagement({ onNavigate }) {
     } finally {
       setLoading(false);
     }
-  }, [canManage, tenantId, showSnack]);
+  }, [canManage, tenantId, showSnack, loadMdm]);
 
   React.useEffect(() => {
     load();
   }, [load]);
+
+  // Tras crear o revocar un alta: de la red, no de la caché de 60 s.
+  const reloadMdm = React.useCallback(() => loadMdm({ fresh: true }), [loadMdm]);
 
   const currentSerialized = React.useMemo(
     () => JSON.stringify(managedAppFormToPolicy(form.managedApp)),
@@ -302,12 +345,12 @@ export default function DeviceManagement({ onNavigate }) {
       const slice = Object.keys(block).length > 0 ? { [platform]: block } : {};
       const expectedVersion = extractPolicyEnvelope(policyRow).version;
       await patchTenantPolicyDomain(tenantId, `mdm-${platform}`, slice, { expectedVersion });
-      showSnack(`Política de ${platform === "macos" ? "macOS" : "iOS"} guardada`, "success");
+      showSnack(`${platform === "macos" ? "macOS" : "iOS"} policy saved`, "success");
       await load();
     } catch (e) {
       if (e?.status === 409) {
         showSnack(
-          "Otra persona modificó la política. Se recargó — revisa tus cambios y vuelve a guardar.",
+          "Policy was modified by someone else. Reloaded — review your changes and save again.",
           "warning"
         );
         await load();
@@ -319,7 +362,7 @@ export default function DeviceManagement({ onNavigate }) {
         const detail = Array.isArray(issues) && issues.length
           ? issues.map((i) => `${i.field}: ${i.message}`).join(" · ")
           : e?.body?.message;
-        showSnack(detail || "No se pudo guardar la política", "error");
+        showSnack(detail || "Could not save the policy", "error");
       }
     } finally {
       setSavingMdm(null);
@@ -377,11 +420,21 @@ export default function DeviceManagement({ onNavigate }) {
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
       <PageHeader
-        title="Device Management"
-        subtitle="Mobile and managed-device policy (MDM / MAM). Per-device actions — lock, selective wipe, alert — are on each device in Asset Management."
+        title="MDM / MAM"
+        subtitle="Enroll and manage Apple devices (MDM) and the Tracenium app on iOS and Android (MAM)."
         icon={<PhonelinkSetupOutlinedIcon />}
         actions={
           <>
+            {canEnroll ? (
+              <Button
+                variant="contained"
+                startIcon={<AddLinkOutlinedIcon />}
+                onClick={() => setTab("enrollment")}
+                sx={{ textTransform: "none", fontWeight: 800, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
+              >
+                Enroll a device
+              </Button>
+            ) : null}
             {canReport ? (
               <GoToReportButton
                 onNavigate={onNavigate}
@@ -399,299 +452,234 @@ export default function DeviceManagement({ onNavigate }) {
         }
       />
 
-      <Grid container spacing={2} alignItems="stretch" sx={{ mb: 2 }}>
-        {/* ── Mobile fleet snapshot ─────────────────────────────────── */}
-        <Grid size={{ xs: 12, md: 4 }}>
-          <SectionPaper variant="panel" sx={{ p: 2, height: "100%" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-              <DevicesOtherOutlinedIcon sx={{ color: BRAND.tealText }} />
-              <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Mobile fleet</Typography>
-            </Box>
+      <PageTabs
+        value={tab}
+        onChange={(_e, v) => setTab(v)}
+        aria-label="MDM / MAM sections"
+        items={[
+          { value: "overview", label: "Overview", icon: <DashboardOutlinedIcon />, ...tabA11y("overview") },
+          { value: "devices", label: "Devices", icon: <DevicesOutlinedIcon />, ...tabA11y("devices") },
+          { value: "enrollment", label: "Enrollment", icon: <AddLinkOutlinedIcon />, ...tabA11y("enrollment") },
+          { value: "policies", label: "Policies", icon: <TuneOutlinedIcon />, ...tabA11y("policies") },
+        ]}
+      />
 
-            {mobileCounts.total === 0 ? (
-              <Box>
-                <Typography variant="body2" sx={{ color: BRAND.gray, mb: 1.5 }}>
-                  No mobile devices are enrolled yet. The managed-app policy below
-                  applies as soon as the first iOS or Android client enrolls.
-                </Typography>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => onNavigate?.("enrollment")}
-                  sx={{
-                    textTransform: "none",
-                    fontWeight: 700,
-                    borderColor: BRAND.teal,
-                    color: BRAND.tealText,
-                  }}
-                >
-                  Go to enrollment
-                </Button>
-              </Box>
-            ) : (
-              <Box>
-                <Typography sx={{ fontSize: TEXT["4xl"], fontWeight: 900, color: BRAND.dark, lineHeight: 1 }}>
-                  {mobileCounts.total}
-                </Typography>
-                <Typography variant="caption" sx={{ color: BRAND.gray }}>
-                  managed mobile device{mobileCounts.total === 1 ? "" : "s"}
-                </Typography>
-                <Box sx={{ mt: 1.5, display: "flex", gap: 0.75, flexWrap: "wrap" }}>
-                  <Chip size="small" label={`iOS · ${mobileCounts.ios}`} sx={{ fontWeight: 700 }} />
-                  <Chip
-                    size="small"
-                    label={`Android · ${mobileCounts.android}`}
-                    sx={{ fontWeight: 700 }}
-                  />
-                </Box>
-                <Button
-                  size="small"
-                  onClick={() => onNavigate?.("assets")}
-                  sx={{ mt: 1.5, textTransform: "none", color: BRAND.gray }}
-                >
-                  Open in Asset Management →
-                </Button>
-              </Box>
-            )}
-          </SectionPaper>
-        </Grid>
+      <TabPanel value={tab} tab="overview">
+        <MdmOverviewTab mdm={mdm} appDevices={mobileDevices} onOpenTab={setTab} />
+      </TabPanel>
 
-        {/* ── MAM policy authoring ──────────────────────────────────── */}
-        <Grid size={{ xs: 12, md: 8 }}>
-          <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, height: "100%" }}>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 1.5 }}>
-              <DetailRow label="Policy version" value={env.version ?? "—"} mono />
-              <DetailRow label="Hash" value={shortHash(env.hash)} mono />
-              <DetailRow label="Updated" value={formatDate(env.updatedAt)} />
-            </Box>
+      <TabPanel value={tab} tab="devices">
+        <MdmDevicesTab mdm={mdm} appDevices={mobileDevices} onNavigate={onNavigate} onOpenTab={setTab} />
+      </TabPanel>
 
-            <ManagedAppSection form={form} onChange={setForm} readOnly={loading} />
+      <TabPanel value={tab} tab="enrollment">
+        <MdmEnrollmentTab
+          mdm={mdm}
+          canEnroll={canEnroll}
+          onChanged={reloadMdm}
+          notify={(message, severity) => showSnack(message, severity)}
+          onNavigate={onNavigate}
+        />
+      </TabPanel>
 
-            <Box sx={{ mt: 2, display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-              <Button
-                variant="contained"
-                startIcon={<SaveOutlinedIcon />}
-                onClick={handleSave}
-                disabled={saving || loading || !dirty}
-                sx={{
-                  textTransform: "none",
-                  fontWeight: 800,
-                  bgcolor: BRAND.teal,
-                  "&:hover": { bgcolor: BRAND.tealHover },
-                }}
-              >
-                {saving ? "Saving…" : "Save policy"}
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<SendOutlinedIcon />}
-                onClick={handlePush}
-                disabled={pushing || loading}
-                sx={{
-                  textTransform: "none",
-                  fontWeight: 700,
-                  borderColor: BRAND.teal,
-                  color: BRAND.tealText,
-                }}
-              >
-                {pushing ? "Pushing…" : "Push now"}
-              </Button>
-              {dirty ? (
-                <Typography variant="caption" sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}>
-                  Unsaved changes
-                </Typography>
-              ) : null}
-            </Box>
-          </SectionPaper>
-        </Grid>
-      </Grid>
+      <TabPanel value={tab} tab="policies">
+        {/* ── Política de la app (MAM) ───────────────────────────────── */}
+        <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 1, mb: 0.5 }}>
+            <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Tracenium app (MAM)</Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+              Enforced by the app itself on iOS and Android, including personal devices.
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 1.5 }}>
+            <DetailRow label="Policy version" value={env.version ?? "—"} mono />
+            <DetailRow label="Hash" value={shortHash(env.hash)} mono />
+            <DetailRow label="Updated" value={formatDate(env.updatedAt)} />
+          </Box>
 
-      {/* ── Intención MDM por plataforma ──────────────────────────────
-          Secciones separadas macOS / iOS: las políticas NO son las mismas
-          en ambas, y cada una guarda su propio dominio de política. Los
-          controles se renderizan desde el catálogo del backend — esta
-          página no conoce ningún ajuste por su nombre. */}
-      <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-          <PhonelinkSetupOutlinedIcon sx={{ color: BRAND.tealText }} />
-          <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
-            Configuración del sistema (MDM)
-          </Typography>
-          <Chip
-            size="small"
-            label="beta"
-            sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray }}
-          />
-        </Box>
-        <Typography variant="body2" sx={{ color: BRAND.gray, mb: 1.5 }}>
-          Estado deseado a nivel de sistema operativo. Se autora por plataforma
-          porque las políticas de macOS e iOS no son equivalentes. Se entregará
-          por perfiles de configuración cuando el MDM propio esté operativo;
-          hoy queda registrado como intención.
-        </Typography>
+          <ManagedAppSection form={form} onChange={setForm} readOnly={loading} />
 
-        <Tabs
-          value={mdmTab}
-          onChange={(_e, v) => setMdmTab(v)}
-          sx={{
-            mb: 2,
-            borderBottom: `1px solid ${BRAND.border}`,
-            "& .MuiTab-root": { textTransform: "none", fontWeight: 800, minHeight: 42 },
-            "& .MuiTabs-indicator": { bgcolor: BRAND.teal, height: 3, borderRadius: 999 },
-          }}
-        >
-          <Tab label="macOS" />
-          <Tab label="iOS" />
-          <Tab label="Android" disabled />
-        </Tabs>
-
-        {catalogLoading ? (
-          <Typography variant="body2" sx={{ color: BRAND.gray }}>
-            Cargando catálogo…
-          </Typography>
-        ) : (
-          (() => {
-            const platform = mdmTab === 1 ? "ios" : "macos";
-            const block = mdmBlocks[platform] || {};
-            const isDirty = mdmDirty[platform];
-            // Hoy ningún equipo está supervisado (no hay MDM operativo aún),
-            // así que el aviso de aplicabilidad cuenta toda la flota de esa
-            // plataforma. Cuando exista enrolamiento real, esto pasa a leer
-            // el estado de supervisión reportado por el dispositivo.
-            const unsupervised =
-              platform === "ios" ? mobileCounts.ios : devices.filter((d) => {
-                const p = String(d?.platform || d?.os || "").toLowerCase();
-                return p === "macos" || p === "darwin";
-              }).length;
-
-            return (
-              <Box>
-                <MdmPlatformSection
-                  platform={platform}
-                  groups={groupsFor(platform)}
-                  block={block}
-                  onChangeBlock={(next) =>
-                    setMdmBlocks((prev) => ({ ...prev, [platform]: next }))
-                  }
-                  readOnly={loading}
-                  unsupervisedCount={unsupervised}
-                />
-                <Box sx={{ mt: 1, display: "flex", gap: 1, alignItems: "center" }}>
+          <Box sx={{ mt: 2, display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+            <Button
+              variant="contained"
+              startIcon={<SaveOutlinedIcon />}
+              onClick={handleSave}
+              disabled={saving || loading || !dirty}
+              sx={{
+                textTransform: "none",
+                fontWeight: 800,
+                bgcolor: BRAND.teal,
+                "&:hover": { bgcolor: BRAND.tealHover },
+              }}
+            >
+              {saving ? "Saving…" : "Save app policy"}
+            </Button>
+            {dirty ? (
+              <Typography variant="caption" sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}>
+                Unsaved changes
+              </Typography>
+            ) : null}
+            {/* Aparte y con confirmación: empuja la política ENTERA del tenant
+                y borra los overrides por equipo (plan MDM/MAM, hallazgo 3). */}
+            <Box sx={{ ml: { sm: "auto" } }}>
+              <Tooltip title="Wakes every device to re-fetch the whole tenant policy and resets device-level overrides.">
+                <span>
                   <Button
-                    variant="contained"
-                    startIcon={<SaveOutlinedIcon />}
-                    onClick={() => handleSaveMdm(platform)}
-                    disabled={savingMdm !== null || loading || !isDirty}
+                    variant="outlined"
+                    startIcon={<SendOutlinedIcon />}
+                    onClick={handlePush}
+                    disabled={pushing || loading}
                     sx={{
                       textTransform: "none",
-                      fontWeight: 800,
-                      bgcolor: BRAND.teal,
-                      "&:hover": { bgcolor: BRAND.tealHover },
+                      fontWeight: 700,
+                      borderColor: BRAND.teal,
+                      color: BRAND.tealText,
                     }}
                   >
-                    {savingMdm === platform
-                      ? "Guardando…"
-                      : `Guardar política de ${platform === "macos" ? "macOS" : "iOS"}`}
+                    {pushing ? "Pushing…" : "Push to all devices…"}
                   </Button>
-                  {/* El perfil de la organización sale de la política GUARDADA:
-                      es el mismo fichero que entregará el MDM (ADR-0002).
-                      Hasta entonces se instala a mano o por el MDM del
-                      cliente. Identificador fijo: uno nuevo reemplaza al
-                      anterior. */}
-                  {platform === "macos" ? (
-                    <Tooltip
-                      arrow
-                      title={
-                        isDirty
-                          ? "Save the policy first: the profile is built from the saved macOS policy."
-                          : "Download the organization's configuration profile with the settings above. Upload it to your MDM, or open it on the Mac and approve it in System Settings › Privacy & Security › Profiles. A newer version replaces the old one."
-                      }
-                    >
-                      <span>
-                        <Button
-                          variant="outlined"
-                          startIcon={<DownloadOutlinedIcon />}
-                          disabled={isDirty || loading || !tenantId}
-                          onClick={async () => {
-                            try {
-                              const name = await downloadMacosOrganizationProfile(tenantId);
-                              showSnack(`Downloaded ${name || "the organization's profile"}`, "success");
-                            } catch (e) {
-                              showSnack(
-                                e?.status === 404
-                                  ? "The macOS policy has no settings a profile can deliver yet."
-                                  : e?.body?.message || e?.message || "Could not download the profile.",
-                                e?.status === 404 ? "info" : "error"
-                              );
-                            }
-                          }}
-                          sx={{ textTransform: "none", fontWeight: 700 }}
-                        >
-                          Download profile
-                        </Button>
-                      </span>
-                    </Tooltip>
-                  ) : null}
-                  {isDirty ? (
-                    <Typography
-                      variant="caption"
-                      sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}
-                    >
-                      Cambios sin guardar
-                    </Typography>
-                  ) : null}
-                </Box>
-              </Box>
-            );
-          })()
-        )}
-      </SectionPaper>
+                </span>
+              </Tooltip>
+            </Box>
+          </Box>
+        </SectionPaper>
 
-      {/* ── Roadmap ───────────────────────────────────────────────────── */}
-      <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-          <RocketLaunchOutlinedIcon sx={{ color: BRAND.gray }} />
-          <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
-            MDM propio — lo que falta
+        {/* ── Ajustes del sistema por plataforma (MDM) ───────────────────
+            Secciones separadas macOS / iOS: las políticas NO son las mismas
+            en ambas, y cada una guarda su propio dominio de política. Los
+            controles se renderizan desde el catálogo del backend — esta
+            página no conoce ningún ajuste por su nombre. */}
+        <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+            <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Device settings (MDM)</Typography>
+            <Chip
+              size="small"
+              label="beta"
+              sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray }}
+            />
+          </Box>
+          <Typography variant="body2" sx={{ color: "text.secondary", mb: 1.5 }}>
+            Operating-system settings for enrolled Macs, iPhones and iPads, per platform — macOS and
+            iOS settings aren&apos;t equivalent.{" "}
+            {mdm.status?.commands?.deliverable
+              ? "Delivered to enrolled devices as configuration profiles."
+              : "Saved, not delivered yet: they reach devices as configuration profiles once Tracenium can send commands to them."}
           </Typography>
-        </Box>
-        <Typography variant="body2" sx={{ color: BRAND.gray, mb: 1.5 }}>
-          El bloque MAM lo aplica la propia app sobre sí misma. La sección de
-          configuración del sistema ya permite <strong>declarar</strong> la
-          intención, pero <strong>todavía no hay quien la entregue</strong>: eso
-          exige el protocolo MDM de Apple. Nada de lo de abajo está construido.
-        </Typography>
-        <Divider sx={{ borderColor: BRAND.border, mb: 1.5 }} />
-        <Grid container spacing={2}>
-          {MDM_ROADMAP.map((item) => (
-            <Grid size={{ xs: 12, md: 4 }} key={item.title}>
-              <Box
-                sx={{
-                  p: 1.5,
-                  height: "100%",
-                  border: `1px dashed ${BRAND.border}`,
-                  borderRadius: 2,
-                  bgcolor: BRAND.surfaceMuted,
-                }}
-              >
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
-                  <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
-                    {item.title}
-                  </Typography>
-                  <Chip
-                    size="small"
-                    label="planned"
-                    sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray }}
+
+          <Tabs
+            value={mdmTab}
+            onChange={(_e, v) => setMdmTab(v)}
+            sx={{
+              mb: 2,
+              borderBottom: `1px solid ${BRAND.border}`,
+              "& .MuiTab-root": { textTransform: "none", fontWeight: 800, minHeight: 42 },
+              "& .MuiTabs-indicator": { bgcolor: BRAND.teal, height: 3, borderRadius: 999 },
+            }}
+          >
+            <Tab label="macOS" />
+            <Tab label="iPhone & iPad" />
+          </Tabs>
+
+          {catalogLoading ? (
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+              Loading settings…
+            </Typography>
+          ) : (
+            (() => {
+              const platform = mdmTab === 1 ? "ios" : "macos";
+              const block = mdmBlocks[platform] || {};
+              const isDirty = mdmDirty[platform];
+              // Sin estado de supervisión real todavía: el aviso de
+              // aplicabilidad cuenta toda la flota de esa plataforma.
+              const unsupervised =
+                platform === "ios" ? mobileCounts.ios : devices.filter((d) => {
+                  const p = String(d?.platform || d?.os || "").toLowerCase();
+                  return p === "macos" || p === "darwin";
+                }).length;
+
+              return (
+                <Box>
+                  <MdmPlatformSection
+                    platform={platform}
+                    groups={groupsFor(platform)}
+                    block={block}
+                    onChangeBlock={(next) =>
+                      setMdmBlocks((prev) => ({ ...prev, [platform]: next }))
+                    }
+                    readOnly={loading}
+                    unsupervisedCount={unsupervised}
                   />
+                  <Box sx={{ mt: 1, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                    <Button
+                      variant="contained"
+                      startIcon={<SaveOutlinedIcon />}
+                      onClick={() => handleSaveMdm(platform)}
+                      disabled={savingMdm !== null || loading || !isDirty}
+                      sx={{
+                        textTransform: "none",
+                        fontWeight: 800,
+                        bgcolor: BRAND.teal,
+                        "&:hover": { bgcolor: BRAND.tealHover },
+                      }}
+                    >
+                      {savingMdm === platform
+                        ? "Saving…"
+                        : `Save ${platform === "macos" ? "macOS" : "iPhone & iPad"} settings`}
+                    </Button>
+                    {/* El perfil de la organización sale de la política GUARDADA:
+                        es el mismo fichero que entregará el MDM (ADR-0002).
+                        Hasta entonces se instala a mano o por el MDM del
+                        cliente. Identificador fijo: uno nuevo reemplaza al
+                        anterior. */}
+                    {platform === "macos" ? (
+                      <Tooltip
+                        arrow
+                        title={
+                          isDirty
+                            ? "Save the policy first: the profile is built from the saved macOS policy."
+                            : "Download the organization's configuration profile with the settings above. Upload it to your MDM, or open it on the Mac and approve it in System Settings › Privacy & Security › Profiles. A newer version replaces the old one."
+                        }
+                      >
+                        <span>
+                          <Button
+                            variant="outlined"
+                            startIcon={<DownloadOutlinedIcon />}
+                            disabled={isDirty || loading || !tenantId}
+                            onClick={async () => {
+                              try {
+                                const name = await downloadMacosOrganizationProfile(tenantId);
+                                showSnack(`Downloaded ${name || "the organization's profile"}`, "success");
+                              } catch (e) {
+                                showSnack(
+                                  e?.status === 404
+                                    ? "The macOS policy has no settings a profile can deliver yet."
+                                    : e?.body?.message || e?.message || "Could not download the profile.",
+                                  e?.status === 404 ? "info" : "error"
+                                );
+                              }
+                            }}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            Download profile
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    ) : null}
+                    {isDirty ? (
+                      <Typography
+                        variant="caption"
+                        sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}
+                      >
+                        Unsaved changes
+                      </Typography>
+                    ) : null}
+                  </Box>
                 </Box>
-                <Typography variant="caption" sx={{ color: BRAND.gray, lineHeight: 1.6 }}>
-                  {item.body}
-                </Typography>
-              </Box>
-            </Grid>
-          ))}
-        </Grid>
-      </SectionPaper>
+              );
+            })()
+          )}
+        </SectionPaper>
+      </TabPanel>
 
       <BrandSnackbar
         open={snackbar.open}

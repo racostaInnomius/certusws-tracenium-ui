@@ -37,7 +37,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function mount(search = "?page=device-management") {
+// La política de la app vive en la pestaña Policies desde el rediseño en
+// pestañas (28-sep-2026).
+function mount(search = "?page=device-management&mdmTab=policies") {
   const calls = [];
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
@@ -72,7 +74,7 @@ describe("MDM / MAM — el refresco respeta la edición en curso", () => {
 
   it("❗ el tick del auto-refresco no pisa un cambio sin guardar", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    mount("?page=device-management&deviceManagementAutoRefresh=60");
+    mount("?page=device-management&mdmTab=policies&deviceManagementAutoRefresh=60");
     const field = await editMinimumVersion(user);
 
     await act(async () => {
@@ -124,5 +126,17 @@ describe("MDM / MAM — el refresco respeta la edición en curso", () => {
 
     await waitFor(() => expect(calls.length).toBeGreaterThan(antes), { timeout: 3000 });
     expect(screen.queryByText(/discard unsaved changes\?/i)).toBeNull();
+  });
+
+  it("❗ cambiar de pestaña y volver no pierde lo editado", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount();
+    await editMinimumVersion(user);
+
+    await user.click(screen.getByRole("tab", { name: /overview/i }));
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+
+    expect(await screen.findByLabelText(/minimum app version/i)).toHaveValue("2.0.0");
+    expect(screen.getByText(/unsaved changes/i)).toBeTruthy();
   });
 });
