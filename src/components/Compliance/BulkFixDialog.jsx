@@ -33,6 +33,12 @@ import { listFrom } from "../../api/shape";
 import { bulkFixPlan, bulkFixSummary, batchFinished } from "./bulkFixPlan";
 import { outcomeColors, outcomeTone } from "../patch-management/outcomeTone";
 import RescanComplianceButton from "./RescanComplianceButton";
+import {
+  PREREQUISITE_MISSING,
+  describePrerequisiteOffer,
+  prerequisiteOfferLabel,
+  prerequisiteOffers,
+} from "../patch-management/prerequisiteOffer";
 
 const POLL_MS = 5000;
 
@@ -79,14 +85,19 @@ export default function BulkFixDialog({
   const [items, setItems] = React.useState([]);        // remediaciones del lote
   const [skipped, setSkipped] = React.useState([]);
   const [addingToPolicy, setAddingToPolicy] = React.useState(false);
+  // Lo que el lote instaló antes (auditd): no es un hallazgo elegido, así que
+  // su título viene de la respuesta.
+  const [prerequisiteTitles, setPrerequisiteTitles] = React.useState(() => new Map());
   const titleOf = React.useMemo(() => {
-    const m = new Map();
+    const m = new Map(prerequisiteTitles);
     for (const f of findings ?? []) if (f?.checkId && !m.has(f.checkId)) m.set(f.checkId, f.title || f.checkId);
     return m;
-  }, [findings]);
+  }, [findings, prerequisiteTitles]);
+  const offers = React.useMemo(() => prerequisiteOffers(skipped), [skipped]);
+  const otherSkipped = skipped.filter((s) => s?.error !== PREREQUISITE_MISSING);
 
   React.useEffect(() => {
-    if (!open) { setMode(null); setItems([]); setSkipped([]); setSubmitting(false); }
+    if (!open) { setMode(null); setItems([]); setSkipped([]); setSubmitting(false); setPrerequisiteTitles(new Map()); }
   }, [open]);
 
   const ids = items.map((r) => r.id).filter(Boolean);
@@ -130,6 +141,40 @@ export default function BulkFixDialog({
       notify?.({
         severity: "error",
         message: err?.body?.message || err?.body?.error || err?.message || "The batch could not be started",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // «¿Instalo auditd y sigo?» — el operador lo pide pulsando el botón del
+  // aviso. Sólo se relanzan los fixes que se quedaron fuera por eso; el backend
+  // pone la instalación delante de ellos en el mismo job del equipo.
+  const fireWithPrerequisites = async (offer) => {
+    if (!canManage || !deviceId || !mode) return;
+    setSubmitting(true);
+    try {
+      const res = await remediateBatch({ checkIds: offer.checkIds, deviceIds: [deviceId], mode, installPrerequisites: true });
+      const fresh = listFrom(res, { context: "bulkFixPrerequisite" });
+      const pre = Array.isArray(res?.prerequisites) ? res.prerequisites : [];
+      if (pre.length) {
+        setPrerequisiteTitles((prev) => {
+          const m = new Map(prev);
+          for (const p of pre) if (p?.checkId) m.set(p.checkId, p.title || p.checkId);
+          return m;
+        });
+      }
+      setItems((prev) => [...prev, ...fresh]);
+      const retried = new Set(offer.checkIds);
+      setSkipped((prev) => [
+        ...prev.filter((s) => !retried.has(s.checkId)),
+        ...(Array.isArray(res?.skipped) ? res.skipped : []),
+      ]);
+      onChanged?.();
+    } catch (err) {
+      notify?.({
+        severity: "error",
+        message: err?.body?.message || err?.body?.error || err?.message || "The fixes could not be started",
       });
     } finally {
       setSubmitting(false);
@@ -236,12 +281,36 @@ export default function BulkFixDialog({
             </Box>
           )}
 
-          {skipped.length ? (
+          {offers.map((offer) => (
+            <Alert
+              key={offer.prerequisite.key}
+              severity="warning"
+              data-testid={`bulk-fix-prerequisite-${offer.prerequisite.key}`}
+              action={canManage ? (
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={submitting}
+                  onClick={() => fireWithPrerequisites(offer)}
+                  sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                >
+                  {prerequisiteOfferLabel(offer, mode)}
+                </Button>
+              ) : null}
+            >
+              <Typography sx={{ fontSize: TEXT.sm }}>{describePrerequisiteOffer(offer, { hostname })}</Typography>
+              {offer.checkIds.map((c) => (
+                <Typography key={c} sx={{ fontSize: TEXT.sm }}>· {titleOf.get(c) || c}</Typography>
+              ))}
+            </Alert>
+          ))}
+
+          {otherSkipped.length ? (
             <Alert severity="warning" data-testid="bulk-fix-skipped">
               <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700 }}>
-                {skipped.length} could not be launched:
+                {otherSkipped.length} could not be launched:
               </Typography>
-              {skipped.map((s) => (
+              {otherSkipped.map((s) => (
                 <Typography key={s.checkId} sx={{ fontSize: TEXT.sm }}>
                   · {titleOf.get(s.checkId) || s.checkId} — {s.message}
                 </Typography>

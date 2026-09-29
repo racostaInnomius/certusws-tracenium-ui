@@ -244,3 +244,34 @@ describe("⭐ sin arreglo automático, la lista es de consulta", () => {
     expect(screen.queryByRole("button", { name: /^Apply on/ })).toBeNull();
   });
 });
+
+// 29-sep: una regla de auditd a un servidor sin auditd devolvía «Fix «auditd
+// packages are installed» first». Ahora se ofrece instalarlo y seguir.
+describe("requisito que se puede instalar — «¿instalo auditd y sigo?»", () => {
+  const PREREQ = { key: "auditd", checkId: "linux.pkg.auditd_a00ddf", title: "auditd packages are installed", deviceIds: ["d1", "d2"] };
+
+  it("⭐ un 409 de requisito no es un error: es una oferta, y aceptarla reintenta con installPrerequisites", async () => {
+    const e = Object.assign(new Error("409"), { status: 409, body: { error: "PATCH_REMEDIATION_PREREQUISITE_MISSING", prerequisite: PREREQ, message: "auditd…" } });
+    remediate.mockRejectedValueOnce(e).mockResolvedValueOnce({ remediation: { id: 44, prerequisites: [{ ...PREREQ, remediationId: 43 }] } });
+    const notify = vi.fn();
+    open({ notify });
+    fireEvent.click(await screen.findByRole("button", { name: /^Apply on 2/ }));
+
+    const offer = await screen.findByTestId("prerequisite-offer");
+    expect(offer).toHaveTextContent(/auditd is not installed on these 2 devices.*install it first \(auditd packages are installed\)/);
+    expect(notify).not.toHaveBeenCalledWith("error", expect.anything());
+
+    fireEvent.click(screen.getByRole("button", { name: "Install auditd and apply on 2" }));
+    await waitFor(() => expect(remediate).toHaveBeenCalledTimes(2));
+    expect(remediate.mock.calls[1][0]).toEqual(expect.objectContaining({ mode: "apply", deviceIds: ["d1", "d2"], installPrerequisites: true }));
+  });
+
+  it("si faltaba sólo en algunos, avisa de cuántos se quedaron fuera y cómo mandárselo", async () => {
+    remediate.mockResolvedValueOnce({ remediation: { id: 45, missingPrerequisite: { ...PREREQ, deviceIds: ["d2"] } } });
+    const notify = vi.fn();
+    open({ notify });
+    fireEvent.click(await screen.findByRole("button", { name: /^Apply on 2/ }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("warning", expect.stringMatching(/1 device was left out: auditd is not installed/)));
+    expect(remediate.mock.calls[0][0]).not.toHaveProperty("installPrerequisites");
+  });
+});

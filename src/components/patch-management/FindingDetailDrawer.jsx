@@ -54,6 +54,7 @@ import {
   cancelRemediation,
   listRemediations,
 } from "../../api/patchManagement";
+import { PREREQUISITE_MISSING } from "./prerequisiteOffer";
 import { formatRelativeTime } from "../Compliance/PatchLevel";
 import { listFrom } from "../../api/shape";
 import { devicesToApplyAfterDryRun, dryRunFinished, dryRunLeftOut } from "./dryRunGate";
@@ -137,6 +138,8 @@ export default function FindingDetailDrawer({
   const [devicesLoading, setDevicesLoading] = React.useState(false);
   const [selectedDeviceIds, setSelectedDeviceIds] = React.useState(() => new Set());
   const [submitting, setSubmitting] = React.useState(false);
+  // «auditd no está instalado — ¿lo instalo y sigo?»: { prerequisite, mode }.
+  const [prerequisiteOffer, setPrerequisiteOffer] = React.useState(null);
 
   // PROGRESS-mode state
   const [activeRemediationId, setActiveRemediationId] = React.useState(null);
@@ -161,6 +164,7 @@ export default function FindingDetailDrawer({
     setSelectedDeviceIds(new Set());
     setActiveRemediationId(null);
     setResults([]);
+    setPrerequisiteOffer(null);
   }, [open, finding?.checkId, checkIdsKey, initialKey]);
 
   // ── SELECT-mode: load devices affected ──────────────────────────
@@ -277,7 +281,7 @@ export default function FindingDetailDrawer({
   }, [mode, activeRemediationId, loadResults]);
 
   // ── Actions ─────────────────────────────────────────────────────
-  const fire = async (theMode, targetIds = null) => {
+  const fire = async (theMode, targetIds = null, { installPrerequisites = false } = {}) => {
     if (!finding?.checkId || !canManage) return;
     // Tras una simulación, `apply` va a los equipos que ELLA marcó. Sin
     // simulación previa va a la selección: simular primero se recomienda, no
@@ -295,7 +299,9 @@ export default function FindingDetailDrawer({
         checkId: finding.checkId,
         mode: theMode,
         deviceIds: targets,
+        ...(installPrerequisites ? { installPrerequisites: true } : {}),
       });
+      setPrerequisiteOffer(null);
       const id = res?.remediation?.id;
       if (!id) {
         notify?.("error", "Backend didn't return a remediation id");
@@ -310,6 +316,15 @@ export default function FindingDetailDrawer({
           `${skipped.length} ${skipped.length === 1 ? "device was" : "devices were"} left out: this fix is already on its way to ${skipped.length === 1 ? "it" : "them"}.`
         );
       }
+      // Equipos que se quedaron fuera por no tener auditd: se dice y se dice
+      // cómo mandárselo instalándolo antes.
+      const missing = res?.remediation?.missingPrerequisite;
+      if (missing?.deviceIds?.length) {
+        notify?.(
+          "warning",
+          `${missing.deviceIds.length} ${missing.deviceIds.length === 1 ? "device was" : "devices were"} left out: ${missing.key} is not installed. Select only ${missing.deviceIds.length === 1 ? "it" : "them"} and apply again — Tracenium offers to install ${missing.key} first.`
+        );
+      }
       setActiveMode(theMode);
       setActiveRemediationId(id);
       setMode("progress");
@@ -318,6 +333,12 @@ export default function FindingDetailDrawer({
       // 409: todos los elegidos lo tienen ya en camino. Se recarga la lista
       // para que la fila lo enseñe.
       if (err?.body?.error === "PATCH_REMEDIATION_IN_FLIGHT") loadDevices();
+      // Ninguno tiene el requisito (auditd): en vez de un error, la oferta de
+      // instalarlo y seguir — la decide el operador con el botón.
+      if (err?.body?.error === PREREQUISITE_MISSING && err?.body?.prerequisite) {
+        setPrerequisiteOffer({ prerequisite: err.body.prerequisite, mode: theMode });
+        return;
+      }
       // Backend's well-known failure modes:
       //   PMP_PLUGIN_DISABLED → 403; banner on the page already
       //                         tells the operator how to fix it,
@@ -736,6 +757,32 @@ export default function FindingDetailDrawer({
               ) : null}
 
               {notice ? <Box sx={{ pt: 1 }}>{notice}</Box> : null}
+
+              {prerequisiteOffer ? (() => {
+                const { prerequisite: pre, mode: offerMode } = prerequisiteOffer;
+                const n = pre.deviceIds?.length ?? 0;
+                return (
+                  <Alert
+                    severity="warning"
+                    variant="outlined"
+                    data-testid="prerequisite-offer"
+                    sx={{ mt: 1 }}
+                    action={
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disabled={submitting || !canManage}
+                        onClick={() => fire(offerMode, pre.deviceIds, { installPrerequisites: true })}
+                        sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                      >
+                        {offerMode === "dry_run" ? `Dry-run with ${pre.key} installed first` : `Install ${pre.key} and apply on ${n}`}
+                      </Button>
+                    }
+                  >
+                    {`${pre.key} is not installed on ${n === 1 ? "this device" : `these ${n} devices`}, so this fix would do nothing. Tracenium can install it first (${pre.title}) and then apply the fix, in the same job.`}
+                  </Alert>
+                );
+              })() : null}
 
               {/* La simulación que ya se hizo. Sin esto, volver a entrar aquí
                   desde Security Compliance obligaba a repetirla para llegar al

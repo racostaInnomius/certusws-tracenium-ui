@@ -156,3 +156,64 @@ describe("confirmar con un escaneo", () => {
     expect(screen.queryByRole("button", { name: /Rescan to confirm/ })).toBeNull();
   });
 });
+
+// 29-sep: reglas de auditd a un servidor sin auditd → «Fix «auditd packages are
+// installed» first». Ahora se ofrece instalarlo y seguir, en el mismo job.
+describe("requisito que se puede instalar — «¿instalo auditd y sigo?»", () => {
+  const PREREQ = { key: "auditd", checkId: "linux.pkg.auditd_a00ddf", title: "auditd packages are installed", deviceIds: ["dev-1"] };
+
+  it("⭐ los fixes retenidos por auditd se agrupan con un botón; pulsarlo relanza SÓLO esos con installPrerequisites", async () => {
+    remediateBatch
+      .mockResolvedValueOnce({
+        items: [{ id: 1, checkId: "a", status: "queued", counts: {} }],
+        skipped: [{ checkId: "b", error: "PATCH_REMEDIATION_PREREQUISITE_MISSING", message: "auditd is not installed…", prerequisite: PREREQ }],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { id: 7, checkId: "linux.pkg.auditd_a00ddf", status: "queued", counts: {} },
+          { id: 8, checkId: "b", status: "queued", counts: {} },
+        ],
+        skipped: [],
+        prerequisites: [{ ...PREREQ, remediationId: 7 }],
+      });
+    getRemediationsBatch.mockResolvedValue({ items: [] });
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /^Apply 2/ }));
+
+    const offer = await screen.findByTestId("bulk-fix-prerequisite-auditd");
+    expect(offer).toHaveTextContent(/auditd is not installed on WS-ALPHA, so 1 fix was held back/);
+    expect(offer).toHaveTextContent(/T b/);
+    // No se mezcla con los omitidos por otros motivos.
+    expect(screen.queryByTestId("bulk-fix-skipped")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Install auditd and apply 1" }));
+    await waitFor(() => expect(remediateBatch).toHaveBeenCalledTimes(2));
+    expect(remediateBatch.mock.calls[1][0]).toEqual({ checkIds: ["b"], deviceIds: ["dev-1"], mode: "apply", installPrerequisites: true });
+
+    // La instalación sale en el progreso con su nombre, y el aviso se va.
+    expect(await screen.findByText("auditd packages are installed")).toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-fix-prerequisite-auditd")).toBeNull();
+  });
+
+  it("en una simulación, el botón simula también (no promete instalar)", async () => {
+    remediateBatch.mockResolvedValueOnce({
+      items: [],
+      skipped: [{ checkId: "a", error: "PATCH_REMEDIATION_PREREQUISITE_MISSING", message: "…", prerequisite: PREREQ }],
+    });
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /^Dry-run 2/ }));
+    expect(await screen.findByRole("button", { name: "Dry-run 1 with auditd installed first" })).toBeInTheDocument();
+  });
+
+  it("sin permiso de gestión no hay botón", async () => {
+    remediateBatch.mockResolvedValueOnce({
+      items: [],
+      skipped: [{ checkId: "a", error: "PATCH_REMEDIATION_PREREQUISITE_MISSING", message: "…", prerequisite: PREREQ }],
+    });
+    const { rerender } = open();
+    fireEvent.click(screen.getByRole("button", { name: /^Apply 2/ }));
+    await screen.findByTestId("bulk-fix-prerequisite-auditd");
+    rerender(<BulkFixDialog open findings={FINDINGS} deviceId="dev-1" hostname="WS-ALPHA" canManage={false} onClose={vi.fn()} onChanged={vi.fn()} notify={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /Install auditd/ })).toBeNull();
+  });
+});
