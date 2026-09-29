@@ -27,6 +27,9 @@ export function pendingKbIds(items) {
   const out = [];
   const seen = new Set();
   for (const it of Array.isArray(items) ? items : []) {
+    // Lo que el agente no puede instalar (macOS en Apple silicon, ver
+    // ownerAuth.js) no entra en «Install all»: el job acabaría pidiendo contraseña.
+    if (it?.installBlockedReason) continue;
     const id = it && typeof it.hotfixId === "string" ? it.hotfixId.trim() : "";
     if (!id || seen.has(id)) continue;
     seen.add(id);

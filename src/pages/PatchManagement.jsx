@@ -60,6 +60,13 @@ import {
   describeBlockedError,
   pendingKbIds,
 } from "../components/patch-management/patchGateOutcome";
+import {
+  OWNER_AUTH_CHIP,
+  OWNER_AUTH_TOOLTIP,
+  describeOwnerAuthLeftOut,
+  isAgentInstallable,
+  ownerAuthLeftOut,
+} from "../components/patch-management/ownerAuth";
 import SecurityConfigPanel from "../components/patch-management/SecurityConfigPanel";
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
@@ -907,7 +914,7 @@ export default function PatchManagement({ onNavigate }) {
         mode: "install",
         dryRun: true
       });
-      setBulkDialog((prev) => prev ? { ...prev, plan: res?.plan ?? [], loading: false } : null);
+      setBulkDialog((prev) => prev ? { ...prev, plan: res?.plan ?? [], ownerAuth: ownerAuthLeftOut(res), loading: false } : null);
     } catch (err) {
       console.error("[patch-mgmt] bulk-install dry-run failed", err);
       notify("error", `Could not load plan: ${err?.message || "unknown error"}`);
@@ -985,8 +992,10 @@ export default function PatchManagement({ onNavigate }) {
 
   const toggleAllSelection = React.useCallback(() => {
     setSelectedHotfixes((prev) => {
-      // Treat "all selected" if every item with an id is in the set.
+      // Treat "all selected" if every item with an id is in the set. Only
+      // what the agent can install: a macOS update on Apple silicon can't be.
       const allIds = drawerItems
+        .filter(isAgentInstallable)
         .map((it) => it.hotfixId)
         .filter((id) => Boolean(id));
       const allSelected = allIds.length > 0 && allIds.every((id) => prev.has(id));
@@ -1890,24 +1899,27 @@ export default function PatchManagement({ onNavigate }) {
                     <Checkbox
                       size="small"
                       checked={
-                        drawerItems.length > 0 &&
-                        drawerItems
-                          .map((it) => it.hotfixId)
-                          .filter(Boolean)
-                          .every((id) => selectedHotfixes.has(id))
+                        allPendingKbIds.length > 0 &&
+                        allPendingKbIds.every((id) => selectedHotfixes.has(id))
                       }
-                      indeterminate={selectedHotfixes.size > 0 && selectedHotfixes.size < drawerItems.length}
+                      indeterminate={selectedHotfixes.size > 0 && selectedHotfixes.size < allPendingKbIds.length}
                       onChange={toggleAllSelection}
-                      disabled={dispatching}
+                      disabled={dispatching || allPendingKbIds.length === 0}
                       sx={{ "&.Mui-checked": { color: BRAND.teal }, "&.MuiCheckbox-indeterminate": { color: BRAND.teal } }}
                     />
                     <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", flex: 1 }}>
                       {drawerItems.length} missing — select to install specific ones
                     </Typography>
                   </Box>
+                  {drawerItems.some((it) => !isAgentInstallable(it)) ? (
+                    <Alert severity="warning" variant="outlined" sx={{ m: 1 }} data-testid="owner-auth-notice">
+                      {OWNER_AUTH_TOOLTIP}
+                    </Alert>
+                  ) : null}
                   {drawerItems.map((item, idx) => {
                     const id = item.hotfixId || `idx-${idx}`;
                     const checked = selectedHotfixes.has(item.hotfixId);
+                    const installable = isAgentInstallable(item);
                     const sevMeta = {
                       critical:  { label: "Critical",  fg: BRAND.alert.errorText,  bg: ROLE.criticalSoft },
                       important: { label: "Important", fg: BRAND.alert.warningText,   bg: ROLE.cautionSoft },
@@ -1933,7 +1945,8 @@ export default function PatchManagement({ onNavigate }) {
                           size="small"
                           checked={checked}
                           onChange={() => item.hotfixId && toggleHotfix(item.hotfixId)}
-                          disabled={dispatching || !item.hotfixId}
+                          disabled={dispatching || !item.hotfixId || !installable}
+                          inputProps={{ "aria-label": `Select ${item.hotfixId || item.title || "patch"}` }}
                           sx={{ mt: -0.5, "&.Mui-checked": { color: BRAND.teal } }}
                         />
                         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -1947,6 +1960,15 @@ export default function PatchManagement({ onNavigate }) {
                               <Typography sx={{ fontFamily: "monospace", fontSize: TEXT.sm, color: BRAND.dark }}>
                                 {item.hotfixId}
                               </Typography>
+                            ) : null}
+                            {!installable ? (
+                              <Tooltip title={OWNER_AUTH_TOOLTIP} arrow describeChild>
+                                <Chip
+                                  size="small"
+                                  label={OWNER_AUTH_CHIP}
+                                  sx={{ bgcolor: ROLE.cautionSoft, color: BRAND.alert.warningText, fontWeight: 700, height: 20, fontSize: TEXT.xs }}
+                                />
+                              </Tooltip>
                             ) : null}
                           </Box>
                           <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, mt: 0.5, wordBreak: "break-word" }}>
@@ -2008,6 +2030,11 @@ export default function PatchManagement({ onNavigate }) {
               <Typography sx={{ color: BRAND.dark, mb: 1.5 }}>
                 {bulkDialog.action.description}
               </Typography>
+              {describeOwnerAuthLeftOut(bulkDialog.ownerAuth) ? (
+                <Alert severity="warning" variant="outlined" sx={{ mb: 1.5 }} data-testid="bulk-owner-auth">
+                  {describeOwnerAuthLeftOut(bulkDialog.ownerAuth)}
+                </Alert>
+              ) : null}
               {bulkDialog.plan && bulkDialog.plan.length > 0 ? (
                 <>
                   <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 1 }}>
