@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeOwnerAuthLeftOut, isAgentInstallable, ownerAuthLeftOut, OWNER_AUTH_REQUIRED } from "./ownerAuth";
+import { buildNudgePayload, describeOwnerAuthLeftOut, isAgentInstallable, nudgeDateBounds, ownerAuthLeftOut, OWNER_AUTH_REQUIRED } from "./ownerAuth";
 import { pendingKbIds } from "./patchGateOutcome";
 
 describe("ownerAuth", () => {
@@ -35,5 +35,27 @@ describe("ownerAuth", () => {
   it("nada dejado fuera → sin frase", () => {
     expect(describeOwnerAuthLeftOut(ownerAuthLeftOut({ plan: [], skipped: [] }))).toBeNull();
     expect(describeOwnerAuthLeftOut(ownerAuthLeftOut(undefined))).toBeNull();
+  });
+});
+
+describe("buildNudgePayload — la fecha límite", () => {
+  const now = new Date(2026, 8, 29, 10, 0, 0); // 29-sep 10:00 local
+  const item = { hotfixId: "macOS 27.0.1-26A434", title: "macOS 27.0.1" };
+
+  it("⭐ «antes del día X» es ese día a las 18:00 locales", () => {
+    const p = buildNudgePayload(item, "2026-10-06", now);
+    expect(p).toEqual({ label: "macOS 27.0.1-26A434", title: "macOS 27.0.1", deadlineUtc: new Date(2026, 9, 6, 18, 0, 0).toISOString() });
+  });
+
+  it("hoy a las 18:00 todavía vale; ayer o más de 60 días, no", () => {
+    expect(buildNudgePayload(item, "2026-09-29", now)).not.toBeNull();
+    expect(buildNudgePayload(item, "2026-09-28", now)).toBeNull();
+    expect(buildNudgePayload(item, "2026-12-31", now)).toBeNull();
+    expect(buildNudgePayload(item, "2026-02-30", now)).toBeNull();
+    expect(buildNudgePayload({}, "2026-10-06", now)).toBeNull();
+  });
+
+  it("el selector propone una semana y no deja pasar de 60 días", () => {
+    expect(nudgeDateBounds(now)).toEqual({ min: "2026-09-30", max: "2026-11-27", def: "2026-10-06" });
   });
 });

@@ -61,10 +61,13 @@ import {
   pendingKbIds,
 } from "../components/patch-management/patchGateOutcome";
 import {
+  NUDGE_CADENCE_TEXT,
   OWNER_AUTH_CHIP,
   OWNER_AUTH_TOOLTIP,
+  buildNudgePayload,
   describeOwnerAuthLeftOut,
   isAgentInstallable,
+  nudgeDateBounds,
   ownerAuthLeftOut,
 } from "../components/patch-management/ownerAuth";
 import SecurityConfigPanel from "../components/patch-management/SecurityConfigPanel";
@@ -95,6 +98,7 @@ import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
@@ -819,6 +823,9 @@ export default function PatchManagement({ onNavigate }) {
   const [installConfirm, setInstallConfirm] = React.useState(null);
   // Reinicio bajo demanda: { when, typedName }. Ver restartRequest.js.
   const [restartDialog, setRestartDialog] = React.useState(null);
+  // Pedir al usuario del Mac que instale una actualización que el agente no
+  // puede instalar (Apple silicon): { item, date }. Ver ownerAuth.js.
+  const [nudgeDialog, setNudgeDialog] = React.useState(null);
   const [drawerReboot, setDrawerReboot] = React.useState(false);
   // Conservar el snapshot hasta validar (P1). Como el reinicio: se elige en
   // cada envío, nunca se hereda del anterior.
@@ -1102,6 +1109,16 @@ export default function PatchManagement({ onNavigate }) {
   }, [dispatchJob]);
 
   const drawerDeviceName = drawerDevice ? drawerDevice.hostname || drawerDevice.agentId.slice(0, 12) : "";
+  const openNudgeDialog = React.useCallback((item) => {
+    setNudgeDialog({ item, date: nudgeDateBounds().def });
+  }, []);
+  const nudgePayload = nudgeDialog ? buildNudgePayload(nudgeDialog.item, nudgeDialog.date) : null;
+  const confirmNudge = React.useCallback(() => {
+    if (!nudgePayload) return;
+    setNudgeDialog(null);
+    dispatchJob("os_update_nudge", nudgePayload, "Install request");
+  }, [nudgePayload, dispatchJob]);
+
   const confirmRestart = React.useCallback(() => {
     if (!restartDialog) return;
     const { when } = restartDialog;
@@ -1979,6 +1996,18 @@ export default function PatchManagement({ onNavigate }) {
                               source: {item.source}
                             </Typography>
                           ) : null}
+                          {!installable ? (
+                            <Button
+                              size="small"
+                              variant="text"
+                              startIcon={<NotificationsActiveOutlinedIcon />}
+                              onClick={() => openNudgeDialog(item)}
+                              disabled={dispatching}
+                              sx={{ textTransform: "none", fontWeight: 700, color: BRAND.teal, mt: 0.5, px: 0.5 }}
+                            >
+                              Ask the user to install…
+                            </Button>
+                          ) : null}
                         </Box>
                       </Box>
                     );
@@ -2295,6 +2324,44 @@ export default function PatchManagement({ onNavigate }) {
             }}
           >
             {restartDialog?.when === RESTART_WHEN.NOW ? "Restart now" : "Schedule restart"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(nudgeDialog)} onClose={() => setNudgeDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
+          Ask the user of {drawerDeviceName} to install {nudgeDialog?.item?.title || nudgeDialog?.item?.hotfixId}
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, mb: 2 }}>
+            On Apple silicon the agent can&apos;t install this update: it needs the Mac owner&apos;s password.
+            {" "}{NUDGE_CADENCE_TEXT}
+          </Typography>
+          <TextField
+            type="date"
+            label="Install before"
+            size="small"
+            value={nudgeDialog?.date ?? ""}
+            onChange={(e) => setNudgeDialog((d) => ({ ...d, date: e.target.value }))}
+            slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: nudgeDateBounds().min, max: nudgeDateBounds().max } }}
+            helperText={nudgePayload ? "Due at 6:00 PM your time on that day." : "Pick a day from tomorrow up to 60 days ahead."}
+            error={Boolean(nudgeDialog) && !nudgePayload}
+          />
+          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 2 }}>
+            Needs the Tracenium menu bar app running in the user&apos;s session. The agent never installs or restarts anything on its own.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNudgeDialog(null)} sx={{ textTransform: "none" }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={confirmNudge}
+            disabled={!nudgePayload || dispatching}
+            sx={{ textTransform: "none", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
+          >
+            Send request
           </Button>
         </DialogActions>
       </Dialog>

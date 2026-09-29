@@ -34,10 +34,16 @@ const ITEMS = [
   { hotfixId: "macOS 27.0.1-26A434", title: "macOS 27.0.1", severity: "unknown", source: "apple_software_update", installBlockedReason: "owner_authorization_required" },
 ];
 
+let jobPosts;
 function mount() {
+  jobPosts = [];
   server.use(
     http.all(/.*\/api\/.*/, async ({ request }) => {
       const url = new URL(request.url);
+      if (request.method === "POST" && url.pathname.endsWith("/orchestrator/devices/jpr/jobs")) {
+        jobPosts.push(await request.json());
+        return HttpResponse.json({ ok: true, jobId: "job-nudge-1", status: "pending" });
+      }
       if (url.pathname.endsWith("/devices/jpr/items")) return HttpResponse.json({ ok: true, agentId: "jpr", items: ITEMS });
       if (url.pathname.endsWith("/orchestrator/devices-connected")) return HttpResponse.json({ ok: true, deviceIds: ["jpr"] });
       if (request.method === "POST" && url.pathname.endsWith("/patch-management/bulk-install")) {
@@ -106,5 +112,32 @@ describe("Patch Management — macOS en Apple silicon", () => {
       expect(within(dialog).getByTestId("bulk-owner-auth")).toHaveTextContent(/macOS updates on 2 Apple silicon Macs are left out/)
     );
     expect(within(dialog).getByText(/Will dispatch to 1 device/)).toBeInTheDocument();
+  });
+
+  it("⭐ «Ask the user to install…» manda el aviso con la fecha límite", async () => {
+    mount();
+    fireEvent.click(await screen.findByText("JPR-MacBookPro"));
+    const drawer = await screen.findByText("macOS 27.0.1-26A434").then((el) => el.closest(".MuiDrawer-paper"));
+    // Sólo en la fila que el agente no puede instalar.
+    expect(within(drawer).getAllByRole("button", { name: /Ask the user to install/ })).toHaveLength(1);
+    fireEvent.click(within(drawer).getByRole("button", { name: /Ask the user to install/ }));
+
+    const dialog = await screen.findByRole("dialog", { name: /Ask the user of JPR-MacBookPro to install macOS 27\.0\.1/ });
+    expect(within(dialog).getByText(/every hour after the deadline/)).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Install before"), { target: { value: "2020-01-01" } });
+    expect(within(dialog).getByRole("button", { name: "Send request" })).toBeDisabled();
+
+    const due = new Date(Date.now() + 5 * 24 * 3600 * 1000);
+    const day = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
+    fireEvent.change(within(dialog).getByLabelText("Install before"), { target: { value: day } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send request" }));
+
+    await waitFor(() => expect(jobPosts).toHaveLength(1));
+    expect(jobPosts[0].jobType).toBe("os_update_nudge");
+    expect(jobPosts[0].payload).toEqual({
+      label: "macOS 27.0.1-26A434",
+      title: "macOS 27.0.1",
+      deadlineUtc: new Date(due.getFullYear(), due.getMonth(), due.getDate(), 18, 0, 0).toISOString(),
+    });
   });
 });

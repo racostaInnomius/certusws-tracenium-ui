@@ -55,3 +55,47 @@ export function describeOwnerAuthLeftOut(leftOut) {
     "Ask the user to install them from System Settings → General → Software Update."
   );
 }
+
+// ── Pedírsela al usuario, con fecha límite ───────────────────────────
+//
+// Lo que sí se puede hacer sin MDM: que la bandeja del Mac se lo recuerde al
+// usuario hasta que la instale (job `os_update_nudge`). El agente la repite
+// una vez al día, cada pocas horas en los 3 últimos días y cada hora pasada la
+// fecha, y deja de avisar cuando el escaneo ya no la lista.
+
+export const NUDGE_DEFAULT_DAYS = 7;
+export const NUDGE_MAX_DAYS = 60;
+
+export const NUDGE_CADENCE_TEXT =
+  "The Mac's menu bar app reminds the user once a day, several times a day in the last 3 days and every hour " +
+  "after the deadline, with a button that opens Software Update. The reminders stop once the update is installed.";
+
+const pad = (n) => String(n).padStart(2, "0");
+/** Una fecha local «YYYY-MM-DD» (lo que usa un <input type="date">). */
+export function localDateString(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function nudgeDateBounds(now = new Date()) {
+  const plus = (days) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+  return { min: localDateString(plus(1)), max: localDateString(plus(NUDGE_MAX_DAYS - 1)), def: localDateString(plus(NUDGE_DEFAULT_DAYS)) };
+}
+
+/**
+ * El payload del job, o null si la fecha no vale. La fecha límite es a las
+ * 18:00 hora local del operador de ese día: «antes del viernes» es el viernes
+ * por la tarde, no a medianoche.
+ */
+export function buildNudgePayload(item, dateString, now = new Date()) {
+  const m = typeof dateString === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString) : null;
+  if (!m || !item?.hotfixId) return null;
+  const deadline = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 18, 0, 0);
+  if (Number.isNaN(deadline.getTime()) || deadline.getMonth() !== Number(m[2]) - 1) return null;
+  const max = now.getTime() + NUDGE_MAX_DAYS * 24 * 3600 * 1000;
+  if (deadline.getTime() <= now.getTime() || deadline.getTime() > max) return null;
+  return {
+    label: item.hotfixId,
+    ...(item.title ? { title: item.title } : {}),
+    deadlineUtc: deadline.toISOString(),
+  };
+}
