@@ -22,6 +22,18 @@ describe("DEVICE_DETAIL_TABS", () => {
     expect(values).toContain("location");
     expect(new Set(values).size).toBe(values.length);
   });
+
+  it("⭐ la evidencia se llama «Troubleshooting» y queda la ÚLTIMA", () => {
+    // El nombre decide el sitio, porque el orden es alfabético: «Evidence»
+    // caía tercera, entre lo que se mira a diario. Esto se abre el día que
+    // algo va mal, así que va al final.
+    const ultima = DEVICE_DETAIL_TABS[DEVICE_DETAIL_TABS.length - 1];
+    expect(ultima).toEqual({ value: "evidence", label: "Troubleshooting" });
+  });
+
+  it("⚠️ y su `value` sigue siendo `evidence`: los enlaces guardados apuntan ahí", () => {
+    expect(DEVICE_DETAIL_TABS.some((t) => t.value === "evidence")).toBe(true);
+  });
 });
 
 describe("diskTone", () => {

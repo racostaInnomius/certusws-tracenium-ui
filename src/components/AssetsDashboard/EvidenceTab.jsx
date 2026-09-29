@@ -1,7 +1,10 @@
 // src/components/AssetsDashboard/EvidenceTab.jsx
 //
-// ADR-0032 F3 — pestaña «Evidence» de la ficha del equipo: capturar el estado
-// de AHORA, y leer lo capturado.
+// ADR-0032 F3 — pestaña «Troubleshooting» de la ficha del equipo: capturar el
+// estado de AHORA, y leer lo capturado. (El `value` de la pestaña sigue siendo
+// `evidence`, y por eso el fichero conserva el nombre: lo que cambió es el
+// rótulo, para que el orden alfabético la deje al final y no entre lo que se
+// mira a diario.)
 //
 // Lo que la pantalla dice sin que nadie pregunte:
 //   · que las sesiones, los procesos y la red sólo existen mientras la máquina

@@ -171,7 +171,7 @@ export default function ReportParamsDialog({ open, onClose, reportType, format, 
                       explica nada: se dice dónde se piden. */}
                   {!loading && captures.length === 0 ? (
                     <Typography sx={{ color: BRAND.gray, fontSize: TEXT.xs, mt: 0.5 }}>
-                      No evidence packages yet. They are captured from a device&apos;s Evidence tab.
+                      No evidence packages yet. They are captured from a device&apos;s Troubleshooting tab.
                     </Typography>
                   ) : null}
                   {err ? <Typography sx={{ color: BRAND.alert.errorText, fontSize: TEXT.xs, mt: 0.5 }}>{err}</Typography> : null}

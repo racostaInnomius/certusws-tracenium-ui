@@ -14,13 +14,20 @@
 export const DEVICE_DETAIL_TABS = [
   { value: "agent", label: "Agent" },
   { value: "activity", label: "Activity" },
-  // ADR-0032 — capturar el estado de AHORA antes de que alguien reinicie.
-  { value: "evidence", label: "Evidence" },
   { value: "experience", label: "Experience" },
   { value: "hardware", label: "Hardware" },
   { value: "location", label: "Location" },
   { value: "printers", label: "Printers" },
   { value: "software", label: "Software" },
+  // ADR-0032 — capturar el estado de AHORA antes de que alguien reinicie.
+  //
+  // ⚠️ Se llama «Troubleshooting» y no «Evidence» POR EL ORDEN: las pestañas
+  // van alfabéticas tras Agent, y «Evidence» caía tercera, entre lo que se
+  // mira todos los días. Esto no se mira todos los días — se abre el día que
+  // algo va mal—, así que su sitio es el final. El `value` sigue siendo
+  // `evidence`: es lo que guardan el estado y los enlaces que abren la ficha
+  // en esta pestaña, y cambiarlo rompería los que ya existan.
+  { value: "evidence", label: "Troubleshooting" },
 ];
 
 /**
