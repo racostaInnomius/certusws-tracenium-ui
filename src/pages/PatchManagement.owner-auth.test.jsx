@@ -133,10 +133,11 @@ describe("Patch Management — macOS en Apple silicon", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(jobPosts).toHaveLength(1));
-    expect(jobPosts[0].jobType).toBe("os_update_nudge");
+    expect(jobPosts[0].jobType).toBe("user_action");
     expect(jobPosts[0].payload).toEqual({
-      label: "macOS 27.0.1-26A434",
-      title: "macOS 27.0.1",
+      op: "request",
+      kind: "os.update",
+      params: { label: "macOS 27.0.1-26A434", title: "macOS 27.0.1" },
       deadlineUtc: new Date(due.getFullYear(), due.getMonth(), due.getDate(), 18, 0, 0).toISOString(),
     });
   });

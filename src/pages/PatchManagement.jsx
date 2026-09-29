@@ -65,6 +65,7 @@ import {
   OWNER_AUTH_CHIP,
   OWNER_AUTH_TOOLTIP,
   buildNudgePayload,
+  USER_ACTION_JOB_TYPE,
   describeOwnerAuthLeftOut,
   isAgentInstallable,
   nudgeDateBounds,
@@ -1116,7 +1117,7 @@ export default function PatchManagement({ onNavigate }) {
   const confirmNudge = React.useCallback(() => {
     if (!nudgePayload) return;
     setNudgeDialog(null);
-    dispatchJob("os_update_nudge", nudgePayload, "Install request");
+    dispatchJob(USER_ACTION_JOB_TYPE, nudgePayload, "Install request");
   }, [nudgePayload, dispatchJob]);
 
   const confirmRestart = React.useCallback(() => {

@@ -59,9 +59,13 @@ export function describeOwnerAuthLeftOut(leftOut) {
 // ── Pedírsela al usuario, con fecha límite ───────────────────────────
 //
 // Lo que sí se puede hacer sin MDM: que la bandeja del Mac se lo recuerde al
-// usuario hasta que la instale (job `os_update_nudge`). El agente la repite
-// una vez al día, cada pocas horas en los 3 últimos días y cada hora pasada la
-// fecha, y deja de avisar cuando el escaneo ya no la lista.
+// usuario hasta que la instale — la «acción para el usuario» `os.update`
+// (job `user_action`, ADR-0036 D1). La bandeja la repite una vez al día, cada
+// pocas horas en los 3 últimos días y cada hora pasada la fecha, y el agente
+// la cierra cuando el escaneo ya no la lista.
+
+/** El job que lleva las acciones para el usuario. */
+export const USER_ACTION_JOB_TYPE = "user_action";
 
 export const NUDGE_DEFAULT_DAYS = 7;
 export const NUDGE_MAX_DAYS = 60;
@@ -84,7 +88,8 @@ export function nudgeDateBounds(now = new Date()) {
 /**
  * El payload del job, o null si la fecha no vale. La fecha límite es a las
  * 18:00 hora local del operador de ese día: «antes del viernes» es el viernes
- * por la tarde, no a medianoche.
+ * por la tarde, no a medianoche. `actionId` y la caducidad los pone el
+ * servidor (job-types.ts, normalizeJobPayload).
  */
 export function buildNudgePayload(item, dateString, now = new Date()) {
   const m = typeof dateString === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString) : null;
@@ -94,8 +99,9 @@ export function buildNudgePayload(item, dateString, now = new Date()) {
   const max = now.getTime() + NUDGE_MAX_DAYS * 24 * 3600 * 1000;
   if (deadline.getTime() <= now.getTime() || deadline.getTime() > max) return null;
   return {
-    label: item.hotfixId,
-    ...(item.title ? { title: item.title } : {}),
+    op: "request",
+    kind: "os.update",
+    params: { label: item.hotfixId, ...(item.title ? { title: item.title } : {}) },
     deadlineUtc: deadline.toISOString(),
   };
 }

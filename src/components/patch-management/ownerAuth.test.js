@@ -44,7 +44,15 @@ describe("buildNudgePayload — la fecha límite", () => {
 
   it("⭐ «antes del día X» es ese día a las 18:00 locales", () => {
     const p = buildNudgePayload(item, "2026-10-06", now);
-    expect(p).toEqual({ label: "macOS 27.0.1-26A434", title: "macOS 27.0.1", deadlineUtc: new Date(2026, 9, 6, 18, 0, 0).toISOString() });
+    expect(p).toEqual({
+      op: "request",
+      kind: "os.update",
+      params: { label: "macOS 27.0.1-26A434", title: "macOS 27.0.1" },
+      deadlineUtc: new Date(2026, 9, 6, 18, 0, 0).toISOString(),
+    });
+    // actionId y caducidad los pone el servidor, no el panel.
+    expect(p).not.toHaveProperty("actionId");
+    expect(p).not.toHaveProperty("expiresUtc");
   });
 
   it("hoy a las 18:00 todavía vale; ayer o más de 60 días, no", () => {
