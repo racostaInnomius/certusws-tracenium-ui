@@ -645,19 +645,28 @@ export default function Alerts({ onNavigate }) {
                         pero nunca miente. La tipografía monoespaciada se queda
                         SÓLO para ese caso — un hostname en monoespaciada
                         parece un identificador y vuelve a costar leerlo. */}
+                    {/* Con equipo, la celda es un enlace a su ficha en Asset
+                        Management: se salta la alerta y va directo a la
+                        máquina. El resto de la fila sigue abriendo la alerta. */}
                     <TableCell>
-                      <Typography
-                        variant="body2"
-                        title={e.hostname && e.deviceId ? e.deviceId : undefined}
-                        sx={{
-                          fontFamily: e.hostname ? "inherit" : "monospace",
-                          fontWeight: e.hostname ? 600 : 400,
-                          color: e.deviceId ? BRAND.dark : BRAND.gray,
-                          fontSize: TEXT.sm
-                        }}
-                      >
-                        {e.hostname || e.deviceId || "—"}
-                      </Typography>
+                      {e.deviceId ? (
+                        <Typography variant="body2" sx={{ fontSize: TEXT.sm }}>
+                          <DeviceLink
+                            deviceId={e.deviceId}
+                            title={e.hostname ? e.deviceId : undefined}
+                            sx={{
+                              fontFamily: e.hostname ? "inherit" : "monospace",
+                              fontWeight: e.hostname ? 600 : 400
+                            }}
+                          >
+                            {e.hostname || e.deviceId}
+                          </DeviceLink>
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" sx={{ color: BRAND.gray, fontSize: TEXT.sm }}>
+                          —
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell sx={{ maxWidth: 360 }}>
                       <Typography variant="body2" sx={{ color: BRAND.dark }} noWrap title={e.summary}>
@@ -1035,14 +1044,24 @@ export function CorrelationSection({ correlation }) {
   );
 }
 
-/** El nombre (o el id) del equipo, como enlace a su ficha en Asset Management. */
-function DeviceLink({ deviceId, children }) {
+/**
+ * El nombre (o el id) del equipo, como enlace a su ficha en Asset Management.
+ *
+ * ⚠️ Corta la propagación: en la tabla la FILA abre la ficha de la alerta, y
+ * sin esto un clic en el enlace hacía las dos cosas — y con Cmd-clic, que no
+ * navega aquí, se quedaba en abrir la alerta.
+ */
+function DeviceLink({ deviceId, children, title, sx }) {
   return (
     <Link
       href={deviceAssetsHref(deviceId)}
-      onClick={(e) => handleDeviceLinkClick(e, deviceId)}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleDeviceLinkClick(e, deviceId);
+      }}
+      title={title}
       underline="hover"
-      sx={{ color: BRAND.teal, fontWeight: 600 }}
+      sx={{ color: BRAND.teal, fontWeight: 600, ...sx }}
     >
       {children}
     </Link>

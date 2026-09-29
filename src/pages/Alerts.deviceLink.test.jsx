@@ -121,10 +121,56 @@ describe("Alerts — de la alerta al equipo", () => {
     expect(window.history.length).toBe(antes + 1);
   });
 
+  it("⭐ en la tabla, la celda Device lleva al equipo sin pasar por la alerta", async () => {
+    montar([evento()]);
+    const enlace = await screen.findByRole("link", { name: "MSIG-WSUS" }, { timeout: 4000 });
+    expect(params(enlace.getAttribute("href")).get("device")).toBe(UUID);
+
+    await userEvent.click(enlace);
+
+    expect(new URLSearchParams(window.location.search).get("device")).toBe(UUID);
+    // ⚠️ La fila abre la alerta: sin cortar la propagación el clic hacía las
+    // dos cosas.
+    expect(screen.queryByRole("presentation")).toBeNull();
+  });
+
+  it("Cmd-clic en la celda: otra pestaña, y aquí no se abre la alerta", async () => {
+    montar([evento()]);
+    const enlace = await screen.findByRole("link", { name: "MSIG-WSUS" }, { timeout: 4000 });
+    // Sin navegación de verdad en jsdom: se cancela la acción por defecto en
+    // CAPTURA (el enlace corta la burbuja), y lo que se mira es que la fila
+    // NO reciba el clic.
+    const cancelar = (ev) => ev.preventDefault();
+    document.addEventListener("click", cancelar, true);
+
+    const user = userEvent.setup();
+    await user.keyboard("{Meta>}");
+    await user.click(enlace);
+    await user.keyboard("{/Meta}");
+
+    document.removeEventListener("click", cancelar, true);
+    expect(screen.queryByRole("presentation")).toBeNull();
+    expect(new URLSearchParams(window.location.search).get("page")).toBe("alerts");
+  });
+
+  it("en la tabla, sin hostname el enlace va en el id; el resto de la fila abre la alerta", async () => {
+    montar([evento({ hostname: null })]);
+    const enlace = await screen.findByRole("link", { name: UUID }, { timeout: 4000 });
+    expect(params(enlace.getAttribute("href")).get("device")).toBe(UUID);
+
+    await abrirFicha("Disk at 95%");
+    expect(new URLSearchParams(window.location.search).get("page")).toBe("alerts");
+  });
+
   it("una alerta de tenant, sin equipo, no ofrece un enlace que no lleva a nada", async () => {
     montar([evento({ deviceId: null, hostname: null, summary: "Tenant-level alert" })]);
     const ficha = await abrirFicha("Tenant-level alert");
 
     expect(within(ficha).queryByRole("link", { name: /asset management/i })).toBeNull();
+    // Ni en la celda de la tabla.
+    // (El resumen sale dos veces: en la fila y en la cabecera de la ficha.)
+    const fila = screen.getAllByText("Tenant-level alert").map((n) => n.closest("tr")).find(Boolean);
+    expect(within(fila).queryByRole("link")).toBeNull();
+    expect(within(fila).getByText("—")).toBeInTheDocument();
   });
 });
