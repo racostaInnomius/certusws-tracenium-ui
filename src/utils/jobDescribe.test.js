@@ -125,6 +125,54 @@ describe("🔴 el veredicto sale del mensaje, NO del status", () => {
     expect(d.facts.some((f) => f.key === "detectBefore")).toBe(false);
   });
 
+  it("🔴 un DESINSTALADO no se lee como «Installed» (job a483ad46, AnyDesk, 29-sep)", () => {
+    // El mismo job_type sirve para instalar y desinstalar; el agente contesta
+    // `software_install:success` en los dos. Lo que distingue es payload.mode.
+    // Mensaje literal de producción.
+    const d = describeJobResult({
+      job_type: "software_install",
+      status: "completed",
+      payload_json: { mode: "uninstall", deploymentId: 60, packageSnapshot: { name: "AnyDesk", version: "ad 9.7.15" } },
+      result_json: {
+        source: "agent_ack",
+        message:
+          "software_install:success;deploymentId=60;exit=0;duration=5488;detectBefore=eyJkaXNwbGF5TmFtZUxpa2UiOiJBbnlEZXNrIiwiZm91bmQiOnRydWUsImluc3RhbGxlZFZlcnNpb24iOiJhZCA5LjcuMTUiLCJtaW5WZXJzaW9uIjpudWxsLCJoaXRzIjpbeyJkaXNwbGF5TmFtZSI6IkFueURlc2siLCJkaXNwbGF5VmVyc2lvbiI6ImFkIDkuNy4xNSIsInB1Ymxpc2hlciI6IkFueURlc2sgU29mdHdhcmUgR21iSCIsInZpZXciOiJ4ODYifV19;detectAfter=eyJkaXNwbGF5TmFtZUxpa2UiOiJBbnlEZXNrIiwiZm91bmQiOmZhbHNlfQ",
+      },
+    });
+    expect(d.headline).toBe("Uninstalled");
+    expect(d.tone).toBe("success");
+    expect(d.detection).toEqual([
+      { label: "Detected before", value: "AnyDesk ad 9.7.15" },
+      { label: "Detected after", value: "Not found" },
+    ]);
+  });
+
+  it.each([
+    ["uninstall", "already_installed;deploymentId=60;reason=pre_detect_absent", "Already absent — the uninstaller was not run"],
+    ["uninstall", "failed;deploymentId=60;reason=post_detect_still_present", "Uninstall failed"],
+    ["uninstall", "reboot_required;deploymentId=60", "Uninstalled — a reboot is required to finish"],
+    ["reinstall", "success;deploymentId=60", "Reinstalled"],
+    ["install", "success;deploymentId=60", "Installed"],
+    ["install", "timed_out;deploymentId=60", "Install timed out"],
+    [undefined, "success;deploymentId=60", "Installed"],
+  ])("software_install en modo %s · %s → %s", (mode, rest, headline) => {
+    const d = describeJobResult({
+      job_type: "software_install",
+      payload_json: mode ? { mode } : {},
+      result_json: { message: `software_install:${rest}` },
+    });
+    expect(d.headline).toBe(headline);
+  });
+
+  it("las razones del desinstalado se leen, no salen en snake_case", () => {
+    const d = describeJobResult({
+      job_type: "software_install",
+      payload_json: { mode: "uninstall" },
+      result_json: { message: "software_install:failed;reason=post_detect_still_present" },
+    });
+    expect(factValue(d, "Reason")).toBe("The software was still detected after the uninstaller ran");
+  });
+
   it("un status `completed` con veredicto desconocido de fallo se pinta en rojo", () => {
     const d = describeJobResult(ack("software_install", "software_install:install_failed;exit=1603"));
     expect(d.known).toBe(false);

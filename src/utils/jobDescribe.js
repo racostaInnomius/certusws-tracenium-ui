@@ -82,6 +82,9 @@ const sourceLabel = (v) => SOURCE_LABELS[lower(v)] || String(v);
 const REASON_LABELS = {
   pre_detect_matched: "The detection rule already matched before installing",
   pre_state_compliant: "The setting already had the expected value",
+  pre_detect_absent: "The software was already absent before uninstalling",
+  post_detect_still_present: "The software was still detected after the uninstaller ran",
+  post_detect_mismatch: "The software was not detected after the installer ran",
 };
 
 // ---------------------------------------------------------------------------
@@ -214,9 +217,26 @@ const VERDICTS = {
         ? { tone: "warning", headline: "This device does not support the query" }
         : { tone: "success", headline: "Query answered" },
   },
+  // 🔴 UN MISMO job_type PARA INSTALAR Y DESINSTALAR (29-sep). El modo viaja
+  // en `payload.mode` y el agente contesta `software_install:<outcome>` en los
+  // tres: el desinstalado de AnyDesk (a483ad46) salía como «Installed». Cada
+  // veredicto significa otra cosa según el modo, así que se lee con él.
   software_install: {
-    success: () => ({ tone: "success", headline: "Installed" }),
-    already_installed: () => ({ tone: "success", headline: "Already installed — the installer was not run" }),
+    success: ({ mode }) => ({ tone: "success", headline: DONE_BY_MODE[mode] || "Installed" }),
+    // `already_installed` es «ya estaba en el estado pedido»: en un uninstall
+    // quiere decir que YA NO ESTABA (reason=pre_detect_absent).
+    already_installed: ({ mode }) =>
+      mode === "uninstall"
+        ? { tone: "success", headline: "Already absent — the uninstaller was not run" }
+        : { tone: "success", headline: "Already installed — the installer was not run" },
+    reboot_required: ({ mode }) => ({
+      tone: "warning",
+      headline: `${DONE_BY_MODE[mode] || "Installed"} — a reboot is required to finish`,
+    }),
+    failed: ({ mode }) => ({ tone: "error", headline: `${ACTION_BY_MODE[mode] || "Install"} failed` }),
+    timed_out: ({ mode }) => ({ tone: "error", headline: `${ACTION_BY_MODE[mode] || "Install"} timed out` }),
+    rejected: () => ({ tone: "error", headline: "Rejected by the agent — nothing was run" }),
+    signature_invalid: () => ({ tone: "error", headline: "Signature check failed — the package was not run" }),
   },
   patch_install: {
     success: ({ f }) => {
@@ -303,6 +323,9 @@ const VERDICTS = {
     }),
   },
 };
+
+const DONE_BY_MODE = { install: "Installed", reinstall: "Reinstalled", uninstall: "Uninstalled" };
+const ACTION_BY_MODE = { install: "Install", reinstall: "Reinstall", uninstall: "Uninstall" };
 
 // `OK` a secas lo mandan agentes viejos de varios tipos: dice que contestó y
 // nada más.
@@ -484,7 +507,7 @@ function normalizeResult(result) {
 }
 
 /** Un mensaje de ack de un tipo dado → lectura completa. */
-function describeMessage(message, jobType) {
+function describeMessage(message, jobType, mode = null) {
   const { head, fields, notes } = parseAckMessage(message);
   const { verdict, rest, batch } = splitHead(head, jobType);
   const f = new Map(fields.map(({ key, value }) => [key, value]));
@@ -507,7 +530,7 @@ function describeMessage(message, jobType) {
   if (batch) {
     const items = decodeBlob(f.get("items"));
     const list = Array.isArray(items) ? items : [];
-    out.items = list.map((m) => describeMessage(String(m), jobType));
+    out.items = list.map((m) => describeMessage(String(m), jobType, mode));
     // Se agrupa por VEREDICTO, no por frase: `applied` y
     // `applied_reboot_required` empiezan igual y recortando la frase salían
     // como dos grupos «fix applied» indistinguibles.
@@ -524,7 +547,7 @@ function describeMessage(message, jobType) {
     f.delete("items");
   } else {
     const rule = VERDICTS[lower(jobType)]?.[lower(verdict)] || COMMON_VERDICTS[lower(verdict)];
-    const said = rule ? rule({ f, rest }) : unknownVerdict(verdict, rest);
+    const said = rule ? rule({ f, rest, mode }) : unknownVerdict(verdict, rest);
     out.known = Boolean(rule);
     out.tone = said.tone;
     out.headline = said.headline;
@@ -604,7 +627,7 @@ function describeResultBody(job) {
   const jobType = job?.job_type;
 
   if (typeof result.message === "string" && result.message.trim()) {
-    const out = describeMessage(result.message, jobType);
+    const out = describeMessage(result.message, jobType, lower(parsePayload(job)?.mode) || null);
     // Claves extra junto al mensaje (agent_update trae version/confirmedBy
     // repetidos): sólo se añaden las que el mensaje no dijo ya.
     const seen = new Set(out.facts.map((x) => x.label));
