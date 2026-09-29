@@ -235,6 +235,31 @@ const FIELDS = {
     },
   ],
 
+  // parseSlaCriteria (compliance-sla.handler.ts). `statuses` (por vencer /
+  // vencido) es una lista: se conserva y se enseña, como en las demás.
+  compliance_sla: [
+    {
+      key: "min_severity",
+      type: "choice",
+      label: "Lowest finding severity worth an alert",
+      help: "Only severities that have a remediation target are measured; a severity with no target is never due.",
+      choices: [
+        { value: "low", label: "Low and above" },
+        { value: "medium", label: "Medium and above" },
+        { value: "high", label: "High and above" },
+        { value: "critical", label: "Critical only" },
+      ],
+      default: "high",
+    },
+    {
+      key: "critical_devices_only",
+      type: "bool",
+      label: "Only devices in a critical asset group",
+      help: "Off: the whole fleet. On: only devices whose asset group is marked critical.",
+      default: false,
+    },
+  ],
+
   // parseDriftCriteria — ⚠️ esta fuente usa camelCase, y es lo que lee.
   security_setting_drift: [
     {

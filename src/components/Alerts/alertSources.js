@@ -40,5 +40,8 @@ export const SOURCE_LABEL = {
   snapshot_retention: "Rollback point",
   // ADR-0031 F3: un ajuste de seguridad cambió sin acción nuestra. El rótulo
   // dice lo que consta —que el cambio no salió de aquí— y no quién lo hizo.
-  security_setting_drift: "Setting changed outside Tracenium"
+  security_setting_drift: "Setting changed outside Tracenium",
+  // El compromiso de remediación: checks por vencer o vencidos contra el
+  // objetivo de su severidad (Security Compliance → Fix → Remediation targets).
+  compliance_sla: "Remediation target"
 };
