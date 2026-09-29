@@ -251,18 +251,31 @@ export default function BulkFixDialog({
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} sx={{ textTransform: "none" }}>Close</Button>
-        <Box sx={{ flex: 1 }} />
-        {launched && mode === "apply" && canRescan && batchFinished(items) ? (
-          <RescanComplianceButton
-            agentId={deviceId}
-            label="Rescan to confirm"
-            variant="contained"
-            size="medium"
-            onToast={notify}
-            onFinished={() => onChanged?.()}
-          />
-        ) : null}
+        {launched ? (
+          // Ya lanzado: cerrar es lo esperado (principal, a la derecha y con
+          // el foco); reescanear es la opción, a la izquierda.
+          <>
+            {mode === "apply" && canRescan && batchFinished(items) ? (
+              <RescanComplianceButton
+                agentId={deviceId}
+                label="Rescan to confirm"
+                variant="outlined"
+                size="medium"
+                onToast={notify}
+                onFinished={() => onChanged?.()}
+              />
+            ) : null}
+            <Box sx={{ flex: 1 }} />
+            <Button variant="contained" autoFocus onClick={onClose} sx={{ textTransform: "none", fontWeight: 700 }}>
+              Close
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button onClick={onClose} sx={{ textTransform: "none" }}>Close</Button>
+            <Box sx={{ flex: 1 }} />
+          </>
+        )}
         {!launched ? (
           <>
             <Button

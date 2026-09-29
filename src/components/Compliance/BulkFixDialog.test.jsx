@@ -132,6 +132,18 @@ describe("confirmar con un escaneo", () => {
     await waitFor(() => expect(createDeviceJob).toHaveBeenCalledWith("dev-1", { jobType: "facts_snapshot", payload: { factType: "compliance" } }));
   });
 
+  it("ya lanzado: «Close» es el principal, a la derecha y con el foco; «Rescan to confirm» a la izquierda", async () => {
+    open({ canRescan: true });
+    fireEvent.click(screen.getByRole("button", { name: /Apply 2/ }));
+    const rescan = await screen.findByRole("button", { name: /Rescan to confirm/ });
+    const close = screen.getByRole("button", { name: "Close" });
+    // En el orden del documento, reescanear va antes que cerrar.
+    expect(rescan.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(close.className).toMatch(/MuiButton-contained/);
+    expect(rescan.className).toMatch(/MuiButton-outlined/);
+    expect(close).toHaveFocus();
+  });
+
   it("tras una simulación, o sin la capacidad `jobs`, no se ofrece", async () => {
     open({ canRescan: true });
     fireEvent.click(screen.getByRole("button", { name: /Dry-run 2/ }));
