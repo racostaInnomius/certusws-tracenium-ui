@@ -241,6 +241,11 @@ const TRANSIENT_CAPTURE_CODES = new Set([
   "out_of_memory"
 ]);
 
+// Errores sobre una ACCIÓN del operador — Ctrl+Alt+Supr (`sas_*`) y la
+// petición de control (`control_consent_*`) — y no sobre la salud de la
+// captura. Van a `notice`, que no se borra con el siguiente fotograma.
+const ACTION_NOTICE_CODE = /^(sas_|control_consent_)/;
+
 // ── StatusChip ─────────────────────────────────────────────────────────────
 
 function StatusChip({ state }) {
@@ -308,6 +313,18 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   // Non-fatal capture trouble: shown as a banner over the still-live canvas
   // instead of replacing the viewer with an error page.
   const [warning, setWarning]     = React.useState("");
+  // ⚠️ Avisos sobre una ACCIÓN del operador (Ctrl+Alt+Supr, pedir control),
+  // separados de `warning` porque éste lo borra cada fotograma — correcto para
+  // la salud de la captura («ya pasó»), inútil para «Windows no deja mandar
+  // Ctrl+Alt+Supr: activa esta directiva», que no se arregla con un fotograma.
+  // A 8 fps el «la persona rechazó que controles» duraba ~125 ms en pantalla.
+  // Este se queda hasta que el operador lo cierra.
+  const [notice, setNotice]       = React.useState("");
+  // ¿Ha llegado ya algún fotograma? Es lo que decide el cartel de «Waiting for
+  // first frame…», y NO `liveFps`: en un escritorio quieto —la pantalla de
+  // login de un servidor— los fps redondean a 0 para siempre aunque la imagen
+  // esté pintada. TNS-OPER-SNOC04, 29-sep-2026: el operador lo dio por roto.
+  const [hasFrame, setHasFrame]   = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   // M3.S3 — telemetry & cursor overlay state.
   const [rtt, setRtt]             = React.useState(null);   // ms, null until first sample
@@ -315,6 +332,9 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   const [cursorPos, setCursorPos] = React.useState(null);   // { x, y } in native pixels
   // M3.S4 — input forwarding (real remote control).
   const [controlEnabled, setControlEnabled] = React.useState(false);
+  // El control automático ante la pantalla de login se aplica UNA vez por
+  // sesión. Si el operador lo suelta con Esc, no se le vuelve a imponer.
+  const autoControlDoneRef = React.useRef(false);
 
   const canvasRef   = React.useRef(null);
   const dcRef       = React.useRef(null);   // RTCDataChannel
@@ -867,6 +887,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     // They also sidestep the stale-closure problem — handleDcMessage is
     // captured by dc.onmessage on the first render and never refreshed.
     setWarning((w) => (w ? "" : w));
+    setHasFrame(true);
 
     // Recover from a terminal capture error without making the operator
     // reconnect. The agent keeps retrying on a slow cadence after reporting
@@ -905,8 +926,21 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         setScreenInfo({
           width:  Number(msg.width  || 0),
           height: Number(msg.height || 0),
-          fps:    appliedFps
+          fps:    appliedFps,
+          noUserSignedIn: msg.noUserSignedIn === true,
+          canSendSas:     msg.canSendSas === true
         });
+        // ⭐ Sin nadie dentro, el acceso YA es teclado y ratón — decisión del
+        // usuario, 29-sep-2026. Pedir «Take control» para poder pulsar
+        // Ctrl+Alt+Supr en un servidor era un paso que no aportaba nada.
+        //
+        // No es un permiso nuevo: el botón lo tiene cualquiera que abre la
+        // sesión, y el agente sigue pasando cada evento por su puerta de
+        // control. Sólo ahorra el clic. Una vez por sesión.
+        if (msg.noUserSignedIn === true && !autoControlDoneRef.current) {
+          autoControlDoneRef.current = true;
+          setControlEnabled(true);
+        }
         // The agent echoes the rate it actually applied (after its own
         // clamp) both on the first frame and whenever setQuality changes it.
         // Snapping the slider to that keeps the control honest instead of
@@ -1004,6 +1038,14 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         // slow upgrade ring might. Never act on it — the canvas already
         // holds the correct pixels.
         if (code === "screen_capture_no_frame") break;
+
+        // Sobre una acción del operador, no sobre la captura: va al aviso que
+        // NO borran los fotogramas. Ver `notice`. El texto del agente se
+        // enseña tal cual — el de Ctrl+Alt+Supr nombra la directiva exacta.
+        if (ACTION_NOTICE_CODE.test(code)) {
+          setNotice(CAPTURE_ERROR_COPY[code] || msg.message || "The action could not be completed.");
+          break;
+        }
 
         // `terminal` says whether the device can recover on its own. Agents
         // predating the flag collapsed every failure into one code with no
@@ -1138,6 +1180,42 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           </span>
         </Tooltip>
 
+        {/* Ctrl+Alt+Supr remoto. Desde un Mac la combinación no existe, y en
+            Windows la intercepta el sistema del OPERADOR antes de llegar
+            aquí — sin este botón, «Presiona Ctrl+Alt+Supr» en un servidor era
+            un callejón sin salida (TNS-OPER-SNOC04, 29-sep-2026).
+            Sólo si el agente lo anuncia (Windows), y sólo con control: es
+            entrada, y el agente la pasa por la misma puerta que un clic. */}
+        {screenInfo?.canSendSas && (
+          <Tooltip
+            title={
+              controlEnabled
+                ? "Send Ctrl+Alt+Del to the device"
+                : "Take control first to send Ctrl+Alt+Del"
+            }
+          >
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => dcSend({ op: "sas" })}
+                disabled={state !== STATE.VIEWING || !controlEnabled}
+                sx={{
+                  textTransform: "none",
+                  fontSize: TEXT.sm,
+                  py: 0.25,
+                  ml: 1,
+                  borderColor: BRAND.teal,
+                  color: BRAND.teal,
+                  "&:hover": { borderColor: BRAND.teal, bgcolor: "rgba(90,159,159,0.12)" }
+                }}
+              >
+                Ctrl+Alt+Del
+              </Button>
+            </span>
+          </Tooltip>
+        )}
+
         <StatusChip state={state} />
         <Tooltip title="Close">
           <IconButton aria-label="Close screen share" size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
@@ -1248,6 +1326,46 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             </Box>
           )}
 
+          {/* Aviso sobre una acción del operador. Se queda hasta que lo
+              cierra: ver `notice`. Debajo del de captura si coinciden. */}
+          {notice && (
+            <Box
+              role="alert"
+              sx={{
+                position: "absolute",
+                top: warning ? 44 : 8,
+                left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 2,
+                maxWidth: "90%",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 1,
+                pl: 1.5,
+                pr: 0.5,
+                py: 0.5,
+                borderRadius: 1,
+                bgcolor: "rgba(0,0,0,0.85)",
+                border: `1px solid ${ROLE.caution}66`
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{ color: ROLE.caution, fontWeight: 600, py: 0.25 }}
+              >
+                {notice}
+              </Typography>
+              <IconButton
+                size="small"
+                aria-label="Dismiss"
+                onClick={() => setNotice("")}
+                sx={{ color: ROLE.caution, p: 0.25 }}
+              >
+                <CloseOutlinedIcon sx={{ fontSize: ICON.sm }} />
+              </IconButton>
+            </Box>
+          )}
+
           {/* The canvas+overlay live in an inner wrapper sized exactly
               to the rendered frame so the cursor overlay coordinates
               map 1:1 onto displayed pixels (the canvas honors
@@ -1308,8 +1426,11 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             )}
           </Box>
 
-          {/* "Waiting for first frame" state — shown until canvas has content */}
-          {liveFps === 0 && (
+          {/* "Waiting for first frame" — hasta que llega UN fotograma.
+              ⚠️ Antes era `liveFps === 0`: en un escritorio quieto los fps
+              redondean a 0 para siempre y el cartel tapaba una imagen ya
+              pintada. El comentario de aquí decía lo correcto; el código no. */}
+          {!hasFrame && (
             <Box
               sx={{
                 position: "absolute",
@@ -1355,7 +1476,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
               minWidth: 110
             }}
           >
-            {resLabel || "—"} · {liveFps}fps
+            {/* «0fps» con la imagen a la vista se lee como «roto». Con el
+                escritorio quieto no llegan fotogramas porque no hay nada
+                nuevo que mandar — eso es «idle», no un fallo. */}
+            {resLabel || "—"} · {hasFrame && liveFps === 0 ? "idle" : `${liveFps}fps`}
           </Typography>
 
           {/* M3.S3 — RTT chip. Color-coded health hint. */}
