@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { formatBytes, formatBytesToGb, formatCalendarDay, formatDate, formatRelative, EMPTY } from "./format";
+import { formatBytes, formatBytesToGb, formatCalendarDay, formatDate, formatDateSeconds, formatRelative, EMPTY } from "./format";
+import { formatDetailDate } from "../components/AssetsDashboard/hostHelpers";
 
 describe("formatBytes", () => {
   it("auto-scales units", () => {
@@ -44,6 +45,27 @@ describe("formatDate", () => {
       year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
     });
     expect(out).toMatch(/2026/);
+  });
+});
+
+describe("formatDateSeconds — Audit y el detalle de un despliegue", () => {
+  const now = new Date("2026-09-28T12:00:00");
+  it("🔴 sin el año a dos cifras que tenían («Sep 28, 26, 16:44:03»)", () => {
+    expect(formatDateSeconds("2026-09-28T16:44:03", now)).toBe("Sep 28, 16:44:03");
+    expect(formatDateSeconds("2025-12-03T09:10:07", now)).toBe("Dec 03, 2025, 09:10:07");
+  });
+  it("vacío o inválido → EMPTY (Audit pintaba «Invalid Date»)", () => {
+    expect(formatDateSeconds(null, now)).toBe(EMPTY);
+    expect(formatDateSeconds("bad", now)).toBe(EMPTY);
+  });
+});
+
+describe("formatDetailDate — la ficha del equipo en Assets", () => {
+  it("🔴 pasa por el formateador común: nada de «Sep 28, 26, 16:44»", () => {
+    const thisYear = new Date().getFullYear();
+    expect(formatDetailDate(`${thisYear}-09-28T16:44:00`)).toBe("Sep 28, 16:44");
+    expect(formatDetailDate(`${thisYear - 1}-09-28T16:44:00`)).toBe(`Sep 28, ${thisYear - 1}, 16:44`);
+    expect(formatDetailDate(null)).toBe(EMPTY);
   });
 });
 

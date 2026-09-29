@@ -65,7 +65,7 @@ import { getEventTypeMeta, groupFacetsByCategory } from "../constants/auditEvent
 import { listFrom } from "../api/shape";
 import { resolveActor } from "../utils/auditActor";
 import { describeEvent, describeEventText } from "../utils/auditSentence";
-import { formatRelative } from "../utils/format";
+import { formatDateSeconds, formatRelative } from "../utils/format";
 import { getMyCapabilities } from "../api/roles";
 
 /**
@@ -174,19 +174,8 @@ function renderOutcomeChip(outcome) {
   );
 }
 
-function formatDate(value) {
-  if (!value) return " - ";
-  const date = new Date(value);
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h23",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
+// Sin año a dos cifras («Sep 28, 26, 16:44:03»): ver formatDateSeconds.
+const formatDate = (value) => formatDateSeconds(value);
 
 function toIsoOrUndefined(value) {
   if (!value) return undefined;

@@ -52,13 +52,30 @@ const DEFAULT_DATE_OPTS = {
   hourCycle: "h23",
 };
 
-export function formatDate(value, options, now = new Date()) {
+function stamp(value, base, now) {
   if (!value) return EMPTY;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return EMPTY;
-  if (options) return d.toLocaleString("en-US", options);
   const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleString("en-US", sameYear ? DEFAULT_DATE_OPTS : { ...DEFAULT_DATE_OPTS, year: "numeric" });
+  return d.toLocaleString("en-US", sameYear ? base : { ...base, year: "numeric" });
+}
+
+export function formatDate(value, options, now = new Date()) {
+  if (options) {
+    if (!value) return EMPTY;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? EMPTY : d.toLocaleString("en-US", options);
+  }
+  return stamp(value, DEFAULT_DATE_OPTS, now);
+}
+
+/**
+ * Lo mismo con segundos, para las vistas que los necesitan (Audit, el detalle
+ * de un despliegue). Tenían formateador propio con el año a dos cifras —
+ * «Sep 28, 26, 16:44:03»— y seguían así tras arreglar `formatDate` (28-sep).
+ */
+export function formatDateSeconds(value, now = new Date()) {
+  return stamp(value, { ...DEFAULT_DATE_OPTS, second: "2-digit" }, now);
 }
 
 /**

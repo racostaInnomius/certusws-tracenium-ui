@@ -68,6 +68,7 @@ import { createDeviceDecommissionJob, getDeviceDecommissionJob, listSilentEnroll
 import { normalizePlatform, platformColor, platformLabel } from "../utils/platform";
 import { groupOsVersionsByPlatform } from "../utils/osVersionGrouping";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
+import { revealWhileSettling } from "../utils/revealWhileSettling";
 import { listFrom } from "../api/shape";
 
 import HostsTable from "../components/Charts/HostsTable";
@@ -1131,12 +1132,17 @@ export default function AssetsDashboard({
   // el Overview (lista de "Blind spots") y las filas de Hardware Inventory.
   // Ya no se consume: la ficha abierta ES el estado de la URL (ver
   // handleAgentSelect), así que recargar vuelve a ella y cerrarla lo quita.
+  //
+  // ⚠️ Al llegar por enlace la página aún está cargando: un scroll de una vez
+  // no encontraba a dónde bajar, y las tarjetas de arriba empujaban luego la
+  // ficha bajo el pliegue (28-sep, desde Patch Management). Se la mantiene a la
+  // vista mientras la página se asienta — ver revealWhileSettling.
   React.useEffect(() => {
     const deviceId = String(getSearchParam("device", "") || "").trim();
-    if (!deviceId) return;
+    if (!deviceId) return undefined;
     handleAgentSelect({ agent_id: deviceId, agentId: deviceId });
-    revealDevicesSection();
-  }, [handleAgentSelect, revealDevicesSection]);
+    return revealWhileSettling(() => devicesSectionRef.current);
+  }, [handleAgentSelect]);
 
   // ADR-0030 — desde la tarjeta de flota: abre el equipo ya en Experience.
   //

@@ -8,6 +8,7 @@
 // the only import is the brand palette.
 
 import { BRAND } from "../../theme/brand";
+import { formatDate } from "../../utils/format";
 
 export const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux", "ios", "android"]);
 export const ALLOWED_VERSION_BUCKETS = new Set([
@@ -135,18 +136,10 @@ export function formatDetailValue(value, fallback = "—") {
   return text ? text : fallback;
 }
 
+// ⚠️ Era «Sep 28, 26, 16:44»: el año a dos cifras junto al día se lee como
+// otro día. Pasa por el formateador común (año sólo si no es el actual).
 export function formatDetailDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
+  return formatDate(value);
 }
 
 export function formatDetailPercent(value) {

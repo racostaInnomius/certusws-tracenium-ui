@@ -32,6 +32,7 @@ import {
 } from "../patch-management/gateway/snapshotStatus";
 import { listFrom } from "../../api/shape";
 import { waitingReason } from "./deploymentSchedule";
+import { formatDateSeconds } from "../../utils/format";
 
 const TERMINAL_STATUSES = new Set(["completed", "cancelled", "failed"]);
 
@@ -91,20 +92,8 @@ function statusChip(status) {
   );
 }
 
-function formatTime(value) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h23",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
+// Sin año a dos cifras («Sep 28, 26, 16:44:03»): ver formatDateSeconds.
+const formatTime = (value) => formatDateSeconds(value);
 
 export default function DeploymentDetailDrawer({
   open,

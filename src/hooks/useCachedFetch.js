@@ -288,8 +288,14 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
         let promise = inFlight.get(scopedInFlightKey);
 
         if (!promise) {
+          // ⚠️ El cargador se lee AQUÍ, no dentro del `.then`: la microtarea
+          // corre después del render siguiente, y para entonces el ref puede
+          // ser el de otra clave. Así, al cambiar de tenant, la carga de
+          // «devices:B:on» ejecutaba el cargador de «off», guardaba null como
+          // dato fresco y Patches decía «0 equipos» hasta pulsar Refresh.
+          const load = loaderRef.current;
           promise = Promise.resolve()
-            .then(() => loaderRef.current({ reason }))
+            .then(() => load({ reason }))
             .then((fresh) => {
               writeCache(cacheKey, fresh);
               return fresh;
