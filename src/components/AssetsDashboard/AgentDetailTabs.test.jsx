@@ -27,6 +27,7 @@ vi.mock("./DeviceLocationMap", () => ({
 }));
 
 import { AgentTab, HardwareTab, LocationTab, SoftwareTab, PrintersTab } from "./AgentDetailTabs";
+import { DEFAULT_SOFTWARE_SORT, nextSoftwareSort } from "./softwareSort";
 
 afterEach(cleanup);
 
@@ -569,7 +570,7 @@ describe("SoftwareTab", () => {
         softwareLoading={false}
         softwareCount={2}
         softwarePage={0}
-        softwarePageSize={8}
+        softwarePageSize={15}
       />
     );
     expect(screen.getByText("Installed")).toBeInTheDocument();
@@ -583,7 +584,7 @@ describe("SoftwareTab", () => {
         softwareLoading={false}
         softwareCount={2}
         softwarePage={0}
-        softwarePageSize={8}
+        softwarePageSize={15}
         onSoftwarePaginationModelChange={() => {}}
       />
     );
@@ -599,7 +600,7 @@ describe("SoftwareTab", () => {
         softwareLoading={false}
         softwareCount={0}
         softwarePage={0}
-        softwarePageSize={8}
+        softwarePageSize={15}
         onSoftwarePaginationModelChange={() => {}}
       />
     );
@@ -614,12 +615,77 @@ describe("SoftwareTab", () => {
         softwareLoading={false}
         softwareCount={50}
         softwarePage={0}
-        softwarePageSize={8}
+        softwarePageSize={15}
         onSoftwarePaginationModelChange={onSoftwarePaginationModelChange}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /next page/i }));
-    expect(onSoftwarePaginationModelChange).toHaveBeenCalledWith({ page: 1, pageSize: 8 });
+    expect(onSoftwarePaginationModelChange).toHaveBeenCalledWith({ page: 1, pageSize: 15 });
+  });
+
+  const tab = (props = {}) =>
+    render(
+      <SoftwareTab
+        softwareRows={rows}
+        softwareLoading={false}
+        softwareCount={2}
+        softwarePage={0}
+        softwarePageSize={15}
+        onSoftwarePaginationModelChange={() => {}}
+        {...props}
+      />
+    );
+
+  it("⭐ cada columna se puede ordenar, y la activa lo dice (aria-sort)", () => {
+    const onSoftwareSortChange = vi.fn();
+    tab({ softwareSort: { by: "installedOn", dir: "desc" }, onSoftwareSortChange });
+    for (const [label, field] of [
+      ["Application", "name"],
+      ["Publisher", "publisher"],
+      ["Source", "source"],
+      ["Installed", "installedOn"],
+      ["Detected", "detectedAtUtc"],
+    ]) {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      expect(onSoftwareSortChange).toHaveBeenLastCalledWith(field);
+    }
+    expect(screen.getByRole("columnheader", { name: "Installed" })).toHaveAttribute("aria-sort", "descending");
+    expect(screen.getByRole("columnheader", { name: "Application" })).not.toHaveAttribute("aria-sort");
+  });
+
+  it("sin orden pedido, marca el de siempre: Detected, más reciente primero", () => {
+    tab();
+    expect(screen.getByRole("columnheader", { name: "Detected" })).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("la caja de búsqueda avisa de lo que se escribe", () => {
+    const onSoftwareSearchChange = vi.fn();
+    tab({ onSoftwareSearchChange });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search installed applications" }), { target: { value: "zoom" } });
+    expect(onSoftwareSearchChange).toHaveBeenCalledWith("zoom");
+  });
+
+  it("buscando sin resultados lo dice con el término, no «sin inventario»", () => {
+    tab({ softwareRows: [], softwareCount: 0, softwareSearch: "zzz" });
+    expect(screen.getByText("No applications match “zzz”.")).toBeInTheDocument();
+    expect(screen.getByText("0 matching")).toBeInTheDocument();
+    expect(screen.queryByText(/No software inventory found/i)).toBeNull();
+  });
+
+  it("⭐ 15 filas por página por defecto, con 30/50/100 a elegir", () => {
+    tab({ softwareCount: 200 });
+    expect(screen.getByText("1–15 of 200")).toBeInTheDocument();
+  });
+});
+
+describe("nextSoftwareSort", () => {
+  it("la misma columna invierte el sentido; otra empieza en el suyo", () => {
+    expect(nextSoftwareSort({ by: "name", dir: "asc" }, "name")).toEqual({ by: "name", dir: "desc" });
+    expect(nextSoftwareSort({ by: "name", dir: "desc" }, "name")).toEqual({ by: "name", dir: "asc" });
+    // Texto: A→Z primero. Fechas: lo más reciente primero.
+    expect(nextSoftwareSort(DEFAULT_SOFTWARE_SORT, "publisher")).toEqual({ by: "publisher", dir: "asc" });
+    expect(nextSoftwareSort({ by: "name", dir: "asc" }, "installedOn")).toEqual({ by: "installedOn", dir: "desc" });
+    expect(nextSoftwareSort(DEFAULT_SOFTWARE_SORT, "detectedAtUtc")).toEqual({ by: "detectedAtUtc", dir: "asc" });
   });
 });
 

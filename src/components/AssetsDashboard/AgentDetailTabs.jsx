@@ -8,7 +8,8 @@
 //   AgentTab     — status tiles + identity + the mobile managed-device panel
 //   HardwareTab  — the machine, then its CPU / memory / disk / battery
 //   LocationTab  — current position, map and location history
-//   SoftwareTab  — paginated installed-applications table
+//   SoftwareTab  — installed applications: sortable, searchable, paginated
+//                  (all three server-side)
 //   PrintersTab  — configured print queues table
 
 import * as React from "react";
@@ -17,6 +18,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  InputAdornment,
   Paper,
   Stack,
   Table,
@@ -26,6 +28,8 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  TableSortLabel,
+  TextField,
   Tooltip,
   Typography
 } from "@mui/material";
@@ -46,10 +50,12 @@ import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import PhoneIphoneRoundedIcon from "@mui/icons-material/PhoneIphoneRounded";
 import PowerSettingsNewRoundedIcon from "@mui/icons-material/PowerSettingsNewRounded";
 import QrCode2RoundedIcon from "@mui/icons-material/QrCode2Rounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 import SystemUpdateAltRoundedIcon from "@mui/icons-material/SystemUpdateAltRounded";
 import TerminalRoundedIcon from "@mui/icons-material/TerminalRounded";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
+import { DEFAULT_SOFTWARE_SORT, SOFTWARE_DATE_COLUMNS, SOFTWARE_PAGE_SIZE } from "./softwareSort";
 import { formatBytesToGb, formatCalendarDay } from "../../utils/format";
 import { platformColor, platformLabel } from "../../utils/platform";
 import {
@@ -687,14 +693,51 @@ export function HardwareTab({ hardware, profile = null, platformKey = "" }) {
   );
 }
 
+// ── Software ──────────────────────────────────────────────────────────
+//
+// Orden, búsqueda y paginación van al SERVIDOR: ver softwareSort.js.
+
+const SOFTWARE_HEAD_SX = { fontWeight: 800, bgcolor: BRAND.surfaceMuted, whiteSpace: "nowrap" };
+
+function SoftwareSortHeader({ field, label, tooltip = null, sort, onSortChange }) {
+  const active = sort?.by === field;
+  // `describeChild`: el texto de ayuda DESCRIBE la cabecera; sin él MUI lo
+  // pone como su nombre y el botón de ordenar dejaba de llamarse «Installed».
+  const text = tooltip ? (
+    <Tooltip title={tooltip} describeChild>
+      <span>{label}</span>
+    </Tooltip>
+  ) : (
+    label
+  );
+  return (
+    <TableCell sx={SOFTWARE_HEAD_SX} sortDirection={active ? sort.dir : false}>
+      <TableSortLabel
+        active={active}
+        direction={active ? sort.dir : SOFTWARE_DATE_COLUMNS.has(field) ? "desc" : "asc"}
+        onClick={() => onSortChange?.(field)}
+        sx={{ "& .MuiTableSortLabel-icon": { color: `${BRAND.tealText} !important` } }}
+      >
+        {text}
+      </TableSortLabel>
+    </TableCell>
+  );
+}
+
 export function SoftwareTab({
   softwareRows,
   softwareLoading,
   softwareCount,
   softwarePage,
   softwarePageSize,
-  onSoftwarePaginationModelChange
+  onSoftwarePaginationModelChange,
+  softwareSort = DEFAULT_SOFTWARE_SORT,
+  onSoftwareSortChange,
+  softwareSearch = "",
+  onSoftwareSearchChange,
 }) {
+  const searching = softwareSearch.trim().length > 0;
+  const header = { sort: softwareSort, onSortChange: onSoftwareSortChange };
   return (
             <Box>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} justifyContent="space-between" sx={{ mb: 1.5 }}>
@@ -703,36 +746,61 @@ export function SoftwareTab({
                     Installed applications
                   </Typography>
                   <Typography sx={{ mt: 0.25, fontSize: TEXT.sm, color: "text.secondary" }}>
-                    Paginated software inventory for this device.
+                    Software inventory for this device. Click a column to sort.
                   </Typography>
                 </Box>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ alignSelf: { xs: "flex-start", sm: "center" } }}>
-                  {softwareLoading ? <CircularProgress size={16} sx={{ color: BRAND.teal }} /> : null}
-                  <Chip size="small" label={`${softwareCount} apps detected`} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
+                {/* En estrecho la búsqueda ocupa su línea y el chip baja: si
+                    no, la caja se encogía y cortaba su propio placeholder. */}
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center" sx={{ alignSelf: { xs: "stretch", sm: "center" } }}>
+                  <TextField
+                    size="small"
+                    value={softwareSearch}
+                    onChange={(e) => onSoftwareSearchChange?.(e.target.value)}
+                    placeholder="Search name, publisher or source"
+                    inputProps={{ "aria-label": "Search installed applications" }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchRoundedIcon sx={{ fontSize: ICON.md, color: "text.secondary" }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{ width: { xs: "100%", sm: 300 } }}
+                  />
+                  {softwareLoading ? <CircularProgress size={16} sx={{ color: BRAND.teal, flexShrink: 0 }} /> : null}
+                  <Chip
+                    size="small"
+                    label={searching ? `${softwareCount} matching` : `${softwareCount} apps detected`}
+                    sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800, flexShrink: 0 }}
+                  />
                 </Stack>
               </Stack>
               <Paper elevation={0} sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}>
-                <TableContainer sx={{ maxHeight: 360 }}>
+                {/* Alto para 15 filas pequeñas sin barra interna; con nombres
+                    largos que ocupan dos líneas, la tabla hace scroll. */}
+                <TableContainer sx={{ maxHeight: 560 }}>
                   <Table stickyHeader size="small" aria-label="agent software table">
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Application</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Publisher</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Source</TableCell>
+                        <SoftwareSortHeader field="name" label="Application" {...header} />
+                        <SoftwareSortHeader field="publisher" label="Publisher" {...header} />
+                        <SoftwareSortHeader field="source" label="Source" {...header} />
                         {/* Dos fechas distintas: cuándo se instaló (lo dice el
                             equipo) y cuándo lo vimos nosotros por primera vez.
                             Para todo lo que ya estaba al enrolar, la segunda es
                             la fecha del enrolamiento. */}
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>
-                          <Tooltip title="Date the current version was installed, as reported by the device">
-                            <span>Installed</span>
-                          </Tooltip>
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>
-                          <Tooltip title="When Tracenium first saw this app on the device">
-                            <span>Detected</span>
-                          </Tooltip>
-                        </TableCell>
+                        <SoftwareSortHeader
+                          field="installedOn"
+                          label="Installed"
+                          tooltip="Date the current version was installed, as reported by the device"
+                          {...header}
+                        />
+                        <SoftwareSortHeader
+                          field="detectedAtUtc"
+                          label="Detected"
+                          tooltip="When Tracenium first saw this app on the device"
+                          {...header}
+                        />
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -748,7 +816,11 @@ export function SoftwareTab({
                       {softwareRows.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={5} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
-                            {softwareLoading ? "Loading software inventory…" : "No software inventory found for this device."}
+                            {softwareLoading
+                              ? "Loading software inventory…"
+                              : searching
+                                ? `No applications match “${softwareSearch.trim()}”.`
+                                : "No software inventory found for this device."}
                           </TableCell>
                         </TableRow>
                       ) : null}
@@ -760,12 +832,12 @@ export function SoftwareTab({
                   count={softwareCount}
                   page={softwarePage}
                   rowsPerPage={softwarePageSize}
-                  rowsPerPageOptions={[8, 16, 24, 50]}
+                  rowsPerPageOptions={[15, 30, 50, 100]}
                   onPageChange={(_, nextPage) => {
                     onSoftwarePaginationModelChange?.({ page: nextPage, pageSize: softwarePageSize });
                   }}
                   onRowsPerPageChange={(event) => {
-                    const nextPageSize = Number(event.target.value || 8);
+                    const nextPageSize = Number(event.target.value || SOFTWARE_PAGE_SIZE);
                     onSoftwarePaginationModelChange?.({ page: 0, pageSize: nextPageSize });
                   }}
                   labelRowsPerPage="Rows per page:"

@@ -107,6 +107,8 @@ const FleetLocationMap = React.lazy(() =>
   import("../components/AssetsDashboard/FleetLocationMap")
 );
 import { AgentTab, HardwareTab, LocationTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
+import { DEFAULT_SOFTWARE_SORT, SOFTWARE_PAGE_SIZE, nextSoftwareSort } from "../components/AssetsDashboard/softwareSort";
+import { useDebounced } from "../components/Compliance/usePagedList";
 import { CopyButton } from "../components/AssetsDashboard/detailAtoms";
 import { DEVICE_DETAIL_TABS } from "../components/AssetsDashboard/deviceVisuals";
 import ExperienceTab from "../components/dex/ExperienceTab";
@@ -146,6 +148,10 @@ function AgentDetailWorkbench({
   softwareLoading = false,
   softwarePaginationModel,
   onSoftwarePaginationModelChange,
+  softwareSort = DEFAULT_SOFTWARE_SORT,
+  onSoftwareSortChange,
+  softwareSearch = "",
+  onSoftwareSearchChange,
   printerRows = [],
   printersLoading = false,
   printerScan = null,
@@ -169,7 +175,7 @@ function AgentDetailWorkbench({
   const rawAgentId = profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId || null;
   const softwareCount = Number.isFinite(Number(softwareTotal)) ? Number(softwareTotal) : softwareRows.length;
   const softwarePage = Number(softwarePaginationModel?.page || 0);
-  const softwarePageSize = Number(softwarePaginationModel?.pageSize || 8);
+  const softwarePageSize = Number(softwarePaginationModel?.pageSize || SOFTWARE_PAGE_SIZE);
 
   // Mobile (MDM/MAM) devices get an extra managed-state panel in the Agent tab.
   const platformKey = normalizePlatform(profile?.platform || hardware?.platform);
@@ -298,6 +304,10 @@ function AgentDetailWorkbench({
               softwarePage={softwarePage}
               softwarePageSize={softwarePageSize}
               onSoftwarePaginationModelChange={onSoftwarePaginationModelChange}
+              softwareSort={softwareSort}
+              onSoftwareSortChange={onSoftwareSortChange}
+              softwareSearch={softwareSearch}
+              onSoftwareSearchChange={onSoftwareSearchChange}
             />
           ) : null}
 
@@ -519,8 +529,13 @@ export default function AssetsDashboard({
   const [agentSoftwareLoading, setAgentSoftwareLoading] = React.useState(false);
   const [agentSoftwarePaginationModel, setAgentSoftwarePaginationModel] = React.useState({
     page: 0,
-    pageSize: 8,
+    pageSize: SOFTWARE_PAGE_SIZE,
   });
+  // Orden y búsqueda de la pestaña Software: en el SERVIDOR, porque la tabla
+  // pagina allí y ordenar/buscar en la página visible mentiría sobre el resto.
+  const [agentSoftwareSort, setAgentSoftwareSort] = React.useState(DEFAULT_SOFTWARE_SORT);
+  const [agentSoftwareSearch, setAgentSoftwareSearch] = React.useState("");
+  const agentSoftwareQuery = useDebounced(agentSoftwareSearch.trim());
   // Printers tab state. Single fetch (no pagination — printer counts
   // per device are typically <10, pathologic <50; the device_printers
   // table indexes (agent_id) for fast retrieval and we render the
@@ -1110,7 +1125,9 @@ export default function AssetsDashboard({
     setSelectedAgent(host || null);
     setAgentDetailTab("agent");
     setAgentDetailError("");
-    setAgentSoftwarePaginationModel({ page: 0, pageSize: 8 });
+    setAgentSoftwarePaginationModel({ page: 0, pageSize: SOFTWARE_PAGE_SIZE });
+    setAgentSoftwareSort(DEFAULT_SOFTWARE_SORT);
+    setAgentSoftwareSearch("");
     // La ficha abierta vive en la URL (?device=): recargar o compartir el
     // enlace vuelve a ella. Se quita al cerrarla.
     const id = host ? getHostDeviceId(host) : "";
@@ -1171,7 +1188,9 @@ export default function AssetsDashboard({
     setAgentSoftwareRows([]);
     setAgentSoftwareTotal(0);
     setAgentSoftwareLoading(false);
-    setAgentSoftwarePaginationModel({ page: 0, pageSize: 8 });
+    setAgentSoftwarePaginationModel({ page: 0, pageSize: SOFTWARE_PAGE_SIZE });
+    setAgentSoftwareSort(DEFAULT_SOFTWARE_SORT);
+    setAgentSoftwareSearch("");
   }, []);
 
   const openInactiveAssetsWorkbench = React.useCallback(() => {
@@ -1263,6 +1282,9 @@ export default function AssetsDashboard({
     getSoftwareInventoryHostApps(agentId, {
       page: agentSoftwarePaginationModel.page + 1,
       pageSize: agentSoftwarePaginationModel.pageSize,
+      sortBy: agentSoftwareSort.by,
+      sortDir: agentSoftwareSort.dir,
+      search: agentSoftwareQuery || undefined,
     })
       .then((res) => {
         if (cancelled) return;
@@ -1284,7 +1306,24 @@ export default function AssetsDashboard({
     return () => {
       cancelled = true;
     };
-  }, [selectedAgent, agentSoftwarePaginationModel.page, agentSoftwarePaginationModel.pageSize]);
+  }, [
+    selectedAgent,
+    agentSoftwarePaginationModel.page,
+    agentSoftwarePaginationModel.pageSize,
+    agentSoftwareSort.by,
+    agentSoftwareSort.dir,
+    agentSoftwareQuery,
+  ]);
+
+  // Otro orden u otra búsqueda es otra lista: se vuelve a la primera página.
+  const handleAgentSoftwareSortChange = React.useCallback((field) => {
+    setAgentSoftwareSort((prev) => nextSoftwareSort(prev, field));
+    setAgentSoftwarePaginationModel((prev) => ({ ...prev, page: 0 }));
+  }, []);
+  const handleAgentSoftwareSearchChange = React.useCallback((value) => {
+    setAgentSoftwareSearch(value);
+    setAgentSoftwarePaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
+  }, []);
 
   // Printers loader. Single fetch when selectedAgent changes (no
   // pagination needed — small list per device). Failure does NOT
@@ -1769,6 +1808,10 @@ const osVersionItems = React.useMemo(() => {
                 canReadEvidence={canReadEvidence}
                 softwarePaginationModel={agentSoftwarePaginationModel}
                 onSoftwarePaginationModelChange={setAgentSoftwarePaginationModel}
+                softwareSort={agentSoftwareSort}
+                onSoftwareSortChange={handleAgentSoftwareSortChange}
+                softwareSearch={agentSoftwareSearch}
+                onSoftwareSearchChange={handleAgentSoftwareSearchChange}
                 printerRows={agentPrinterRows}
                 printersLoading={agentPrintersLoading}
                 printerScan={agentPrinterScan}
