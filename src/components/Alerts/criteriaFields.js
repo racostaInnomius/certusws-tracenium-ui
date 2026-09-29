@@ -260,6 +260,47 @@ const FIELDS = {
     },
   ],
 
+  // compliance-governance.handler.ts — mismos topes que allí (intIn).
+  compliance_exception_expiring: [
+    {
+      key: "within_days",
+      type: "number",
+      unit: "days",
+      label: "Warn this many days before an exception expires",
+      help: "Only exceptions whose check is still failing. The last three days are raised to high.",
+      min: 1,
+      max: 90,
+      default: 14,
+    },
+  ],
+  compliance_exception_pending: [
+    {
+      key: "older_than_days",
+      type: "number",
+      unit: "days",
+      label: "Days a request may wait for an approver",
+      help: "A pending request has no effect: the finding keeps counting until someone other than the requester decides.",
+      min: 1,
+      max: 60,
+      default: 3,
+    },
+  ],
+  compliance_fix_not_held: [
+    {
+      key: "min_severity",
+      type: "choice",
+      label: "Lowest finding severity worth an alert",
+      help: "The alert carries the severity of the finding whose fix did not hold.",
+      choices: [
+        { value: "low", label: "Low and above" },
+        { value: "medium", label: "Medium and above" },
+        { value: "high", label: "High and above" },
+        { value: "critical", label: "Critical only" },
+      ],
+      default: "medium",
+    },
+  ],
+
   // parseDriftCriteria — ⚠️ esta fuente usa camelCase, y es lo que lee.
   security_setting_drift: [
     {
