@@ -164,7 +164,7 @@ describe("3 · Ctrl+Alt+Supr", () => {
     expect(dc.ops()).toContainEqual({ op: "sas" });
   });
 
-  it("no aparece si el agente no lo anuncia (macOS, Linux, agente viejo)", async () => {
+  it("no aparece si el agente no lo anuncia (endpoint Windows, macOS, Linux, agente viejo)", async () => {
     const { dc } = await connect();
     await dc.fireMessage({ ...LOGON_INFO, canSendSas: false });
     await dc.fireMessage(FRAME);

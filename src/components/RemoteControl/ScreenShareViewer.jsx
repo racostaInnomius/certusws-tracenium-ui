@@ -1184,8 +1184,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             Windows la intercepta el sistema del OPERADOR antes de llegar
             aquí — sin este botón, «Presiona Ctrl+Alt+Supr» en un servidor era
             un callejón sin salida (TNS-OPER-SNOC04, 29-sep-2026).
-            Sólo si el agente lo anuncia (Windows), y sólo con control: es
-            entrada, y el agente la pasa por la misma puerta que un clic. */}
+            Sólo si el agente lo anuncia —servidor Windows CLASIFICADO como tal;
+            en un endpoint siempre hay alguien dentro y el botón no se ocupa—,
+            y sólo con control: es entrada, y el agente la pasa por la misma
+            puerta que un clic. */}
         {screenInfo?.canSendSas && (
           <Tooltip
             title={
