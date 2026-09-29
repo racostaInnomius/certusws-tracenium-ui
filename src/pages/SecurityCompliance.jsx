@@ -73,7 +73,7 @@ import {
   StatusChip,
 } from "../components/Compliance/complianceChips";
 import { getSearchParam, updateSearchParams, searchForPage } from "../utils/browserState";
-import { parseUrlFilters, filterDevices } from "./complianceFilters";
+import { parseUrlFilters, parseUrlScope, scopeUrlParams, filterDevices } from "./complianceFilters";
 
 import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
@@ -128,6 +128,7 @@ import OnlineDot from "../components/common/OnlineDot";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useComplianceBands } from "../hooks/useComplianceBands";
 import { scoreBandTextRole, scoreBandLabel, formatFleetScore } from "../theme/scoreBands";
+import { platformLabel } from "../utils/platform";
 
 // Below this share of the catalog, a framework score is computed on so
 // few controls that reading it as a posture is a mistake. 40% is a
@@ -466,7 +467,13 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
     [securityForm, capabilityAuto]
   );
 
-  const [selectedFramework, setSelectedFramework] = React.useState(""); // "" = overall
+  // Grupo y framework viven en la URL (?group= / ?framework=): ir a un equipo
+  // y volver, recargar o compartir el enlace los perdía (walkthrough 25-sep #9).
+  const initialScope = React.useMemo(
+    () => (typeof window === "undefined" ? { assetGroupId: "", framework: null } : parseUrlScope(window.location.search)),
+    []
+  );
+  const [selectedFramework, setSelectedFramework] = React.useState(initialScope.framework ?? ""); // "" = overall
 
   // ── El default sale del pack del tenant, no de una constante ───────
   // Una empresa no audita contra diez estándares: audita contra uno. El
@@ -483,7 +490,8 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // `frameworkTouched` protege la elección del operador: sin él, este
   // efecto volvería a imponer el default en cada recarga de datos, y
   // volver a "All frameworks" a mano sería imposible.
-  const [frameworkTouched, setFrameworkTouched] = React.useState(false);
+  // Un framework en la URL (también `all`) es una elección, no un default.
+  const [frameworkTouched, setFrameworkTouched] = React.useState(initialScope.framework !== null);
 
   // Qué framework tiene desplegada su lista de controles. Uno a la vez:
   // dos paneles abiertos convierten la tabla en un muro y ninguno de los
@@ -504,14 +512,21 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   //  PCI DSS — hoy no tengo forma de ver sólo esos." Los grupos ya
   //  existían y PMP, SDP y CDP ya filtraban por ellos; SCP era el que
   //  faltaba. "" = toda la flota.
-  const [assetGroupId, setAssetGroupId] = React.useState("");
+  const [assetGroupId, setAssetGroupId] = React.useState(initialScope.assetGroupId);
   const [assetGroups, setAssetGroups] = React.useState([]);
 
   React.useEffect(() => {
     let alive = true;
     listAssetGroups({ pageSize: 100 })
       .then((res) => {
-        if (alive) setAssetGroups(listFrom(res, "items"));
+        if (!alive) return;
+        const items = listFrom(res, "items");
+        setAssetGroups(items);
+        // Un ?group= de un grupo borrado vuelve a la flota en vez de dejar la
+        // página filtrando por nada. Sólo si la lista está entera (< 100).
+        if (items.length < 100) {
+          setAssetGroupId((cur) => (cur && !items.some((g) => String(g.id) === String(cur)) ? "" : cur));
+        }
       })
       // Un fallo aquí no debe romper la página: sin grupos el selector
       // simplemente no aparece y todo sigue funcionando sobre la flota.
@@ -552,6 +567,10 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
       severity: "",
     });
   }, [statusFilter, platformFilter, versionBucketFilter, scoreBandFilter]);
+
+  React.useEffect(() => {
+    updateSearchParams(scopeUrlParams({ assetGroupId, framework: selectedFramework, frameworkChosen: frameworkTouched }));
+  }, [assetGroupId, selectedFramework, frameworkTouched]);
 
   const [drawerAgentId, setDrawerAgentId] = React.useState(null);
   const [drawerData, setDrawerData] = React.useState(null);
@@ -656,6 +675,15 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
     if (families.length === 1 && families[0]?.key) setSelectedFramework(families[0].key);
     else if (families.length === 0 && frameworks.length === 1) setSelectedFramework(frameworks[0].framework);
   }, [frameworks, families, frameworkTouched, selectedFramework]);
+
+  // Un ?framework= que ya no está en el pack (enlace viejo, framework
+  // desactivado) vuelve a «All frameworks»: el backend lo rechaza con 400 y
+  // media página se quedaría en error.
+  React.useEffect(() => {
+    if (!selectedFramework || frameworks.length === 0) return;
+    const valid = families.some((f) => f.key === selectedFramework) || frameworks.some((f) => f.framework === selectedFramework);
+    if (!valid) setSelectedFramework("");
+  }, [frameworks, families, selectedFramework]);
   const familySummary = React.useMemo(() => data?.familySummary ?? [], [data]);
   const devices = React.useMemo(() => data?.devices ?? [], [data]);
   const errorMsg = error ? error?.message || "Failed to load compliance data" : null;
@@ -1475,7 +1503,10 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                 </>
               ) : null}
               {scoped && (fwRow?.totalFailed ?? 0) > 0 ? (
-                <> · {fwRow.totalFailed} failing controls in this framework</>
+                // totalFailed suma los checks que falla CADA equipo: son
+                // resultados, no controles (ISO tiene 25 controles mapeados
+                // y esto daba «3053 failing controls»).
+                <> · {Number(fwRow.totalFailed).toLocaleString()} failing check results across devices in this framework</>
               ) : null}
               {avgAdjusted != null && avgScore != null && formatFleetScore(avgAdjusted) !== formatFleetScore(avgScore) ? (
                 <> · {formatFleetScore(avgAdjusted)} once accepted exceptions are excluded</>
@@ -2089,9 +2120,8 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                           </Typography>
                         ) : null}
                       </TableCell>
-                      <TableCell sx={{ textTransform: "capitalize" }}>
-                        {d.platform || "—"}
-                      </TableCell>
+                      {/* platformLabel, no `capitalize`: «macOS», no «Macos». */}
+                      <TableCell>{d.platform ? platformLabel(d.platform) : "—"}</TableCell>
                       <TableCell>{d.agentVersion || "—"}</TableCell>
                       <TableCell>
                         <StatusChip status={d.overallStatus || "unknown"} />
@@ -2187,7 +2217,12 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         PaperProps={{
           sx: {
             width: { xs: "100%", sm: 560, md: 640 },
-            maxWidth: "100%"
+            maxWidth: "100%",
+            // Ids de check, rutas de registro y valores de evidencia no traen
+            // espacios: sin esto una sola cadena ensanchaba la tarjeta y el
+            // cajón entero cogía scroll horizontal (walkthrough 25-sep #9).
+            // Se hereda, así que cubre todo lo que se pinte dentro.
+            overflowWrap: "anywhere",
           }
         }}
       >

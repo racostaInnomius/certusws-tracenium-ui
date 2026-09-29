@@ -58,6 +58,7 @@ import { useFindingLifecycle } from "./useFindingLifecycle";
 import { useBulkSelection } from "./useBulkSelection";
 import { PatchLevelSection } from "./PatchLevel";
 import DeviceScoreTrend from "./DeviceScoreTrend";
+import { platformLabel } from "../../utils/platform";
 
 export default function DeviceDrawerContent({
   agentId,
@@ -317,7 +318,7 @@ export default function DeviceDrawerContent({
             {device?.hostname || agentId}
           </Typography>
           <Typography variant="caption" sx={{ color: BRAND.gray, display: "block" }}>
-            {device?.platform ? `${device.platform} · ` : ""}
+            {device?.platform ? `${platformLabel(device.platform)} · ` : ""}
             {device?.agentVersion ? `agent ${device.agentVersion} · ` : ""}
             {device?.collectedAtUtc
               ? `last report ${new Date(device.collectedAtUtc).toLocaleString()}`

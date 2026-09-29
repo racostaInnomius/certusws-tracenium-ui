@@ -115,13 +115,16 @@ export default function ActionOutlookNotice({ deviceIds = [], onLoaded }) {
         {covered > 0
           ? `${covered} of ${deviceIds.length} device${deviceIds.length === 1 ? "" : "s"} will be snapshotted in vCenter first.`
           : "No vCenter snapshot will be taken."}
+        {/* Un espacio de verdad, no un margen: con `ml` se leía (y se
+            copiaba) «will be taken.7 without…». */}
+        {unprotected.length > 0 ? " " : null}
         {unprotected.length > 0 ? (
           <Tooltip
             arrow
             title={unprotected.map((u) => `${u.deviceId}: ${u.reason}`).join("\n")}
           >
-            <Box component="span" sx={{ color: BRAND.tealText, ml: 0.5, cursor: "help", textDecoration: "underline dotted" }}>
-              {unprotected.length} without a rollback point
+            <Box component="span" sx={{ color: BRAND.tealText, cursor: "help", textDecoration: "underline dotted" }}>
+              {unprotected.length} device{unprotected.length === 1 ? "" : "s"} without a rollback point
             </Box>
           </Tooltip>
         ) : null}

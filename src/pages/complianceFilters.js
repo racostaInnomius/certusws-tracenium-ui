@@ -75,6 +75,40 @@ export function parseUrlFilters(search) {
   };
 }
 
+// The page's SCOPE, as opposed to the device table's filters above: the asset
+// group and the framework, which narrow every section. They were state only,
+// so going to a device and coming back (or a refresh, or a shared link) lost
+// them — walkthrough 25-sep #9.
+//
+//   ?group=<positive integer>
+//   ?framework=<framework id | family:<x> | all>
+//
+// `framework=all` is the operator having CHOSEN "All frameworks": without it a
+// reload would re-apply the tenant's default (a single-standard tenant opens on
+// that standard) over their choice. Whether the value is still in the pack is
+// checked by the page once the framework list has loaded — here it is only
+// shape.
+const FRAMEWORK_PARAM = /^[a-z0-9_.:-]{1,100}$/i;
+
+export function parseUrlScope(search) {
+  const params = new URLSearchParams(search || "");
+  const group = String(params.get("group") || "").trim();
+  const framework = String(params.get("framework") || "").trim();
+  return {
+    assetGroupId: /^[1-9]\d{0,9}$/.test(group) ? group : "",
+    // null = not in the URL (the page may pick its default); "" = all, chosen.
+    framework: framework.toLowerCase() === "all" ? "" : FRAMEWORK_PARAM.test(framework) ? framework : null,
+  };
+}
+
+// What to write back: "" removes the param (see updateSearchParams).
+export function scopeUrlParams({ assetGroupId, framework, frameworkChosen }) {
+  return {
+    group: assetGroupId ? String(assetGroupId) : "",
+    framework: framework ? framework : frameworkChosen ? "all" : "",
+  };
+}
+
 // True when a device matches the status filter. "fail" ⇒ overallStatus is
 // fail/non_compliant; "pass" ⇒ pass/compliant; "" ⇒ no status filter.
 export function deviceMatchesStatus(device, statusFilter) {

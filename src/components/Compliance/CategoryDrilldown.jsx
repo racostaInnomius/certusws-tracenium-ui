@@ -37,6 +37,7 @@ import { formatDate } from "../../utils/format";
 import { getCategoryFailingChecks, getCategoryCheckDevices, getCategoryDevices } from "../../api/compliance";
 import { SearchBox, PageFooter, ListState, DeviceName } from "./pagedList";
 import { usePagedList, useDebounced } from "./usePagedList";
+import { platformLabel } from "../../utils/platform";
 
 export const CHECKS_PAGE = 25;
 export const DEVICES_PAGE = 50;
@@ -70,7 +71,7 @@ function CheckDevices({ category, checkId, onOpenDevice, assetGroupId }) {
               <Stack key={d.agentId} direction="row" alignItems="baseline" spacing={1} sx={{ minWidth: 0 }}>
                 <DeviceName device={d} onOpenDevice={onOpenDevice} />
                 <Typography noWrap sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-                  {[d.platform, d.failingSince ? `since ${formatDate(d.failingSince, { month: "short", day: "numeric" })}` : null].filter(Boolean).join(" · ")}
+                  {[d.platform ? platformLabel(d.platform) : null, d.failingSince ? `since ${formatDate(d.failingSince, { month: "short", day: "numeric" })}` : null].filter(Boolean).join(" · ")}
                 </Typography>
               </Stack>
             ))}
@@ -206,7 +207,7 @@ function DevicesView({ category, onOpenDevice, assetGroupId, framework }) {
                 <DeviceName device={d} onOpenDevice={onOpenDevice} />
               </Box>
               {d.platform ? (
-                <Chip size="small" label={d.platform} sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }} />
+                <Chip size="small" label={platformLabel(d.platform)} sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }} />
               ) : null}
               <Typography sx={{ width: 90, textAlign: "right", fontSize: TEXT.xs, color: BRAND.dark }}>
                 {d.failingChecks} failing

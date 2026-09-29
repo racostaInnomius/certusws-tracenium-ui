@@ -5,6 +5,8 @@ import {
   compareVersionsReverse,
   bucketOfVersion,
   parseUrlFilters,
+  parseUrlScope,
+  scopeUrlParams,
   deviceMatchesStatus,
   filterDevices,
 } from "./complianceFilters";
@@ -152,3 +154,30 @@ describe("score-band filter (Sprint 2 item 8)", () => {
     expect(ids).toEqual(["l"]);
   });
 });
+
+describe("parseUrlScope / scopeUrlParams — the group and framework survive navigation (walkthrough 25-sep #9)", () => {
+  it("reads a group and a framework, family keys included", () => {
+    expect(parseUrlScope("?group=12&framework=family%3Acis")).toEqual({ assetGroupId: "12", framework: "family:cis" });
+    expect(parseUrlScope("?framework=nist_csf_2.0").framework).toBe("nist_csf_2.0");
+  });
+
+  it("tells «not in the URL» (null: the page may default) from «All frameworks chosen» (\"\")", () => {
+    expect(parseUrlScope("").framework).toBeNull();
+    expect(parseUrlScope("?framework=all").framework).toBe("");
+  });
+
+  it("ignores values of the wrong shape", () => {
+    expect(parseUrlScope("?group=0&framework=a%20b")).toEqual({ assetGroupId: "", framework: null });
+    expect(parseUrlScope("?group=-3").assetGroupId).toBe("");
+    expect(parseUrlScope("?group=abc").assetGroupId).toBe("");
+  });
+
+  it("writes back what it reads", () => {
+    expect(scopeUrlParams({ assetGroupId: "12", framework: "family:cis", frameworkChosen: true })).toEqual({ group: "12", framework: "family:cis" });
+    expect(scopeUrlParams({ assetGroupId: "", framework: "", frameworkChosen: true })).toEqual({ group: "", framework: "all" });
+    expect(scopeUrlParams({ assetGroupId: "", framework: "", frameworkChosen: false })).toEqual({ group: "", framework: "" });
+    const round = parseUrlScope("?" + new URLSearchParams(scopeUrlParams({ assetGroupId: "7", framework: "", frameworkChosen: true })));
+    expect(round).toEqual({ assetGroupId: "7", framework: "" });
+  });
+});
+

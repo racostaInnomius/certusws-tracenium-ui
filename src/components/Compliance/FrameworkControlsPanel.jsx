@@ -45,6 +45,7 @@ import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { formatDate, formatRelative } from "../../utils/format";
 import { SearchBox, PageFooter, ListState, DeviceName } from "./pagedList";
 import { usePagedList, useDebounced } from "./usePagedList";
+import { platformLabel } from "../../utils/platform";
 
 // Filas de controles por página. NIST 800-53 tiene 1.014 controles y la
 // familia CIS 1.444 filas: pintarlas todas de golpe no le sirve a nadie.
@@ -198,7 +199,7 @@ function ControlDevices({ framework, controlId, assetGroupId, onOpenDevice }) {
                 {d.failingChecks > (d.sampleChecks?.length ?? 0) ? ` +${d.failingChecks - d.sampleChecks.length} more` : ""}
               </Typography>
               <Typography noWrap sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-                {[d.platform, d.failingSince ? `since ${formatDate(d.failingSince, { month: "short", day: "numeric" })}` : null].filter(Boolean).join(" · ")}
+                {[d.platform ? platformLabel(d.platform) : null, d.failingSince ? `since ${formatDate(d.failingSince, { month: "short", day: "numeric" })}` : null].filter(Boolean).join(" · ")}
               </Typography>
             </Stack>
           ))
