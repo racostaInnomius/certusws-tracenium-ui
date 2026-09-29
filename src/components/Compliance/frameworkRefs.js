@@ -50,6 +50,35 @@ export function frameworkShortLabel(framework) {
   return familyOf(framework)?.short ?? prettify(framework);
 }
 
+// Tokens of a benchmark id as their vendors write them.
+const TOKEN_LABELS = {
+  windows: "Windows", server: "Server", ubuntu: "Ubuntu", macos: "macOS", chrome: "Chrome", edge: "Edge",
+  firefox: "Firefox", linux: "Linux", rhel: "RHEL", debian: "Debian", security: "Security", rule: "Rule", tsc: "TSC",
+};
+
+/**
+ * One benchmark / standard, readable: "cis_ubuntu_22_v3.0.0" → "CIS Ubuntu 22 v3.0.0",
+ * "stig_edge_v2r5" → "STIG Edge v2r5", "iso_27001_2022" → "ISO 27001 2022".
+ * CIS and STIG are families of many benchmarks, and "CIS 5.1.19" alone does not
+ * say whether it is the Ubuntu 22 or the Ubuntu 24 one.
+ */
+export function frameworkLongLabel(framework) {
+  const f = String(framework || "");
+  const fam = familyOf(f);
+  if (!fam) return prettify(f);
+  const rest = f.slice(fam.prefix.length).replace(/^_+/, "");
+  const words = rest
+    .split("_")
+    .filter(Boolean)
+    .map((w) => TOKEN_LABELS[w.toLowerCase()] ?? w);
+  // nist_csf_2.0 → "CSF 2.0"; pci_dss_v4_0_1 → "PCI DSS v4 0 1" reads badly: join version digits.
+  const text = words.join(" ").replace(/\bv(\d+) (\d+) (\d+)\b/, "v$1.$2.$3");
+  // Las dos que se nombran por su número, no por su familia corta.
+  if (fam.short === "NIST") return text ? `NIST 800-53 ${text}` : "NIST 800-53";
+  if (fam.short === "ISO 27001") return text ? `ISO 27001:${text}` : "ISO 27001";
+  return text ? `${fam.short} ${text}` : fam.short;
+}
+
 /** The standard's name, for the "opens …" hint. */
 export function frameworkName(framework) {
   return familyOf(framework)?.name ?? prettify(framework);

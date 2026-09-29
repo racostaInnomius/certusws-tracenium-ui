@@ -5,7 +5,7 @@
 // control. The ids below are the real ones in the control DB (29-sep).
 
 import { describe, expect, it } from "vitest";
-import { controlReference, controlReferenceHint, frameworkShortLabel } from "./frameworkRefs";
+import { controlReference, controlReferenceHint, frameworkLongLabel, frameworkShortLabel } from "./frameworkRefs";
 
 describe("frameworkShortLabel", () => {
   it("never shows a raw snake_case id", () => {
@@ -92,3 +92,23 @@ describe("controlReferenceHint", () => {
     expect(controlReferenceHint("nist_800_53_rev5", "Device Lock", ref)).toBe("Device Lock");
   });
 });
+
+describe("frameworkLongLabel — one benchmark, readable", () => {
+  it("names each benchmark of a family, so two «CIS 5.1.19» can be told apart", () => {
+    expect(frameworkLongLabel("cis_ubuntu_22_v3.0.0")).toBe("CIS Ubuntu 22 v3.0.0");
+    expect(frameworkLongLabel("cis_ubuntu_24_v2.0.0")).toBe("CIS Ubuntu 24 v2.0.0");
+    expect(frameworkLongLabel("cis_windows_server_2022_v5.1.0")).toBe("CIS Windows Server 2022 v5.1.0");
+    expect(frameworkLongLabel("cis_macos_15_v2.1.0")).toBe("CIS macOS 15 v2.1.0");
+    expect(frameworkLongLabel("stig_edge_v2r5")).toBe("STIG Edge v2r5");
+  });
+
+  it("the single standards", () => {
+    expect(frameworkLongLabel("nist_800_53_rev5")).toBe("NIST 800-53 rev5");
+    expect(frameworkLongLabel("nist_csf_2.0")).toBe("CSF 2.0");
+    expect(frameworkLongLabel("iso_27001_2022")).toBe("ISO 27001:2022");
+    expect(frameworkLongLabel("pci_dss_v4_0_1")).toBe("PCI DSS v4.0.1");
+    expect(frameworkLongLabel("soc2_tsc_2017")).toBe("SOC 2 TSC 2017");
+    expect(frameworkLongLabel("hipaa_security_rule")).toBe("HIPAA Security Rule");
+  });
+});
+

@@ -38,7 +38,96 @@ import { severityMeta } from "../../theme/severity";
 import { getComplianceCatalog } from "../../api/compliance";
 import { categoryLabel, categoryDescription } from "./categoryMeta";
 import { FrameworkChip } from "./complianceChips";
-import { frameworkShortLabel } from "./frameworkRefs";
+import { frameworkLongLabel, frameworkShortLabel } from "./frameworkRefs";
+
+// ── Frameworks of a check: a line when collapsed, the list when open ──────
+// A check maps to up to ~30 controls across 8 standards (the SSH ones: CIS x3
+// benchmarks, HIPAA, ISO, NIST, CSF, PCI, SOC 2, STIG), and every one was a
+// pill in the row — rows 10 pills tall, a list of 1,411 checks that never
+// ended. Collapsed, the row says WHICH standards and how many controls of
+// each; opening it shows the controls, one line per benchmark.
+
+function distinctControls(frameworks) {
+  const seen = new Set();
+  return (frameworks || []).filter((fw) => {
+    const k = `${fw.framework}\u0000${fw.controlId}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+// [{ family: "CIS", controls: [...] }] in first-seen order.
+function byFamily(frameworks) {
+  const map = new Map();
+  for (const fw of distinctControls(frameworks)) {
+    const fam = frameworkShortLabel(fw.framework);
+    if (!map.has(fam)) map.set(fam, []);
+    map.get(fam).push(fw);
+  }
+  return [...map.entries()].map(([family, controls]) => ({ family, controls }));
+}
+
+function FrameworkSummary({ frameworks, onOpen }) {
+  const groups = byFamily(frameworks);
+  if (!groups.length) return <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>—</Typography>;
+  return (
+    <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5 }}>
+      {groups.map((g) => (
+        <Tooltip
+          key={g.family}
+          arrow
+          placement="top"
+          title={g.controls.map((c) => `${frameworkLongLabel(c.framework)} ${c.controlId}`).join("\n")}
+          slotProps={{ tooltip: { sx: { whiteSpace: "pre-line" } } }}
+        >
+          <Chip
+            size="small"
+            label={g.controls.length > 1 ? `${g.family} · ${g.controls.length}` : g.family}
+            onClick={onOpen}
+            sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark, border: `1px solid ${BRAND.border}` }}
+          />
+        </Tooltip>
+      ))}
+    </Stack>
+  );
+}
+
+function FrameworkDetail({ frameworks }) {
+  const controls = distinctControls(frameworks);
+  if (!controls.length) return null;
+  const byFramework = new Map();
+  for (const fw of controls) {
+    if (!byFramework.has(fw.framework)) byFramework.set(fw.framework, []);
+    byFramework.get(fw.framework).push(fw);
+  }
+  return (
+    <Box sx={{ mt: 1.25 }}>
+      <Typography sx={{ fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray, mb: 0.5 }}>FRAMEWORKS</Typography>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(160px, max-content) 1fr" }, columnGap: 1.5, rowGap: 0.5 }}>
+        {[...byFramework.entries()].map(([framework, list]) => (
+          <React.Fragment key={framework}>
+            <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.dark, pt: "2px" }}>{frameworkLongLabel(framework)}</Typography>
+            <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5 }}>
+              {list.map((fw) => (
+                <FrameworkChip
+                  key={fw.controlId}
+                  framework={fw.framework}
+                  controlId={fw.controlId}
+                  controlLevel={fw.controlLevel}
+                  controlTitle={fw.controlTitle}
+                  referenceUrl={fw.referenceUrl}
+                  dense
+                  bare
+                />
+              ))}
+            </Stack>
+          </React.Fragment>
+        ))}
+      </Box>
+    </Box>
+  );
+}
 
 // Canonical severity scale (theme/severity.js) — removes the hardcoded hex.
 const SEV_META = {
@@ -117,19 +206,7 @@ function CheckRow({ check, focused = false }) {
           <Chip size="small" label={m.label} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 800, bgcolor: m.bg, color: m.fg }} />
         </TableCell>
         <TableCell>
-          <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
-            {(check.frameworks || []).map((fw, i) => (
-              <FrameworkChip
-                key={`${fw.framework}-${fw.controlId}-${i}`}
-                framework={fw.framework}
-                controlId={fw.controlId}
-                controlLevel={fw.controlLevel}
-                controlTitle={fw.controlTitle}
-                referenceUrl={fw.referenceUrl}
-                dense
-              />
-            ))}
-          </Stack>
+          <FrameworkSummary frameworks={check.frameworks} onOpen={() => setOpen(true)} />
         </TableCell>
       </TableRow>
       <TableRow>
@@ -156,6 +233,7 @@ function CheckRow({ check, focused = false }) {
                   ))}
                 </Box>
               ) : null}
+              <FrameworkDetail frameworks={check.frameworks} />
               <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 1 }}>
                 Collector: {check.collectorPlugin || "—"}
                 {check.collectorVersionMin ? ` · min agent ${check.collectorVersionMin}` : ""}

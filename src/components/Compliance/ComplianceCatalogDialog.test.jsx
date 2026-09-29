@@ -61,9 +61,31 @@ describe("ComplianceCatalogDialog", () => {
 
     expect(await screen.findByText("linux.ssh.strong_ciphers_only")).toBeInTheDocument();
     expect(screen.getByText("3 of 3 checks")).toBeInTheDocument();
-    // Framework chips rendered from the mappings — incl. STIG (family + CAT level).
-    expect(screen.getByText(/NIST SC-13/)).toBeInTheDocument();
-    expect(screen.getByText(/STIG V-260000 · CAT II/)).toBeInTheDocument();
+    // Collapsed, a row names its standards — not every control as a pill
+    // (the SSH checks were ~30 pills and 10 lines tall).
+    const row = screen.getByText("linux.ssh.strong_ciphers_only").closest("tr");
+    expect(within(row).getByText("NIST")).toBeInTheDocument();
+    expect(within(row).getByText("STIG")).toBeInTheDocument();
+    expect(screen.queryByText("SC-13")).not.toBeInTheDocument();
+  });
+
+  it("opening a row lists its controls, one line per benchmark (incl. the STIG CAT level)", async () => {
+    getComplianceCatalog.mockResolvedValue(CHECKS);
+    render(<ComplianceCatalogDialog open onClose={() => {}} />);
+    const row = (await screen.findByText("linux.ssh.strong_ciphers_only")).closest("tr");
+    fireEvent.click(within(row).getByRole("button", { name: "Expand" }));
+    expect(await screen.findByText("NIST 800-53 rev5")).toBeInTheDocument();
+    expect(screen.getByText("SC-13")).toBeInTheDocument();
+    expect(screen.getByText("STIG Ubuntu 22")).toBeInTheDocument();
+    expect(screen.getByText("V-260000 · CAT II")).toBeInTheDocument();
+  });
+
+  it("clicking the collapsed summary opens the row too", async () => {
+    getComplianceCatalog.mockResolvedValue(CHECKS);
+    render(<ComplianceCatalogDialog open onClose={() => {}} />);
+    const row = (await screen.findByText("linux.ssh.strong_ciphers_only")).closest("tr");
+    fireEvent.click(within(row).getByText("NIST"));
+    expect(await screen.findByText("SC-13")).toBeInTheDocument();
   });
 
   it("filters by platform", async () => {

@@ -112,17 +112,17 @@ export function SeverityChip({ severity }) {
 
 // `dense`: the catalog's 20 px rows. The label and the link come from
 // frameworkRefs.js — see there why the stored reference_url is not enough.
-export function FrameworkChip({ framework, controlId, controlLevel, controlTitle, referenceUrl, dense = false }) {
+// `bare`: without the family prefix, for a list already headed by the
+// framework's name (the catalog's expanded row).
+export function FrameworkChip({ framework, controlId, controlLevel, controlTitle, referenceUrl, dense = false, bare = false }) {
   // Short label: "CIS 9.3.1 · L1" / "NIST SC-7(5)" / "CSF PR.IR-01" /
   // "STIG V-253xxx · CAT I" / "ISO 27001 A.8.8".
   const fam = frameworkShortLabel(framework);
 
   // CIS levels (L1/L2) and STIG severities (CAT I/II/III) are meaningful, so we
   // suffix them; NIST/CSF control levels ("baseline"/"core") are noise here.
-  const label =
-    controlLevel && (fam === "CIS" || fam === "STIG")
-      ? `${fam} ${controlId} · ${controlLevel}`
-      : `${fam} ${controlId}`;
+  const id = bare ? String(controlId) : `${fam} ${controlId}`;
+  const label = controlLevel && (fam === "CIS" || fam === "STIG") ? `${id} · ${controlLevel}` : id;
 
   const ref = controlReference(framework, controlId, referenceUrl);
   const hint = controlReferenceHint(framework, controlTitle, ref);
