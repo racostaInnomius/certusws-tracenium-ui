@@ -21,6 +21,7 @@ import {
   Drawer,
   Grid,
   IconButton,
+  Link,
   MenuItem,
   Paper,
   Select,
@@ -59,6 +60,8 @@ import BoltOutlinedIcon from "@mui/icons-material/BoltOutlined";
 import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
+import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
+import { deviceAssetsHref, handleDeviceLinkClick } from "../utils/deviceLink";
 
 import { BRAND, ROLE, TEXT } from "../theme/brand";
 import { formatOpenFor } from "../utils/alertAge";
@@ -898,8 +901,20 @@ function EventDetailDrawer({ event, onClose }) {
             {/* En la ficha caben los dos, y hacen falta los dos: el nombre
                 para saber de qué máquina se habla, el id para pegarlo en una
                 consulta o en un ticket. */}
-            {event.hostname ? <DetailRow label="Device" value={event.hostname} /> : null}
-            <DetailRow label={event.hostname ? "Agent ID" : "Device"} value={event.deviceId || "—"} mono />
+            {event.hostname ? (
+              <DetailRow label="Device" value={<DeviceLink deviceId={event.deviceId}>{event.hostname}</DeviceLink>} />
+            ) : null}
+            <DetailRow
+              label={event.hostname ? "Agent ID" : "Device"}
+              value={
+                !event.hostname && event.deviceId ? (
+                  <DeviceLink deviceId={event.deviceId}>{event.deviceId}</DeviceLink>
+                ) : (
+                  event.deviceId || "—"
+                )
+              }
+              mono
+            />
             <DetailRow label="Occurred" value={new Date(event.occurredAt).toLocaleString()} />
             {/*
               Dos filas y no una: "Occurred" es cuándo pasó según la
@@ -918,6 +933,23 @@ function EventDetailDrawer({ event, onClose }) {
             <DetailRow label="Source ID" value={event.sourceEventId} mono />
             <DetailRow label="Rule" value={event.rule?.name || "—"} />
           </Stack>
+          {/* De la alerta al equipo en un clic. Antes había que copiar el
+              nombre, ir a Asset Management y buscarlo. Un `<a>` de verdad:
+              Cmd/Ctrl-clic lo abre en otra pestaña y la alerta sigue aquí.
+              Sólo si la alerta es de un equipo — las de tenant no llevan id. */}
+          {event.deviceId ? (
+            <Button
+              size="small"
+              variant="outlined"
+              component="a"
+              href={deviceAssetsHref(event.deviceId)}
+              onClick={(e) => handleDeviceLinkClick(e, event.deviceId)}
+              startIcon={<LaunchOutlinedIcon fontSize="small" />}
+              sx={{ mt: 1.25, textTransform: "none", borderColor: BRAND.border, color: BRAND.teal }}
+            >
+              Open device in Asset Management
+            </Button>
+          ) : null}
         </Paper>
 
         {/* ADR-0034 — qué hizo la automatización con ESTA alerta, para que
@@ -1000,6 +1032,20 @@ export function CorrelationSection({ correlation }) {
         </Button>
       ) : null}
     </Paper>
+  );
+}
+
+/** El nombre (o el id) del equipo, como enlace a su ficha en Asset Management. */
+function DeviceLink({ deviceId, children }) {
+  return (
+    <Link
+      href={deviceAssetsHref(deviceId)}
+      onClick={(e) => handleDeviceLinkClick(e, deviceId)}
+      underline="hover"
+      sx={{ color: BRAND.teal, fontWeight: 600 }}
+    >
+      {children}
+    </Link>
   );
 }
 
