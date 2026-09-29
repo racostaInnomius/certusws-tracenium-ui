@@ -47,7 +47,7 @@ import JobsTimeseriesChart from "../components/Overview/JobsTimeseriesChart";
 // BRAND used to be duplicated here (Fase 1 homologation deleted it).
 // Central source of truth lives in src/theme/brand.js; adding
 // borderStrong/tealText/etc. there propagates automatically.
-import { BRAND, DATAGRID_SX, ICON, NEUTRAL, TEXT, TEXT_MUTED } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, TEXT, TEXT_MUTED } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 
@@ -87,7 +87,13 @@ import {
 } from "../utils/jobForm";
 import { deriveTriage, groupFailingDevices, groupFailureCauses, isStuckJob } from "../utils/jobInsights";
 import { CHART_CATEGORICAL } from "../theme/chartPalette";
-import { hasJobResult, formatJobResult } from "../utils/jobResult";
+import {
+  DetailRow,
+  JobOutcomeSection,
+  JobRawDataSection,
+  JobRequestSection,
+} from "../components/jobs/JobDetailSections";
+import { hasJobResult } from "../utils/jobResult";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -315,35 +321,6 @@ function DeviceCheckAutocomplete({ label, devices, value, onChange, disabled, he
   );
 }
 
-function DetailRow({ label, value, mono = false }) {
-  return (
-    <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline" }}>
-      <Typography
-        sx={{
-          fontSize: TEXT.sm,
-          color: TEXT_MUTED,
-          fontWeight: 600,
-          minWidth: 88,
-          textTransform: "uppercase",
-          letterSpacing: 0.3,
-        }}
-      >
-        {label}
-      </Typography>
-      <Typography
-        sx={{
-          fontSize: TEXT.md,
-          color: BRAND.dark,
-          fontFamily: mono ? "monospace" : "inherit",
-          wordBreak: "break-all",
-          flex: 1,
-        }}
-      >
-        {value}
-      </Typography>
-    </Box>
-  );
-}
 
 /**
  * Horizontal-bar breakdown of Jobs by job_type within the same
@@ -2909,69 +2886,27 @@ export default function Jobs({ onNavigate }) {
                   </>
                 ) : null}
 
-                {/* Result — what the agent reported back on completion.
-                    The panel used to show only the payload (what was
-                    REQUESTED); this is what actually HAPPENED. For a
-                    patch_remediate dry-run, whose whole purpose is to
-                    return a result without acting, the payload alone made
-                    the detail view useless. Only shown when the agent
-                    returned something, so a still-running or never-answered
-                    job doesn't render an empty block. */}
-                {hasJobResult(selectedJob.result_json) ? (
-                  <>
-                    <Divider sx={{ borderColor: BRAND.border }} />
-                    <Box>
-                      <Typography variant="overline" sx={{ color: BRAND.tealText, fontWeight: 800, letterSpacing: 1.2 }}>
-                        Result
-                      </Typography>
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          mt: 0.5,
-                          p: 1.25,
-                          borderColor: `${BRAND.teal}55`,
-                          bgcolor: BRAND.tealSoft,
-                          color: BRAND.dark,
-                          overflow: "auto",
-                          maxHeight: 220,
-                          fontFamily: "monospace",
-                          fontSize: TEXT.sm,
-                          whiteSpace: "pre-wrap",
-                          wordBreak: "break-word",
-                        }}
-                      >
-                        {formatJobResult(selectedJob.result_json)}
-                      </Paper>
-                    </Box>
-                  </>
-                ) : null}
+                {/* What happened / What was requested — el result y el
+                    payload LEÍDOS (utils/jobDescribe). El crudo sigue ahí,
+                    plegado debajo, para quien lo busca. Antes eran dos
+                    bloques monoespaciados abiertos: una vista de
+                    desarrollador en la pantalla del operador.
+                    `key` por job: al cambiar de fila los plegables vuelven a
+                    empezar cerrados. */}
+                <React.Fragment key={selectedJob.job_id}>
+                  {hasJobResult(selectedJob.result_json) ? (
+                    <>
+                      <Divider sx={{ borderColor: BRAND.border }} />
+                      <JobOutcomeSection job={selectedJob} />
+                    </>
+                  ) : null}
 
-                <Divider sx={{ borderColor: BRAND.border }} />
+                  <Divider sx={{ borderColor: BRAND.border }} />
+                  <JobRequestSection job={selectedJob} />
 
-                {/* Payload */}
-                <Box>
-                  <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
-                    Payload
-                  </Typography>
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      mt: 0.5,
-                      p: 1.25,
-                      bgcolor: BRAND.dark,
-                      color: NEUTRAL[100],
-                      borderColor: BRAND.dark,
-                      overflow: "auto",
-                      maxHeight: 220,
-                      fontFamily: "monospace",
-                      fontSize: TEXT.sm,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {JSON.stringify(selectedJob.payload_json ?? {}, null, 2)}
-                  </Paper>
-                </Box>
+                  <Divider sx={{ borderColor: BRAND.border }} />
+                  <JobRawDataSection job={selectedJob} />
+                </React.Fragment>
 
                 {/* Actions */}
                 <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: "auto", pt: 1 }}>
