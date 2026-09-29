@@ -186,6 +186,22 @@ describe("equipos a los que el fix ya les está llegando", () => {
     expect(screen.getByRole("checkbox", { name: "Select all devices" })).toBeDisabled();
   });
 
+  it("🔴 el que YA lo tiene puesto y sólo espera reiniciar: fuera, y el aviso dice REINICIA", async () => {
+    getDevicesAffectedByCheck.mockResolvedValue({
+      items: [dev("d1"), { ...busy("d2", 12, "applied_reboot_required"), inFlight: { ...busy("d2", 12, "applied_reboot_required").inFlight, finishedAt: "2026-09-28T10:00:00.000Z" } }],
+    });
+    open();
+    expect(await screen.findByRole("button", { name: /^Apply on 1/ })).toBeEnabled();
+    expect(screen.getByText("Restart pending · #12")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Select D2" })).toBeDisabled();
+    expect(screen.getByTestId("restart-pending-notice")).toHaveTextContent(
+      /1 of 2 devices already have this fix applied \(#12\) and takes effect after a restart, so it is left out\. Restart it instead/
+    );
+    // No se mezcla con «en camino».
+    expect(screen.queryByTestId("in-flight-notice")).toBeNull();
+    expect(screen.getByText(/1 of 1 selected · 1 left out/)).toBeInTheDocument();
+  });
+
   it("el chip abre esa remediación, donde se sigue o se cancela", async () => {
     getDevicesAffectedByCheck.mockResolvedValue({ items: [busy("d1")] });
     getRemediationResults.mockResolvedValue({ items: [{ id: 9, deviceId: "d1", outcome: "pending" }] });

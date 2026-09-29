@@ -352,6 +352,12 @@ export default function FindingDetailDrawer({
   // Los que ya tienen este fix en camino no se pueden volver a elegir.
   const selectableDevices = devices.filter((d) => !d.inFlight);
   const inFlightDevices = devices.filter((d) => d.inFlight);
+  // Dos motivos para dejarlo fuera: el fix va de camino, o YA está puesto y
+  // sólo falta reiniciar (applied_reboot_required). Mandarlo otra vez no
+  // arregla ninguno de los dos, pero lo que el operador tiene que hacer sí
+  // cambia: esperar/cancelar, o reiniciar.
+  const onTheWayDevices = inFlightDevices.filter((d) => d.inFlight.outcome !== "applied_reboot_required");
+  const awaitingRestartDevices = inFlightDevices.filter((d) => d.inFlight.outcome === "applied_reboot_required");
 
   const toggleDevice = (agentId) => {
     if (inFlightDevices.some((d) => d.agentId === agentId)) return;
@@ -594,12 +600,20 @@ export default function FindingDetailDrawer({
                 </Stack>
               </Stack>
 
-              {inFlightDevices.length > 0 ? (
+              {onTheWayDevices.length > 0 ? (
                 <Alert severity="info" variant="outlined" data-testid="in-flight-notice">
-                  {inFlightDevices.length === devices.length
+                  {onTheWayDevices.length === devices.length
                     ? `This fix is already on its way to ${devices.length === 1 ? "this device" : `all ${devices.length} devices`}`
-                    : `${inFlightDevices.length} of ${devices.length} devices already have this fix on its way`}
-                  {" "}({[...new Set(inFlightDevices.map((d) => `#${d.inFlight.remediationId}`))].join(", ")}), so {inFlightDevices.length === 1 ? "it is" : "they are"} left out. An offline device picks it up when it reconnects — open the fix to follow it, or cancel it to send a new one.
+                    : `${onTheWayDevices.length} of ${devices.length} devices already have this fix on its way`}
+                  {" "}({[...new Set(onTheWayDevices.map((d) => `#${d.inFlight.remediationId}`))].join(", ")}), so {onTheWayDevices.length === 1 ? "it is" : "they are"} left out. An offline device picks it up when it reconnects — open the fix to follow it, or cancel it to send a new one.
+                </Alert>
+              ) : null}
+              {awaitingRestartDevices.length > 0 ? (
+                <Alert severity="warning" variant="outlined" data-testid="restart-pending-notice">
+                  {awaitingRestartDevices.length === devices.length
+                    ? `This fix is already applied on ${devices.length === 1 ? "this device" : `all ${devices.length} devices`}`
+                    : `${awaitingRestartDevices.length} of ${devices.length} devices already have this fix applied`}
+                  {" "}({[...new Set(awaitingRestartDevices.map((d) => `#${d.inFlight.remediationId}`))].join(", ")}) and takes effect after a restart, so {awaitingRestartDevices.length === 1 ? "it is" : "they are"} left out. Restart {awaitingRestartDevices.length === 1 ? "it" : "them"} instead of sending the fix again.
                 </Alert>
               ) : null}
 
@@ -637,7 +651,7 @@ export default function FindingDetailDrawer({
                       />
                       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                         {selectedDeviceIds.size} of {selectableDevices.length} selected
-                        {inFlightDevices.length > 0 ? ` · ${inFlightDevices.length} already being fixed` : ""}
+                        {inFlightDevices.length > 0 ? ` · ${inFlightDevices.length} left out` : ""}
                       </Typography>
                     </Box>
                     ) : null}
@@ -683,11 +697,15 @@ export default function FindingDetailDrawer({
                                un segundo job igual detrás del primero. */
                             <Tooltip
                               arrow
-                              title={`Fix #${busy.remediationId} is ${busy.outcome === "running" ? "running on" : "waiting for"} this device${busy.createdAt ? ` (sent ${formatRelativeTime(busy.createdAt)})` : ""}. Open it to follow or cancel it before sending it again.`}
+                              title={
+                                busy.outcome === "applied_reboot_required"
+                                  ? `Fix #${busy.remediationId} is already applied on this device${busy.finishedAt ? ` (${formatRelativeTime(busy.finishedAt)})` : ""} and takes effect after a restart. Restart the device instead of sending it again.`
+                                  : `Fix #${busy.remediationId} is ${busy.outcome === "running" ? "running on" : "waiting for"} this device${busy.createdAt ? ` (sent ${formatRelativeTime(busy.createdAt)})` : ""}. Open it to follow or cancel it before sending it again.`
+                              }
                             >
                               <Chip
                                 size="small"
-                                label={`${busy.outcome === "running" ? "Running" : "Pending"} · #${busy.remediationId}`}
+                                label={`${busy.outcome === "running" ? "Running" : busy.outcome === "applied_reboot_required" ? "Restart pending" : "Pending"} · #${busy.remediationId}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openRemediation(busy.remediationId);
