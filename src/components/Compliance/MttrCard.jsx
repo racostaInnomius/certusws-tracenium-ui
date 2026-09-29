@@ -46,6 +46,7 @@ import {
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 
 import { getTimeToCloseSummary } from "../../api/compliance";
+import { ScopeChip } from "./complianceChips";
 import { BRAND, ICON } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 
@@ -82,8 +83,10 @@ function fmtDays(d) {
 }
 
 // `reloadKey` — see ComplianceTrendChart; lets the page-level refresh
-// reach this widget (Sprint 2 item 4).
-export default function MttrCard({ reloadKey } = {}) {
+// reach this widget (Sprint 2 item 4). `assetGroupId` / `framework`: the
+// page's filters — the remediations of that group, of findings mapping to
+// that framework.
+export default function MttrCard({ reloadKey, assetGroupId = "", framework = "", scopeLabels = null } = {}) {
   const [windowDays, setWindowDays] = useState(90);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -99,7 +102,7 @@ export default function MttrCard({ reloadKey } = {}) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    getTimeToCloseSummary({ windowDays })
+    getTimeToCloseSummary({ windowDays, assetGroupId, framework })
       .then((res) => {
         if (cancelled) return;
         if (res?.ok) {
@@ -118,7 +121,7 @@ export default function MttrCard({ reloadKey } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [windowDays, reloadKey]);
+  }, [windowDays, reloadKey, assetGroupId, framework]);
 
   // The endpoint returns one row per severity that has closures.
   // We render a FIXED set of buckets (critical/high/medium/low) and
@@ -194,6 +197,11 @@ export default function MttrCard({ reloadKey } = {}) {
                 Time to remediate
               </Typography>
             </Tooltip>
+            {scopeLabels?.group || scopeLabels?.framework ? (
+              <Box sx={{ my: 0.25 }}>
+                <ScopeChip groupLabel={scopeLabels.group} frameworkLabel={scopeLabels.framework} />
+              </Box>
+            ) : null}
             {/* The old caption said "from open to resolved", which was
                 not what the number measured: it averaged every closure,
                 including controls that merely stopped applying. Now

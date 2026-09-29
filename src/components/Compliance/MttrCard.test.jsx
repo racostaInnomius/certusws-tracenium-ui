@@ -96,3 +96,17 @@ describe("MttrCard", () => {
     await waitFor(() => expect(getTimeToCloseSummary).toHaveBeenCalledTimes(2));
   });
 });
+
+describe("MttrCard — the page's filters (walkthrough 25-sep #7)", () => {
+  it("asks for the group's and framework's remediations, and again when they change", async () => {
+    getTimeToCloseSummary.mockResolvedValue(okResponse([]));
+    const { rerender } = render(<MttrCard assetGroupId="7" framework="iso_27001_2022" />);
+    await waitFor(() =>
+      expect(getTimeToCloseSummary).toHaveBeenCalledWith({ windowDays: 90, assetGroupId: "7", framework: "iso_27001_2022" })
+    );
+    rerender(<MttrCard assetGroupId="" framework="iso_27001_2022" />);
+    await waitFor(() =>
+      expect(getTimeToCloseSummary).toHaveBeenLastCalledWith({ windowDays: 90, assetGroupId: "", framework: "iso_27001_2022" })
+    );
+  });
+});

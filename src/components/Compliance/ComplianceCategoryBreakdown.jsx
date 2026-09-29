@@ -35,6 +35,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getCategorySummary } from "../../api/compliance";
 import CategoryDrilldown from "./CategoryDrilldown";
+import { ScopeChip } from "./complianceChips";
 import { listFrom } from "../../api/shape";
 import { categoryLabel, categoryDescription, compareCategoryLabels } from "./categoryMeta";
 
@@ -162,7 +163,7 @@ function CategoryName({ category }) {
   );
 }
 
-function CategoryRow({ row, baselineBridge, onOpenDevice }) {
+function CategoryRow({ row, baselineBridge, onOpenDevice, assetGroupId, framework }) {
   const [open, setOpen] = React.useState(false);
   const expandable = row.failed > 0;
   return (
@@ -217,7 +218,9 @@ function CategoryRow({ row, baselineBridge, onOpenDevice }) {
         <TableRow>
           <TableCell colSpan={baselineBridge ? 8 : 7} sx={{ py: 0, borderBottom: open ? `1px solid ${BRAND.border}` : "none" }}>
             <Collapse in={open} timeout="auto" unmountOnExit>
-              <Box sx={{ pl: 5, pr: 2 }}>{open ? <CategoryDrilldown category={row.category} onOpenDevice={onOpenDevice} /> : null}</Box>
+              <Box sx={{ pl: 5, pr: 2 }}>{open ? (
+                <CategoryDrilldown category={row.category} onOpenDevice={onOpenDevice} assetGroupId={assetGroupId} framework={framework} />
+              ) : null}</Box>
             </Collapse>
           </TableCell>
         </TableRow>
@@ -226,7 +229,17 @@ function CategoryRow({ row, baselineBridge, onOpenDevice }) {
   );
 }
 
-export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge = null, onOpenDevice = null }) {
+// `assetGroupId` / `framework`: the page's two filters. Until 29-sep this
+// section ignored both and kept showing the whole fleet under a picked group
+// or framework (walkthrough 25-sep #7).
+export default function ComplianceCategoryBreakdown({
+  reloadKey,
+  baselineBridge = null,
+  onOpenDevice = null,
+  assetGroupId = "",
+  framework = "",
+  scopeLabels = null,
+}) {
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState(null);
@@ -235,7 +248,7 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
     let cancelled = false;
     setLoading(true);
     setErr(null);
-    getCategorySummary()
+    getCategorySummary({ assetGroupId, framework })
       .then((res) => {
         // Alphabetical by the label on screen, not the API's order: with 18
         // categories a fixed order is how you find one again.
@@ -250,7 +263,7 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, assetGroupId, framework]);
 
   return (
     // Plegable, con la misma cáscara que «Trend over time» y «Posture by
@@ -270,11 +283,14 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
       }}
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>Posture by category</Typography>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>Posture by category</Typography>
+          <ScopeChip groupLabel={scopeLabels?.group} frameworkLabel={scopeLabels?.framework} />
+        </Stack>
       </AccordionSummary>
       <AccordionDetails sx={{ pt: 0 }}>
       <Typography variant="caption" component="p" sx={{ color: BRAND.gray, mb: 1.5 }}>
-        Fleet pass rate per control category. Click a category with failures to see which devices fail it.
+        {assetGroupId ? "Pass rate" : "Fleet pass rate"} per control category. Click a category with failures to see which devices fail it.
       </Typography>
 
       {loading ? (
@@ -304,7 +320,14 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
             </TableHead>
             <TableBody>
               {rows.map((r) => (
-                <CategoryRow key={r.category} row={r} baselineBridge={baselineBridge} onOpenDevice={onOpenDevice} />
+                <CategoryRow
+                  key={r.category}
+                  row={r}
+                  baselineBridge={baselineBridge}
+                  onOpenDevice={onOpenDevice}
+                  assetGroupId={assetGroupId}
+                  framework={framework}
+                />
               ))}
             </TableBody>
           </Table>

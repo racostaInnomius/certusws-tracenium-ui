@@ -58,7 +58,7 @@ describe("CategoryDrilldown — by check (default)", () => {
     expect(within(row).getByText(/\/ 62/)).toBeInTheDocument();
     expect(within(row).getByText("Agent fix")).toBeInTheDocument();
     // The first page is a page: it never asks for the whole category.
-    expect(getCategoryFailingChecks).toHaveBeenCalledWith("integrity", { limit: CHECKS_PAGE, offset: 0 });
+    expect(getCategoryFailingChecks).toHaveBeenCalledWith("integrity", { limit: CHECKS_PAGE, offset: 0, assetGroupId: "", framework: "" });
     // And it does not load any device until a check is opened.
     expect(getCategoryCheckDevices).not.toHaveBeenCalled();
     expect(getCategoryDevices).not.toHaveBeenCalled();
@@ -71,7 +71,7 @@ describe("CategoryDrilldown — by check (default)", () => {
     getCategoryFailingChecks.mockResolvedValueOnce({ ok: true, items: [check("c.aslr", "ASLR enabled", "medium", 50, 60)], total: 3 });
     fireEvent.click(screen.getByRole("button", { name: "Show 1 more" }));
     expect(await screen.findByText("ASLR enabled")).toBeInTheDocument();
-    expect(getCategoryFailingChecks).toHaveBeenLastCalledWith("integrity", { limit: CHECKS_PAGE, offset: 2 });
+    expect(getCategoryFailingChecks).toHaveBeenLastCalledWith("integrity", { limit: CHECKS_PAGE, offset: 2, assetGroupId: "", framework: "" });
     expect(screen.getByText("Secure Boot must be enabled")).toBeInTheDocument();
     expect(screen.queryByText(/Showing/)).not.toBeInTheDocument();
   });
@@ -82,7 +82,7 @@ describe("CategoryDrilldown — by check (default)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Devices failing Secure Boot must be enabled/ }));
 
     expect(await screen.findByText("WS-01")).toBeInTheDocument();
-    expect(getCategoryCheckDevices).toHaveBeenCalledWith("integrity", "c.secureboot", { limit: DEVICES_PAGE, offset: 0, q: "" });
+    expect(getCategoryCheckDevices).toHaveBeenCalledWith("integrity", "c.secureboot", { limit: DEVICES_PAGE, offset: 0, q: "", assetGroupId: "" });
     expect(screen.getByText("32 devices failing this check")).toBeInTheDocument();
     expect(screen.getByText("Showing 2 of 32 devices")).toBeInTheDocument();
 
@@ -96,7 +96,7 @@ describe("CategoryDrilldown — by check (default)", () => {
     await screen.findByText("WS-01");
     fireEvent.change(screen.getByRole("textbox", { name: "Search devices" }), { target: { value: " ws-0 " } });
     await waitFor(() =>
-      expect(getCategoryCheckDevices).toHaveBeenLastCalledWith("integrity", "c.secureboot", { limit: DEVICES_PAGE, offset: 0, q: "ws-0" })
+      expect(getCategoryCheckDevices).toHaveBeenLastCalledWith("integrity", "c.secureboot", { limit: DEVICES_PAGE, offset: 0, q: "ws-0", assetGroupId: "" })
     );
   });
 });
@@ -108,7 +108,7 @@ describe("CategoryDrilldown — by device", () => {
     fireEvent.click(screen.getByRole("button", { name: "By device" }));
 
     expect(await screen.findByText("WS-01")).toBeInTheDocument();
-    expect(getCategoryDevices).toHaveBeenCalledWith("integrity", { limit: DEVICES_PAGE, offset: 0, q: "", fields: "counts" });
+    expect(getCategoryDevices).toHaveBeenCalledWith("integrity", { limit: DEVICES_PAGE, offset: 0, q: "", fields: "counts", assetGroupId: "", framework: "" });
     expect(screen.getByText("2 failing")).toBeInTheDocument();
     expect(screen.getByText("1 critical/high")).toBeInTheDocument();
     expect(screen.getByText(/52 devices failing/)).toBeInTheDocument();
@@ -122,5 +122,27 @@ describe("CategoryDrilldown — failure", () => {
     render(<CategoryDrilldown category="integrity" />);
     expect(await screen.findByText("boom")).toBeInTheDocument();
     expect(screen.queryByText(/No checks are failing/)).not.toBeInTheDocument();
+  });
+});
+
+// Walkthrough 25-sep #7: the row this opens under counts with the page's group
+// and framework, so its lists have to as well.
+describe("CategoryDrilldown — the page's filters", () => {
+  it("sends the group and the framework to both views, and only the group to one check's devices", async () => {
+    render(<CategoryDrilldown category="integrity" assetGroupId="7" framework="family:cis" />);
+    await screen.findByText("Secure Boot must be enabled");
+    expect(getCategoryFailingChecks).toHaveBeenCalledWith("integrity", { limit: CHECKS_PAGE, offset: 0, assetGroupId: "7", framework: "family:cis" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Devices failing Secure Boot must be enabled/ }));
+    await waitFor(() =>
+      expect(getCategoryCheckDevices).toHaveBeenCalledWith("integrity", "c.secureboot", { limit: DEVICES_PAGE, offset: 0, q: "", assetGroupId: "7" })
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "By device" }));
+    await waitFor(() =>
+      expect(getCategoryDevices).toHaveBeenCalledWith("integrity", {
+        limit: DEVICES_PAGE, offset: 0, q: "", fields: "counts", assetGroupId: "7", framework: "family:cis",
+      })
+    );
   });
 });

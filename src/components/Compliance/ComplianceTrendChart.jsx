@@ -98,7 +98,10 @@ function scoreDelta(buckets) {
 // `reloadKey` — bump from the host page's RefreshControl so one click
 // refreshes this widget too (Sprint 2 item 4); the chart previously
 // only refetched on window/view changes.
-export default function ComplianceTrendChart({ notify, reloadKey }) {
+// `assetGroupId` / `framework` — the page's filters. With a framework, "Avg
+// score" and "Devices" are measured against it (the last point is then the
+// filtered headline) and "By framework" shows only its lines.
+export default function ComplianceTrendChart({ notify, reloadKey, assetGroupId = "", framework = "" }) {
   const [windowDays, setWindowDays] = React.useState(30);
   const [view, setView] = React.useState("score"); // 'score' | 'devices' | 'framework'
   const [fleet, setFleet] = React.useState([]);
@@ -116,7 +119,7 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
     };
 
     if (isFramework) {
-      getFrameworkComplianceTimeseries(windowDays)
+      getFrameworkComplianceTimeseries(windowDays, { assetGroupId, framework })
         .then((res) => {
           if (cancelled) return;
           const frameworks = Array.isArray(res?.frameworks) ? res.frameworks : [];
@@ -133,7 +136,7 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
         })
         .finally(() => !cancelled && setLoading(false));
     } else {
-      getFleetComplianceTimeseries(windowDays)
+      getFleetComplianceTimeseries(windowDays, { assetGroupId, framework })
         .then((res) => {
           if (cancelled) return;
           const rows = Array.isArray(res?.buckets) ? res.buckets : [];
@@ -156,7 +159,7 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
     return () => {
       cancelled = true;
     };
-  }, [windowDays, isFramework, notify, reloadKey]);
+  }, [windowDays, isFramework, notify, reloadKey, assetGroupId, framework]);
 
   const delta = view === "score" ? scoreDelta(fleet) : null;
   const enoughData = isFramework

@@ -231,3 +231,20 @@ export function Sparkline({ points = [], bands = DEFAULT_BANDS }) {
     </svg>
   );
 }
+
+// «Filtering by …» next to a section title: which of the page's filters the
+// section is showing. Nothing when neither is set. Same chip the Frameworks
+// section already wore; the sections that ignored the filters until 29-sep
+// (category, trend, time to remediate) now honor them, and have to say so —
+// "Fleet pass rate" over one asset group would be a false statement.
+export function ScopeChip({ groupLabel, frameworkLabel }) {
+  const parts = [frameworkLabel, groupLabel].filter(Boolean);
+  if (!parts.length) return null;
+  return (
+    <Chip
+      size="small"
+      label={`Filtering by ${parts.join(" · ")}`}
+      sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+    />
+  );
+}

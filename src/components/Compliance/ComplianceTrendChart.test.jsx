@@ -29,7 +29,7 @@ describe("ComplianceTrendChart", () => {
     getFleetComplianceTimeseries.mockResolvedValue(twoDays);
     render(<ComplianceTrendChart />);
     expect(await screen.findByText(/\+12 pts · now 82.0%/)).toBeInTheDocument();
-    expect(getFleetComplianceTimeseries).toHaveBeenCalledWith(30); // default window
+    expect(getFleetComplianceTimeseries).toHaveBeenCalledWith(30, { assetGroupId: "", framework: "" }); // default window
   });
 
   it("re-fetches with the selected window", async () => {
@@ -39,7 +39,7 @@ describe("ComplianceTrendChart", () => {
     await screen.findByText(/pts · now/);
 
     await user.click(screen.getByRole("button", { name: "90d" }));
-    await waitFor(() => expect(getFleetComplianceTimeseries).toHaveBeenCalledWith(90));
+    await waitFor(() => expect(getFleetComplianceTimeseries).toHaveBeenCalledWith(90, { assetGroupId: "", framework: "" }));
   });
 
   it("shows an empty state with no snapshots", async () => {
@@ -70,7 +70,7 @@ describe("ComplianceTrendChart", () => {
     await screen.findByText(/pts · now/); // score view loaded first
 
     await user.click(screen.getByRole("button", { name: "By framework" }));
-    await waitFor(() => expect(getFrameworkComplianceTimeseries).toHaveBeenCalledWith(30));
+    await waitFor(() => expect(getFrameworkComplianceTimeseries).toHaveBeenCalledWith(30, { assetGroupId: "", framework: "" }));
     // No per-framework empty state shown → the series rendered.
     expect(screen.queryByText(/No per-framework data yet/i)).not.toBeInTheDocument();
   });
@@ -96,5 +96,19 @@ describe("ComplianceTrendChart", () => {
     await screen.findByText(/pts · now/);
     await user.click(screen.getByRole("button", { name: "By framework" }));
     expect(await screen.findByText(/No per-framework data yet/i)).toBeInTheDocument();
+  });
+});
+
+describe("ComplianceTrendChart — the page's filters (walkthrough 25-sep #7)", () => {
+  it("measures the trend in the page's group and framework, and follows a change", async () => {
+    getFleetComplianceTimeseries.mockResolvedValue(twoDays);
+    getFrameworkComplianceTimeseries.mockResolvedValue({ frameworks: [], buckets: [] });
+    const { rerender } = render(<ComplianceTrendChart assetGroupId="7" framework="family:cis" />);
+    await waitFor(() => expect(getFleetComplianceTimeseries).toHaveBeenCalledWith(30, { assetGroupId: "7", framework: "family:cis" }));
+    rerender(<ComplianceTrendChart assetGroupId="" framework="family:cis" />);
+    await waitFor(() => expect(getFleetComplianceTimeseries).toHaveBeenLastCalledWith(30, { assetGroupId: "", framework: "family:cis" }));
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "By framework" }));
+    await waitFor(() => expect(getFrameworkComplianceTimeseries).toHaveBeenCalledWith(30, { assetGroupId: "", framework: "family:cis" }));
   });
 });

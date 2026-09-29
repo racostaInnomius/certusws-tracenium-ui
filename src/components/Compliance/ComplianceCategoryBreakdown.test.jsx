@@ -117,7 +117,7 @@ describe("ComplianceCategoryBreakdown", () => {
     fireEvent.click(within(firewallCell.closest("tr")).getByRole("button"));
 
     expect(await screen.findByText("Domain firewall on")).toBeInTheDocument();
-    expect(getCategoryFailingChecks).toHaveBeenCalledWith("firewall", { limit: 25, offset: 0 });
+    expect(getCategoryFailingChecks).toHaveBeenCalledWith("firewall", { limit: 25, offset: 0, assetGroupId: "", framework: "" });
     expect(getCategoryDevices).not.toHaveBeenCalled();
   });
 
@@ -160,5 +160,30 @@ describe("gate de tier — el botón de auto-remediar", () => {
     // …y el tooltip del chip deja de invitar a una llave inglesa que ya no está.
     expect(screen.queryAllByLabelText(/Click the wrench/i)).toHaveLength(0);
     expect(screen.getAllByText("report-only").length).toBeGreaterThan(0);
+  });
+});
+
+describe("ComplianceCategoryBreakdown — the page's filters (walkthrough 25-sep #7)", () => {
+  it("asks for the group and framework, and asks again when either changes", async () => {
+    getCategorySummary.mockResolvedValue(ITEMS);
+    const { rerender } = render(<ComplianceCategoryBreakdown assetGroupId="7" framework="nist_csf_2.0" />);
+    await waitFor(() => expect(getCategorySummary).toHaveBeenCalledWith({ assetGroupId: "7", framework: "nist_csf_2.0" }));
+    rerender(<ComplianceCategoryBreakdown assetGroupId="7" framework="" />);
+    await waitFor(() => expect(getCategorySummary).toHaveBeenLastCalledWith({ assetGroupId: "7", framework: "" }));
+    rerender(<ComplianceCategoryBreakdown assetGroupId="" framework="" />);
+    await waitFor(() => expect(getCategorySummary).toHaveBeenLastCalledWith({ assetGroupId: "", framework: "" }));
+    expect(getCategorySummary).toHaveBeenCalledTimes(3);
+  });
+
+  it("the drill-in inherits them", async () => {
+    getCategorySummary.mockResolvedValue(ITEMS);
+    getCategoryFailingChecks.mockResolvedValue({ ok: true, items: [], total: 0 });
+    render(<ComplianceCategoryBreakdown assetGroupId="7" framework="nist_csf_2.0" />);
+    const firewallCell = await screen.findByText("Firewall");
+    fireEvent.click(screen.getByRole("button", { name: "Posture by category" }));
+    fireEvent.click(within(firewallCell.closest("tr")).getByRole("button"));
+    await waitFor(() =>
+      expect(getCategoryFailingChecks).toHaveBeenCalledWith("firewall", { limit: 25, offset: 0, assetGroupId: "7", framework: "nist_csf_2.0" })
+    );
   });
 });

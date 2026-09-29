@@ -7,6 +7,7 @@ import {
   Sparkline,
   StatusChip,
   RemediationStatusChip,
+  ScopeChip,
 } from "./complianceChips";
 
 afterEach(cleanup);
@@ -104,5 +105,17 @@ describe("Sparkline", () => {
     const d = path.getAttribute("d");
     expect(d.startsWith("M")).toBe(true);
     expect((d.match(/L/g) || []).length).toBe(2); // 3 points → M + 2 L
+  });
+});
+
+describe("ScopeChip", () => {
+  it("says nothing without a filter", () => {
+    const { container } = render(<ScopeChip groupLabel={null} frameworkLabel={null} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("names the framework and the group", () => {
+    render(<ScopeChip groupLabel="PCI scope" frameworkLabel="CIS Benchmarks" />);
+    expect(screen.getByText("Filtering by CIS Benchmarks · PCI scope")).toBeInTheDocument();
   });
 });

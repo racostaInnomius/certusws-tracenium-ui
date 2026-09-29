@@ -40,8 +40,11 @@ export async function getFrameworks({ all = false } = {}) {
 // Fleet-wide posture aggregated by catalog category (firewall, crypto,
 // network_hardening, patching, …) — one row per category with pass/fail counts,
 // high-severity fails, devices failing, and a pass rate.
-export async function getCategorySummary() {
-  return httpGetJson(`${BASE}/category-summary`);
+// `assetGroupId` / `framework` are the page's two filters; this and its
+// drill-ins (below), the trend and the time-to-remediate card all take them,
+// so picking one changes the whole page (walkthrough 25-sep #7).
+export async function getCategorySummary({ assetGroupId, framework } = {}) {
+  return httpGetJson(`${BASE}/category-summary${buildQuery({ assetGroupId, framework })}`);
 }
 
 // Baselines: por capability, los fallos y los equipos DISTINTOS que incumplen
@@ -81,25 +84,26 @@ export async function getTopFailingChecks({ limit, framework, assetGroupId } = {
 // the category, worst first, paginated. `fields: "counts"` drops each
 // device's list of failing checks — with it, Integrity in a 54-device tenant
 // was 15,706 chips; the checks view is "By check" (getCategoryFailingChecks).
-export async function getCategoryDevices(category, { limit, offset, q, fields } = {}) {
+export async function getCategoryDevices(category, { limit, offset, q, fields, assetGroupId, framework } = {}) {
   return httpGetJson(
-    `${BASE}/category-summary/${encodeURIComponent(category)}/devices${buildQuery({ limit, offset, q, fields })}`
+    `${BASE}/category-summary/${encodeURIComponent(category)}/devices${buildQuery({ limit, offset, q, fields, assetGroupId, framework })}`
   );
 }
 
 // Drill-in for a category, "By check": the checks failing in the category,
 // with how many devices fail each one out of how many it was evaluated on.
 // Grows with the catalog, not with the fleet. Returns { items, total }.
-export async function getCategoryFailingChecks(category, { limit, offset } = {}) {
+export async function getCategoryFailingChecks(category, { limit, offset, assetGroupId, framework } = {}) {
   return httpGetJson(
-    `${BASE}/category-summary/${encodeURIComponent(category)}/checks${buildQuery({ limit, offset })}`
+    `${BASE}/category-summary/${encodeURIComponent(category)}/checks${buildQuery({ limit, offset, assetGroupId, framework })}`
   );
 }
 
 // The devices failing ONE check of a category, paginated, searchable by name.
-export async function getCategoryCheckDevices(category, checkId, { limit, offset, q } = {}) {
+// Only the group narrows it: the check is already chosen.
+export async function getCategoryCheckDevices(category, checkId, { limit, offset, q, assetGroupId } = {}) {
   return httpGetJson(
-    `${BASE}/category-summary/${encodeURIComponent(category)}/checks/${encodeURIComponent(checkId)}/devices${buildQuery({ limit, offset, q })}`
+    `${BASE}/category-summary/${encodeURIComponent(category)}/checks/${encodeURIComponent(checkId)}/devices${buildQuery({ limit, offset, q, assetGroupId })}`
   );
 }
 
@@ -155,15 +159,18 @@ export async function getDeviceTimeseries(agentId, windowDays = 30, options = {}
 
 // Fleet-wide compliance trend: per day, the fleet's average score plus the
 // compliant / non-compliant device counts (latest snapshot per device per day).
-export async function getFleetComplianceTimeseries(windowDays = 30) {
-  return httpGetJson(`${BASE}/fleet-timeseries${buildQuery({ windowDays })}`);
+// With `framework`, each device scores against that framework (its last point
+// is then the framework-filtered headline); `assetGroupId` narrows the fleet.
+export async function getFleetComplianceTimeseries(windowDays = 30, { assetGroupId, framework } = {}) {
+  return httpGetJson(`${BASE}/fleet-timeseries${buildQuery({ windowDays, assetGroupId, framework })}`);
 }
 
 // Per-framework compliance trend: { frameworks: [...], buckets: [{ bucket,
 // scores: { framework: score } }] }. Recorded from 2026-07 forward — older days
-// may be sparse.
-export async function getFrameworkComplianceTimeseries(windowDays = 30) {
-  return httpGetJson(`${BASE}/framework-timeseries${buildQuery({ windowDays })}`);
+// may be sparse. With `framework`, only its series (a family's: the family
+// line and its members).
+export async function getFrameworkComplianceTimeseries(windowDays = 30, { assetGroupId, framework } = {}) {
+  return httpGetJson(`${BASE}/framework-timeseries${buildQuery({ windowDays, assetGroupId, framework })}`);
 }
 
 // ── Sprint 3 — finding lifecycle ───────────────────────────────────
@@ -254,8 +261,8 @@ export async function getFindingHistory(findingId, { limit = 200 } = {}) {
 
 // GET /time-to-close?windowDays=N — p50/p90 days from open→close,
 // bucketed by severity. Feeds the "MTTR by severity" widget.
-export async function getTimeToCloseSummary({ windowDays = 90 } = {}) {
-  return httpGetJson(`${BASE}/time-to-close${buildQuery({ windowDays })}`);
+export async function getTimeToCloseSummary({ windowDays = 90, assetGroupId, framework } = {}) {
+  return httpGetJson(`${BASE}/time-to-close${buildQuery({ windowDays, assetGroupId, framework })}`);
 }
 
 // ── Sprint 4 — diff vs last scan ───────────────────────────────────

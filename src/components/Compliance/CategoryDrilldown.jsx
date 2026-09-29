@@ -43,10 +43,13 @@ export const DEVICES_PAGE = 50;
 
 // ── By check ────────────────────────────────────────────────────────────
 
-function CheckDevices({ category, checkId, onOpenDevice }) {
+function CheckDevices({ category, checkId, onOpenDevice, assetGroupId }) {
   const [search, setSearch] = React.useState("");
   const q = useDebounced(search.trim());
-  const fetchPage = React.useCallback((p) => getCategoryCheckDevices(category, checkId, { ...p, q }), [category, checkId, q]);
+  const fetchPage = React.useCallback(
+    (p) => getCategoryCheckDevices(category, checkId, { ...p, q, assetGroupId }),
+    [category, checkId, q, assetGroupId]
+  );
   const list = usePagedList(fetchPage, DEVICES_PAGE);
 
   return (
@@ -79,7 +82,7 @@ function CheckDevices({ category, checkId, onOpenDevice }) {
   );
 }
 
-function CheckRow({ check, category, open, onToggle, onOpenDevice }) {
+function CheckRow({ check, category, open, onToggle, onOpenDevice, assetGroupId }) {
   const sev = severityMeta(check.severity);
   const evaluated = Math.max(check.devicesEvaluated || 0, check.deviceCount || 0);
   const share = evaluated ? Math.round((check.deviceCount / evaluated) * 100) : 0;
@@ -130,13 +133,16 @@ function CheckRow({ check, category, open, onToggle, onOpenDevice }) {
           </Stack>
         </Tooltip>
       </Stack>
-      {open ? <CheckDevices category={category} checkId={check.checkId} onOpenDevice={onOpenDevice} /> : null}
+      {open ? <CheckDevices category={category} checkId={check.checkId} onOpenDevice={onOpenDevice} assetGroupId={assetGroupId} /> : null}
     </Box>
   );
 }
 
-function ChecksView({ category, onOpenDevice }) {
-  const fetchPage = React.useCallback((p) => getCategoryFailingChecks(category, p), [category]);
+function ChecksView({ category, onOpenDevice, assetGroupId, framework }) {
+  const fetchPage = React.useCallback(
+    (p) => getCategoryFailingChecks(category, { ...p, assetGroupId, framework }),
+    [category, assetGroupId, framework]
+  );
   const list = usePagedList(fetchPage, CHECKS_PAGE);
   const [openCheck, setOpenCheck] = React.useState(null);
 
@@ -160,6 +166,7 @@ function ChecksView({ category, onOpenDevice }) {
               open={openCheck === c.checkId}
               onToggle={() => setOpenCheck((cur) => (cur === c.checkId ? null : c.checkId))}
               onOpenDevice={onOpenDevice}
+              assetGroupId={assetGroupId}
             />
           ))}
           <PageFooter shown={list.items.length} total={list.total} loading={list.loading} onMore={list.loadMore} noun="checks" pageSize={CHECKS_PAGE} />
@@ -171,10 +178,13 @@ function ChecksView({ category, onOpenDevice }) {
 
 // ── By device ───────────────────────────────────────────────────────────
 
-function DevicesView({ category, onOpenDevice }) {
+function DevicesView({ category, onOpenDevice, assetGroupId, framework }) {
   const [search, setSearch] = React.useState("");
   const q = useDebounced(search.trim());
-  const fetchPage = React.useCallback((p) => getCategoryDevices(category, { ...p, q, fields: "counts" }), [category, q]);
+  const fetchPage = React.useCallback(
+    (p) => getCategoryDevices(category, { ...p, q, fields: "counts", assetGroupId, framework }),
+    [category, q, assetGroupId, framework]
+  );
   const list = usePagedList(fetchPage, DEVICES_PAGE);
 
   return (
@@ -215,7 +225,10 @@ function DevicesView({ category, onOpenDevice }) {
   );
 }
 
-export default function CategoryDrilldown({ category, onOpenDevice = null }) {
+// `assetGroupId` / `framework`: the page's filters. The row this opens under
+// already counts with them, so the lists below must too — otherwise the row
+// says 5 and the list shows 50.
+export default function CategoryDrilldown({ category, onOpenDevice = null, assetGroupId = "", framework = "" }) {
   const [view, setView] = React.useState("checks");
   return (
     <Box sx={{ py: 1 }}>
@@ -231,9 +244,9 @@ export default function CategoryDrilldown({ category, onOpenDevice = null }) {
         <ToggleButton value="devices" sx={{ textTransform: "none", py: 0.25 }}>By device</ToggleButton>
       </ToggleButtonGroup>
       {view === "checks" ? (
-        <ChecksView category={category} onOpenDevice={onOpenDevice} />
+        <ChecksView category={category} onOpenDevice={onOpenDevice} assetGroupId={assetGroupId} framework={framework} />
       ) : (
-        <DevicesView category={category} onOpenDevice={onOpenDevice} />
+        <DevicesView category={category} onOpenDevice={onOpenDevice} assetGroupId={assetGroupId} framework={framework} />
       )}
     </Box>
   );

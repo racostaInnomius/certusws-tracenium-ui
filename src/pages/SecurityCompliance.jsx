@@ -68,6 +68,7 @@ import {
 } from "../api/compliance";
 import { BRAND, ICON, TEXT } from "../theme/brand";
 import {
+  ScopeChip,
   ScoreBar,
   StatusChip,
 } from "../components/Compliance/complianceChips";
@@ -727,6 +728,10 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // an open-then-open in quick succession atomically replaces both.
   const [toast, setToast] = React.useState(null);
   const showToast = React.useCallback((t) => setToast(t), []);
+  // Estable: el gráfico de tendencia lo lleva en las dependencias de su
+  // fetch, y una flecha nueva en cada render lo volvía a pedir con cada
+  // tecla del buscador.
+  const notifyToast = React.useCallback((severity, message) => showToast({ severity, message }), [showToast]);
   const hideToast = React.useCallback(() => setToast(null), []);
 
   // ── macOS: lo que sólo cumple un perfil ─────────────────────────────
@@ -1026,6 +1031,11 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   const selectedFrameworkLabel = selectedFramework
     ? frameworkLabels.get(selectedFramework) || selectedFramework
     : "All frameworks (weighted)";
+  // Lo que las secciones filtradas anuncian junto al título (ScopeChip).
+  const scopeLabels = React.useMemo(
+    () => ({ group: assetGroupLabel, framework: selectedFramework ? selectedFrameworkLabel : null }),
+    [assetGroupLabel, selectedFramework, selectedFrameworkLabel]
+  );
 
   // Client-side filtering of the device table. We already have the full device
   // list from the backend, so filtering in-memory is cheap. Logic lives in the
@@ -1561,7 +1571,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           }}
           onRemediate={canRemediate ? handleRemediateCheck : null}
         />
-        <MttrCard reloadKey={refreshToken} />
+        <MttrCard reloadKey={refreshToken} assetGroupId={assetGroupId} framework={selectedFramework} scopeLabels={scopeLabels} />
       </Box>
 
       {/* Fleet compliance trend over time — the audit / CIO "are we improving?"
@@ -1587,9 +1597,17 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               are we improving?
             </Box>
           </Typography>
+          <Box component="span" sx={{ ml: 1 }}>
+            <ScopeChip groupLabel={scopeLabels.group} frameworkLabel={scopeLabels.framework} />
+          </Box>
         </AccordionSummary>
         <AccordionDetails sx={{ pt: 0 }}>
-          <ComplianceTrendChart notify={(severity, message) => showToast({ severity, message })} reloadKey={refreshToken} />
+          <ComplianceTrendChart
+            notify={notifyToast}
+            reloadKey={refreshToken}
+            assetGroupId={assetGroupId}
+            framework={selectedFramework}
+          />
         </AccordionDetails>
       </Accordion>
 
@@ -1866,7 +1884,14 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           the fleet analogue of the drawer's per-device category grouping.
           Sits below the framework table (compliance vs benchmarks) and above
           the MTTR/device views (triage). */}
-      <ComplianceCategoryBreakdown baselineBridge={baselineBridge} reloadKey={refreshToken} onOpenDevice={openDrawer} />
+      <ComplianceCategoryBreakdown
+        baselineBridge={baselineBridge}
+        reloadKey={refreshToken}
+        onOpenDevice={openDrawer}
+        assetGroupId={assetGroupId}
+        framework={selectedFramework}
+        scopeLabels={scopeLabels}
+      />
 
       {/* «Time to remediate» se mudó arriba, al lado de «What to fix first». */}
 
