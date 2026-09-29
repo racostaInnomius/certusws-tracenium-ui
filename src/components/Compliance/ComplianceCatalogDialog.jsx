@@ -32,12 +32,13 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
-import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getComplianceCatalog } from "../../api/compliance";
 import { categoryLabel, categoryDescription } from "./categoryMeta";
+import { FrameworkChip } from "./complianceChips";
+import { frameworkShortLabel } from "./frameworkRefs";
 
 // Canonical severity scale (theme/severity.js) — removes the hardcoded hex.
 const SEV_META = {
@@ -52,50 +53,6 @@ const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
 
 function sevMeta(s) {
   return SEV_META[String(s || "").toLowerCase()] || SEV_META.info;
-}
-
-function frameworkFamily(framework) {
-  const f = String(framework || "");
-  if (f.startsWith("cis_")) return "CIS";
-  if (f.startsWith("nist_csf")) return "CSF";
-  if (f.startsWith("nist_800_53")) return "NIST";
-  if (f.startsWith("stig_")) return "STIG";
-  return f;
-}
-
-function FrameworkChip({ fw }) {
-  const fam = frameworkFamily(fw.framework);
-  // CIS levels (L1/L2) and STIG severities (CAT I/II/III) are meaningful; NIST/CSF
-  // control levels are noise here.
-  const label =
-    fw.controlLevel && (fam === "CIS" || fam === "STIG")
-      ? `${fam} ${fw.controlId} · ${fw.controlLevel}`
-      : `${fam} ${fw.controlId}`;
-  const chip = (
-    <Chip
-      label={label}
-      size="small"
-      icon={fw.referenceUrl ? <LaunchOutlinedIcon sx={{ fontSize: ICON.xs }} /> : undefined}
-      onClick={fw.referenceUrl ? () => window.open(fw.referenceUrl, "_blank", "noopener,noreferrer") : undefined}
-      clickable={Boolean(fw.referenceUrl)}
-      sx={{
-        bgcolor: BRAND.darkSoft,
-        color: BRAND.dark,
-        fontWeight: 600,
-        fontSize: TEXT.xs,
-        height: 20,
-        border: `1px solid ${BRAND.border}`,
-        "& .MuiChip-icon": { color: BRAND.dark, ml: "5px" },
-      }}
-    />
-  );
-  return fw.controlTitle ? (
-    <Tooltip title={fw.controlTitle} arrow placement="top">
-      <span>{chip}</span>
-    </Tooltip>
-  ) : (
-    chip
-  );
 }
 
 function CheckRow({ check, focused = false }) {
@@ -162,7 +119,15 @@ function CheckRow({ check, focused = false }) {
         <TableCell>
           <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
             {(check.frameworks || []).map((fw, i) => (
-              <FrameworkChip key={`${fw.framework}-${fw.controlId}-${i}`} fw={fw} />
+              <FrameworkChip
+                key={`${fw.framework}-${fw.controlId}-${i}`}
+                framework={fw.framework}
+                controlId={fw.controlId}
+                controlLevel={fw.controlLevel}
+                controlTitle={fw.controlTitle}
+                referenceUrl={fw.referenceUrl}
+                dense
+              />
             ))}
           </Stack>
         </TableCell>
@@ -271,7 +236,7 @@ export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId 
     [checks]
   );
   const families = React.useMemo(
-    () => Array.from(new Set(checks.flatMap((c) => (c.frameworks || []).map((f) => frameworkFamily(f.framework))))).sort(),
+    () => Array.from(new Set(checks.flatMap((c) => (c.frameworks || []).map((f) => frameworkShortLabel(f.framework))))).sort(),
     [checks]
   );
 
@@ -281,7 +246,7 @@ export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId 
       .filter((c) => platform === "all" || c.platform === platform)
       .filter((c) => category === "all" || c.category === category)
       .filter((c) => severity === "all" || String(c.severity).toLowerCase() === severity)
-      .filter((c) => family === "all" || (c.frameworks || []).some((f) => frameworkFamily(f.framework) === family))
+      .filter((c) => family === "all" || (c.frameworks || []).some((f) => frameworkShortLabel(f.framework) === family))
       .filter(
         (c) =>
           !focusControl ||

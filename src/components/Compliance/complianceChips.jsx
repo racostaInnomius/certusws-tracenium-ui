@@ -17,6 +17,7 @@ import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { DEFAULT_BANDS, scoreBandRole, scoreBandTextRole } from "../../theme/scoreBands";
+import { controlReference, controlReferenceHint, frameworkShortLabel } from "./frameworkRefs";
 
 // Rule-outcome status presentation. Exported because non-chip parts of the
 // compliance page key off it too (this was shared module-level state in the
@@ -109,18 +110,12 @@ export function SeverityChip({ severity }) {
   );
 }
 
-export function FrameworkChip({ framework, controlId, controlLevel, controlTitle, referenceUrl }) {
+// `dense`: the catalog's 20 px rows. The label and the link come from
+// frameworkRefs.js — see there why the stored reference_url is not enough.
+export function FrameworkChip({ framework, controlId, controlLevel, controlTitle, referenceUrl, dense = false }) {
   // Short label: "CIS 9.3.1 · L1" / "NIST SC-7(5)" / "CSF PR.IR-01" /
-  // "STIG V-253xxx · CAT I". Tooltip carries the full control title.
-  const fam = framework.startsWith("cis_")
-    ? "CIS"
-    : framework.startsWith("nist_csf")
-    ? "CSF"
-    : framework.startsWith("nist_800_53")
-    ? "NIST"
-    : framework.startsWith("stig_")
-    ? "STIG"
-    : framework;
+  // "STIG V-253xxx · CAT I" / "ISO 27001 A.8.8".
+  const fam = frameworkShortLabel(framework);
 
   // CIS levels (L1/L2) and STIG severities (CAT I/II/III) are meaningful, so we
   // suffix them; NIST/CSF control levels ("baseline"/"core") are noise here.
@@ -129,32 +124,31 @@ export function FrameworkChip({ framework, controlId, controlLevel, controlTitle
       ? `${fam} ${controlId} · ${controlLevel}`
       : `${fam} ${controlId}`;
 
+  const ref = controlReference(framework, controlId, referenceUrl);
+  const hint = controlReferenceHint(framework, controlTitle, ref);
+
   const inner = (
     <Chip
       label={label}
       size="small"
-      icon={referenceUrl ? <LaunchOutlinedIcon sx={{ fontSize: ICON.xs }} /> : undefined}
-      onClick={
-        referenceUrl
-          ? () => window.open(referenceUrl, "_blank", "noopener,noreferrer")
-          : undefined
-      }
-      clickable={Boolean(referenceUrl)}
+      icon={ref ? <LaunchOutlinedIcon sx={{ fontSize: ICON.xs }} /> : undefined}
+      onClick={ref ? () => window.open(ref.url, "_blank", "noopener,noreferrer") : undefined}
+      clickable={Boolean(ref)}
       sx={{
         bgcolor: BRAND.darkSoft,
         color: BRAND.dark,
         fontWeight: 600,
         fontSize: TEXT.xs,
-        height: 22,
+        height: dense ? 20 : 22,
         border: `1px solid ${BRAND.border}`,
-        "& .MuiChip-icon": { color: BRAND.dark, marginLeft: "6px" },
+        "& .MuiChip-icon": { color: BRAND.dark, marginLeft: dense ? "5px" : "6px" },
       }}
     />
   );
 
-  if (!controlTitle) return inner;
+  if (!hint) return inner;
   return (
-    <Tooltip title={controlTitle} arrow placement="top">
+    <Tooltip title={hint} arrow placement="top" slotProps={{ tooltip: { sx: { whiteSpace: "pre-line" } } }}>
       <span>{inner}</span>
     </Tooltip>
   );

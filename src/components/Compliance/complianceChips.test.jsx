@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import {
   SeverityChip,
   FrameworkChip,
@@ -73,6 +73,30 @@ describe("FrameworkChip", () => {
     // NIST/CSF control levels are noise → NOT suffixed
     render(<FrameworkChip framework="nist_800_53" controlId="SC-7" controlLevel="baseline" />);
     expect(screen.getByText("NIST SC-7")).toBeInTheDocument();
+  });
+});
+
+describe("FrameworkChip — label and link (walkthrough 25-sep #8)", () => {
+  it("an ISO / PCI chip reads like the others, not the raw id", () => {
+    render(<FrameworkChip framework="iso_27001_2022" controlId="A.8.8" />);
+    expect(screen.getByText("ISO 27001 A.8.8")).toBeInTheDocument();
+    cleanup();
+    render(<FrameworkChip framework="pci_dss_v4_0_1" controlId="8.3.1" />);
+    expect(screen.getByText("PCI DSS 8.3.1")).toBeInTheDocument();
+  });
+
+  it("a NIST chip opens THAT control, whatever the catalog stored", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<FrameworkChip framework="nist_800_53_rev5" controlId="SC-7(5)" referenceUrl="https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final" />);
+    fireEvent.click(screen.getByText("NIST SC-7(5)"));
+    expect(open).toHaveBeenCalledWith("https://csf.tools/reference/nist-sp-800-53/r5/sc/sc-7/sc-7-5/", "_blank", "noopener,noreferrer");
+    open.mockRestore();
+  });
+
+  it("a chip whose link is the standard's page says so on hover", async () => {
+    render(<FrameworkChip framework="iso_27001_2022" controlId="A.8.8" controlTitle="Management of technical vulnerabilities" referenceUrl="https://www.iso.org/standard/27001" />);
+    fireEvent.mouseOver(screen.getByText("ISO 27001 A.8.8"));
+    expect(await screen.findByText(/Opens the ISO\/IEC 27001 page, not this control/)).toBeInTheDocument();
   });
 });
 
