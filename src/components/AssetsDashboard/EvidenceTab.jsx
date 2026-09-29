@@ -56,6 +56,7 @@ import {
   createEvidenceCapture,
   deleteEvidenceCapture,
   evidenceArtifactUrl,
+  evidenceReportUrl,
   getEvidenceCapture,
   getEvidenceCollectors,
   listEvidenceCaptures,
@@ -377,6 +378,19 @@ export default function EvidenceTab({ agentId, canCapture = false, canRead = fal
               </Table>
             </DialogContent>
             <DialogActions>
+              {/* El informe del paquete, desde donde se está mirando (D9). El
+                  mismo documento está en la página de Reports, que es donde
+                  alguien lo busca semanas después sin recordar el equipo;
+                  aquí se ofrece porque ya se sabe cuál es. Es un enlace, no
+                  una descarga silenciosa: pasa por el backend, que apunta la
+                  exportación a nombre de quien la pide. */}
+              <Button
+                size="small"
+                href={evidenceReportUrl(detail.captureId, "pdf")}
+                sx={{ textTransform: "none", mr: "auto" }}
+              >
+                Report (PDF)
+              </Button>
               <Button onClick={() => setDetail(null)} sx={{ textTransform: "none" }}>Close</Button>
             </DialogActions>
           </>

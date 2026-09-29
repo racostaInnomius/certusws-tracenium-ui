@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { server, respond } from "../../test/msw/server";
 import ReportParamsDialog from "./ReportParamsDialog";
-import { validateParams } from "./reportParams";
+import { captureOptionLabel, validateParams } from "./reportParams";
 
 afterEach(() => {
   cleanup();
@@ -113,5 +113,89 @@ describe("ReportParamsDialog — familias", () => {
     await userEvent.clear(to); await userEvent.type(to, "2026-08");
     await userEvent.click(screen.getByRole("button", { name: "Generate" }));
     expect(onSubmit).toHaveBeenCalledWith({ framework: "family:cis", from: "2026-07", to: "2026-08" });
+  });
+});
+
+// ── Una clase de parámetro que esta pantalla no conoce ─────────────────
+//
+// Hasta ADR-0032 el `map` del diálogo terminaba en un campo de mes que
+// atendía tanto a `month` como a cualquier clase sin rama: el backend añadía
+// un parámetro nuevo y aquí se mandaba un `YYYY-MM` donde se esperaba otra
+// cosa. El informe salía, con un alcance que nadie pidió y con el mismo
+// aspecto que el correcto.
+
+describe("clases desconocidas", () => {
+  const DESCONOCIDO = [{ name: "siteId", label: "Site", kind: "site", required: false }];
+
+  it("🔴 bloquean la generación aunque NO sean obligatorias", () => {
+    expect(validateParams(DESCONOCIDO, {})).toMatchObject({ siteId: expect.stringMatching(/cannot ask/i) });
+  });
+
+  it("⭐ y lo dicen en pantalla en vez de pedir un mes", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <ReportParamsDialog
+        open
+        reportType={{ key: "x.y", label: "Something", formats: ["pdf"], params: DESCONOCIDO }}
+        format="pdf"
+        onClose={() => {}}
+        onSubmit={onSubmit}
+      />
+    );
+    const campo = await screen.findByLabelText("Site");
+    expect(campo).toBeDisabled();
+    // Y no es un campo de mes disfrazado.
+    expect(campo).not.toHaveAttribute("type", "month");
+    expect(screen.getByText(/cannot set "Site" \(site\) yet/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Generate" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+// ── El selector de captura de evidencia (ADR-0032 D9) ──────────────────
+
+describe("captureOptionLabel", () => {
+  it("⭐ equipo por su NOMBRE, hora del EQUIPO y estado", () => {
+    const label = captureOptionLabel({
+      captureId: "c1", deviceId: "fb27bbd6", hostname: "FTP-SPS", status: "complete",
+      capturedAtUtc: "2026-09-23T12:52:00.000Z", deviceUtcOffsetMinutes: -300,
+    });
+    expect(label).toMatch(/^FTP-SPS · /);
+    // 12:52 UTC en UTC-5 son las 07:52 del equipo. Pintar 12:52 —o la hora de
+    // quien mira— fecharía el incidente en otro momento.
+    expect(label).toContain("07:52");
+    expect(label).toContain("(UTC-5)");
+    expect(label).toContain("Complete");
+  });
+
+  it("un equipo sin nombre se elige por su id, no por un hueco", () => {
+    expect(captureOptionLabel({ captureId: "c", deviceId: "fb27bbd6", status: "partial" })).toMatch(/^fb27bbd6/);
+  });
+
+  it("⚠️ una captura que nunca llegó se puede elegir igual: su informe dice que el equipo no contestó", () => {
+    const label = captureOptionLabel({
+      captureId: "c", deviceId: "d", hostname: "SRV-1", status: "expired",
+      capturedAtUtc: null, createdAt: "2026-09-23T12:50:00.000Z",
+    });
+    expect(label).toMatch(/SRV-1/);
+    expect(label).toMatch(/requested /);
+    expect(label).toMatch(/Expired/);
+  });
+
+  it("sin capturas el selector lo explica en vez de quedarse mudo", async () => {
+    respond("get", "/api/v1/evidence", { ok: true, captures: [] });
+    render(
+      <ReportParamsDialog
+        open
+        reportType={{
+          key: "amp.evidence", label: "Incident Evidence Report", formats: ["pdf"],
+          params: [{ name: "captureId", label: "Evidence package", kind: "evidence_capture", required: true }],
+        }}
+        format="pdf"
+        onClose={() => {}}
+        onSubmit={() => {}}
+      />
+    );
+    expect(await screen.findByText(/No evidence packages yet/i)).toBeInTheDocument();
   });
 });

@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   setEvidenceHold: vi.fn(),
   deleteEvidenceCapture: vi.fn(),
   evidenceArtifactUrl: (id, name) => `/api/v1/evidence/${id}/artifacts/${name}`,
+  evidenceReportUrl: (id, format) => `/api/v1/evidence/${id}/report.${format}`,
 }));
 vi.mock("../../api/evidence", () => api);
 
@@ -119,6 +120,18 @@ describe("EvidenceTab — lo que la pantalla dice", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Open" }));
     const link = within(await screen.findByRole("dialog")).getByRole("link", { name: "Download" });
     expect(link).toHaveAttribute("href", "/api/v1/evidence/cap-1/artifacts/sessions.txt");
+  });
+
+  // ⚠️ ALCANZABLE, no sólo montado. El informe de la captura (D9) existía en
+  // el backend y sólo se podía pedir desde la página de Reports eligiendo el
+  // paquete a ciegas: desde aquí, que es donde ya se sabe cuál es, no había
+  // por dónde. Es un enlace al backend por lo mismo que la descarga: la
+  // exportación queda a nombre de quien la pide.
+  it("⭐ y desde el paquete se saca su informe", async () => {
+    render(<EvidenceTab agentId="dev-1" canRead />);
+    await userEvent.click(await screen.findByRole("button", { name: "Open" }));
+    const link = within(await screen.findByRole("dialog")).getByRole("link", { name: /Report \(PDF\)/ });
+    expect(link).toHaveAttribute("href", "/api/v1/evidence/cap-1/report.pdf");
   });
 });
 

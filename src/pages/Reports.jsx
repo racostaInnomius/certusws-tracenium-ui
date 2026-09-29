@@ -63,7 +63,7 @@ import {
   listGrcTargets, deliverRunToGrcTarget, listGrcDeliveries,
 } from "../api/reports";
 import {
-  describeDelivery, formatBytes, formatWhen,
+  canScheduleType, describeDelivery, formatBytes, formatWhen,
   runStatusColor, runStatusLabel, summarizeRunParams, triggerLabel,
 } from "../components/Reports/reportSchedules";
 import { deliveryColor } from "../components/Reports/grcConnector";
@@ -1060,7 +1060,12 @@ export default function Reports() {
         anchorEl={newScheduleAnchor}
         onClose={() => setNewScheduleAnchor(null)}
       >
-        {rows.map((r) => (
+        {/* ⚠️ Sólo los que SE PUEDEN programar. Programar exige un constructor
+            de adjunto, y hay tipos que deliberadamente no lo tienen (ADR-0032:
+            una captura de evidencia es un hecho puntual, no un periodo).
+            Ofrecerlos aquí llevaba a un formulario entero que moría con un 400
+            al guardar. */}
+        {rows.filter(canScheduleType).map((r) => (
           <MenuItem
             key={r.key}
             onClick={() => { setNewScheduleAnchor(null); setScheduleTarget(r); }}

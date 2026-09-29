@@ -27,7 +27,7 @@ import { listAssetGroups } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
 import { parseRecipients, validateRecipients } from "../Alerts/notifyHelpers";
 import { BRAND, TEXT } from "../../theme/brand";
-import { periodOptionsFor, scheduleParamDefs, typeCoversMonthRange, typeHasPeriod } from "./reportSchedules";
+import { canScheduleType, periodOptionsFor, scheduleParamDefs, schedulableFormatsOf, typeCoversMonthRange, typeHasPeriod } from "./reportSchedules";
 
 export default function ScheduleReportDialog({ open, onClose, reportType, schedule = null, onCreated, onUpdated }) {
   // `schedule` presente = edición. El tipo no se cambia editando: sería otra
@@ -61,7 +61,9 @@ export default function ScheduleReportDialog({ open, onClose, reportType, schedu
     if (!open || !reportType) return;
     // Editando se parte de lo GUARDADO; creando, de los valores por defecto.
     // Un formulario de edición que arranca vacío no edita: pisa.
-    setFormat(schedule?.format || reportType.formats?.[0] || "");
+    // ⚠️ El primer formato PROGRAMABLE, no el primero a secas: un tipo puede
+    // ofrecer PDF para descargar y sólo JSON para programar.
+    setFormat(schedule?.format || schedulableFormatsOf(reportType)[0] || "");
     // Un tipo de mes único sólo admite 1: arrancar en otro valor dejaría el
     // select sin opción seleccionada y el guardado rechazado.
     setPeriodMonths(typeCoversMonthRange(reportType) ? (schedule?.periodMonths ?? 1) : 1);
@@ -95,6 +97,27 @@ export default function ScheduleReportDialog({ open, onClose, reportType, schedu
   }, [open, reportType, paramDefs, tenantId, schedule]);
 
   if (!reportType) return null;
+
+  // Un tipo que no se puede programar no enseña formulario: se dice por qué.
+  // El menú de "New schedule" ya los filtra, pero una programación guardada
+  // puede apuntar a un tipo que DEJÓ de ser programable, y ahí el formulario
+  // llevaría a un guardado que el servidor rechaza sin explicar nada.
+  if (!canScheduleType(reportType)) {
+    return (
+      <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>{reportType.label}</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+            This report cannot be scheduled: it describes a single moment on one device, not a period.
+            Generate it from the catalog when you need it.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ textTransform: "none" }}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
 
   const set = (name, v) => setValues((prev) => ({ ...prev, [name]: v }));
   const toggleMember = (id) => setCheckedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -161,7 +184,7 @@ export default function ScheduleReportDialog({ open, onClose, reportType, schedu
           </Typography>
 
           <TextField select label="Format" size="small" value={format} onChange={(e) => setFormat(e.target.value)} inputProps={{ "aria-label": "Format" }}>
-            {(reportType.formats || []).map((f) => (
+            {schedulableFormatsOf(reportType).map((f) => (
               <MenuItem key={f} value={f}>{f.toUpperCase()}</MenuItem>
             ))}
           </TextField>

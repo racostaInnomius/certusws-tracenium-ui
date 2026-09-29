@@ -1420,3 +1420,86 @@ describe("Reports — U3: fichas de programación", () => {
     expect(ficha.textContent).toMatch(/never run yet/i);
   });
 });
+
+// ── El informe de evidencia en el catálogo (ADR-0032 D9) ───────────────
+//
+// La captura se pide desde la ficha del equipo, pero el informe se BUSCA
+// semanas después, cuando ya nadie recuerda en qué equipo fue: por eso vive
+// también aquí. Lo que este bloque protege son las dos mitades de esa
+// integración — que se pueda generar eligiendo la captura, y que NO se pueda
+// programar, porque una captura es un hecho puntual y programarla mandaría el
+// mismo paquete para siempre.
+
+const TIPO_EVIDENCIA = {
+  key: "amp.evidence",
+  label: "Incident Evidence Report",
+  description: "What one evidence package contains, with its timeline and its limitations.",
+  group: "AMP",
+  formats: ["json", "pdf"],
+  // Vacío A PROPÓSITO: el motor sólo programa lo que sabe adjuntar.
+  schedulableFormats: [],
+  params: [{ name: "captureId", label: "Evidence package", kind: "evidence_capture", required: true }],
+};
+
+const TYPES_CON_EVIDENCIA = { ok: true, types: [...TYPES.types, TIPO_EVIDENCIA] };
+
+describe("Reports — informe de evidencia (ADR-0032)", () => {
+  it("⭐ se genera eligiendo QUÉ captura, con su equipo y su hora", async () => {
+    respond("get", `${BASE}/types`, TYPES_CON_EVIDENCIA);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", "/api/v1/evidence", {
+      ok: true,
+      captures: [
+        {
+          captureId: "cap-1", deviceId: "fb27bbd6", hostname: "FTP-SPS", status: "partial",
+          capturedAtUtc: "2026-09-23T12:52:00.000Z", deviceUtcOffsetMinutes: -300,
+          createdAt: "2026-09-23T12:50:00.000Z",
+        },
+      ],
+    });
+    let pedido = null;
+    server.use(
+      http.get(`${API_BASE}${BASE}/amp.evidence/run`, ({ request }) => {
+        pedido = new URL(request.url);
+        return HttpResponse.text("%PDF-1.4", { headers: { "content-type": "application/pdf" } });
+      })
+    );
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    const pagina = await abrirPagina("Asset Management");
+    const fila = await within(pagina).findByRole("group", { name: "Incident Evidence Report" });
+    await userEvent.click(within(fila).getByRole("button", { name: /Generate Incident Evidence Report/i }));
+
+    // Paso 1: el formato. Paso 2: QUÉ captura.
+    await userEvent.click(await screen.findByRole("button", { name: /^pdf$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^Continue$/ }));
+    const selector = await screen.findByLabelText("Evidence package");
+    await userEvent.click(selector);
+    // El equipo por su NOMBRE y la hora del EQUIPO con su desfase: un id
+    // opaco no se puede elegir, y la hora de quien mira fecharía mal el
+    // incidente (el caso real iba en UTC-5 y quien reportó en UTC-6).
+    const opcion = await screen.findByRole("option", { name: /FTP-SPS.*UTC-5.*Partial/ });
+    await userEvent.click(opcion);
+    await userEvent.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => expect(pedido).toBeTruthy());
+    expect(pedido.searchParams.get("captureId")).toBe("cap-1");
+    expect(pedido.searchParams.get("format")).toBe("pdf");
+  });
+
+  it("🔴 y NO se ofrece programarlo: el guardado lo rechazaría", async () => {
+    respond("get", `${BASE}/types`, TYPES_CON_EVIDENCIA);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, SCHEDULES);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await esperarCatalogo();
+    await abrirPestana(/schedules/i);
+
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.click(await screen.findByRole("button", { name: /New schedule/i }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).queryByRole("menuitem", { name: "Incident Evidence Report" })).toBeNull();
+    // El resto siguen estando: lo que se quita es UNO, no la función.
+    expect(within(menu).getByRole("menuitem", { name: "Evidence Pack" })).toBeInTheDocument();
+  });
+});

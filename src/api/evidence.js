@@ -51,3 +51,16 @@ export async function deleteEvidenceCapture(captureId) {
 export function evidenceArtifactUrl(captureId, name) {
   return `/api/v1/evidence/${encodeURIComponent(captureId)}/artifacts/${encodeURIComponent(name)}`;
 }
+
+/**
+ * El informe de una captura (ADR-0032 D9), en PDF para entregar o en JSON.
+ *
+ * ⚠️ Enlace al backend, igual que los artefactos: cada exportación queda
+ * apuntada con el nombre de quien la pidió ANTES de servir el documento. El
+ * mismo informe se genera desde la página de Reports eligiendo la captura
+ * (`amp.evidence`); son dos puertas al mismo documento.
+ */
+export function evidenceReportUrl(captureId, format = "pdf") {
+  const ext = format === "json" ? "json" : "pdf";
+  return `/api/v1/evidence/${encodeURIComponent(captureId)}/report.${ext}`;
+}

@@ -1,6 +1,8 @@
 // src/components/Reports/reportSchedules.test.js
 import { describe, expect, it } from "vitest";
 import {
+  canScheduleType,
+  schedulableFormatsOf,
   describePeriod, recipientCount, runStatusColor, runStatusLabel, scheduleParamDefs, summarizeParams, triggerLabel, typeHasPeriod,
   periodOptionsFor, typeCoversMonthRange,
 } from "./reportSchedules";
@@ -60,5 +62,35 @@ describe("reportSchedules helpers", () => {
     expect(runStatusColor("failed")).toBe("error");
     expect(triggerLabel("schedule")).toBe("Scheduled");
     expect(triggerLabel("manual")).toBe("Download");
+  });
+});
+
+// ── Qué se puede PROGRAMAR (ADR-0032) ──────────────────────────────────
+//
+// Programar exige que el motor sepa construir el adjunto de cada corrida, y
+// hay tipos que deliberadamente no lo declaran: una captura de evidencia es
+// un hecho puntual de un equipo concreto, y programarla "cada mes" mandaría
+// el mismo paquete para siempre. El servidor lo rechaza con un 400; la
+// pantalla no debe llegar a pedirlo.
+
+describe("schedulableFormatsOf / canScheduleType", () => {
+  it("🔴 un tipo con la lista VACÍA no se programa", () => {
+    const t = { key: "amp.evidence", formats: ["json", "pdf"], schedulableFormats: [] };
+    expect(schedulableFormatsOf(t)).toEqual([]);
+    expect(canScheduleType(t)).toBe(false);
+  });
+
+  it("⚠️ y un tipo puede ofrecer PDF para descargar y sólo JSON para programar", () => {
+    const t = { formats: ["json", "pdf"], schedulableFormats: ["json"] };
+    expect(schedulableFormatsOf(t)).toEqual(["json"]);
+    expect(canScheduleType(t)).toBe(true);
+  });
+
+  it("⭐ un backend anterior no manda el campo: NO se esconde nada", () => {
+    // Callarse los tipos porque el servidor es viejo sería quitar función por
+    // no saber. Sin el dato se asume lo de siempre: todos sus formatos.
+    const t = { formats: ["pdf"] };
+    expect(schedulableFormatsOf(t)).toEqual(["pdf"]);
+    expect(canScheduleType(t)).toBe(true);
   });
 });

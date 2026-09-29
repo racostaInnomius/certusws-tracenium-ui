@@ -5,12 +5,20 @@
 // dialog renders one field per kind and hands back a plain object the
 // caller sends as query (run) or body.params (email):
 //
-//   framework    → select over the tenant's active SCP frameworks
-//   month        → YYYY-MM (native month input; typed fallback in tests)
-//   asset_group  → optional select over the tenant's asset groups
+//   framework       → select over the tenant's active SCP frameworks
+//   month           → YYYY-MM (native month input; typed fallback in tests)
+//   asset_group     → optional select over the tenant's asset groups
+//   evidence_capture→ select over this tenant's evidence packages (ADR-0032)
 //
 // Nothing here knows about the evidence pack specifically: a future report
 // with the same param kinds gets this dialog for free.
+//
+// ⚠️ UNA CLASE DESCONOCIDA SE DICE, NO SE ADIVINA. Hasta ADR-0032 este
+// `map` terminaba en un campo de mes que atendía tanto a `month` como a
+// cualquier clase que aún no tuviera rama: añadir un parámetro nuevo en el
+// backend no rompía nada visible, simplemente mandaba un `YYYY-MM` donde se
+// esperaba otra cosa y el informe salía con un alcance que nadie pidió. Ahora
+// el campo sale deshabilitado, con el motivo, y el botón no deja generar.
 
 import * as React from "react";
 import {
@@ -18,8 +26,9 @@ import {
   FormControl, InputLabel, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
 import { getFrameworks } from "../../api/compliance";
-import { frameworkOptionsFrom, defaultFrameworkOption } from "./reportParams";
+import { frameworkOptionsFrom, defaultFrameworkOption, captureOptionLabel, isKnownParamKind } from "./reportParams";
 import { listAssetGroups } from "../../api/assetGroups";
+import { listEvidenceCaptures } from "../../api/evidence";
 import { listFrom } from "../../api/shape";
 import { BRAND, TEXT } from "../../theme/brand";
 
@@ -30,6 +39,7 @@ export default function ReportParamsDialog({ open, onClose, reportType, format, 
   const [values, setValues] = React.useState({});
   const [frameworks, setFrameworks] = React.useState([]);
   const [groups, setGroups] = React.useState([]);
+  const [captures, setCaptures] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [touched, setTouched] = React.useState(false);
 
@@ -49,15 +59,22 @@ export default function ReportParamsDialog({ open, onClose, reportType, format, 
     setValues(defaults);
     const needsFrameworks = params.some((p) => p.kind === "framework");
     const needsGroups = params.some((p) => p.kind === "asset_group");
-    if (!needsFrameworks && !needsGroups) return;
+    const needsCaptures = params.some((p) => p.kind === "evidence_capture");
+    if (!needsFrameworks && !needsGroups && !needsCaptures) return;
     setLoading(true);
     Promise.all([
       needsFrameworks ? getFrameworks().then((r) => frameworkOptionsFrom(r)).catch(() => []) : Promise.resolve([]),
       needsGroups ? listAssetGroups().then((r) => listFrom(r, { context: "reportParamsGroups" })).catch(() => []) : Promise.resolve([]),
+      // ⚠️ SIN preselección. El resto de parámetros tienen un valor evidente
+      // ("el mes pasado", "el único framework"); una captura, no: elegir la
+      // más reciente por su cuenta produciría el informe de OTRO incidente con
+      // el mismo aspecto que el correcto.
+      needsCaptures ? listEvidenceCaptures({ limit: 50 }).then((r) => r?.captures || []).catch(() => []) : Promise.resolve([]),
     ])
-      .then(([fws, gs]) => {
+      .then(([fws, gs, caps]) => {
         setFrameworks(fws);
         setGroups(gs);
+        setCaptures(caps);
         // Preselect the only framework, or SOC 2 when present: that is the
         // reason this dialog exists.
         const fwParam = params.find((p) => p.kind === "framework");
@@ -133,6 +150,49 @@ export default function ReportParamsDialog({ open, onClose, reportType, format, 
                     ))}
                   </Select>
                 </FormControl>
+              );
+            }
+            if (p.kind === "evidence_capture") {
+              return (
+                <FormControl key={p.name} fullWidth size="small" error={Boolean(err)}>
+                  <InputLabel id={`param-${p.name}`}>{p.label}</InputLabel>
+                  <Select
+                    labelId={`param-${p.name}`}
+                    label={p.label}
+                    value={values[p.name] || ""}
+                    onChange={(e) => set(p.name, e.target.value)}
+                    inputProps={{ "aria-label": p.label }}
+                  >
+                    {captures.map((c) => (
+                      <MenuItem key={c.captureId} value={c.captureId}>{captureOptionLabel(c)}</MenuItem>
+                    ))}
+                  </Select>
+                  {/* Sin capturas el select queda vacío, y un select vacío no
+                      explica nada: se dice dónde se piden. */}
+                  {!loading && captures.length === 0 ? (
+                    <Typography sx={{ color: BRAND.gray, fontSize: TEXT.xs, mt: 0.5 }}>
+                      No evidence packages yet. They are captured from a device&apos;s Evidence tab.
+                    </Typography>
+                  ) : null}
+                  {err ? <Typography sx={{ color: BRAND.alert.errorText, fontSize: TEXT.xs, mt: 0.5 }}>{err}</Typography> : null}
+                </FormControl>
+              );
+            }
+            if (!isKnownParamKind(p.kind)) {
+              // El servidor pide algo que esta versión del portal no sabe
+              // ofrecer. Se dice, y no se genera: ver la cabecera del fichero.
+              return (
+                <TextField
+                  key={p.name}
+                  label={p.label}
+                  size="small"
+                  value=""
+                  disabled
+                  error
+                  helperText={`This dashboard cannot set "${p.label}" (${p.kind}) yet. Update it to generate this report.`}
+                  inputProps={{ "aria-label": p.label }}
+                  InputLabelProps={{ shrink: true }}
+                />
               );
             }
             // month

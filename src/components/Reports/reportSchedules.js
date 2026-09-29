@@ -38,6 +38,31 @@ export function periodOptionsFor(type) {
   return typeCoversMonthRange(type) ? PERIOD_OPTIONS : PERIOD_OPTIONS.filter((o) => o.value === 1);
 }
 
+/**
+ * Los formatos de un tipo que de verdad se pueden PROGRAMAR.
+ *
+ * ⚠️ No son siempre todos. El motor exige un constructor de adjunto para
+ * archivar y enviar cada corrida, y hay tipos que deliberadamente no lo tienen
+ * (ADR-0032: una captura de evidencia es un hecho puntual de un equipo
+ * concreto — programarla «cada mes» mandaría el mismo paquete para siempre).
+ * Sin esto la pantalla ofrecía programar cualquier cosa y el guardado moría
+ * con un 400 que el operador no podía interpretar.
+ *
+ * Un backend anterior no manda `schedulableFormats`: entonces se cae a
+ * `formats`, que es como se comportaba antes. No esconder nada es lo correcto
+ * cuando no se sabe.
+ */
+export function schedulableFormatsOf(type) {
+  const declared = type?.schedulableFormats;
+  if (!Array.isArray(declared)) return type?.formats || [];
+  return declared;
+}
+
+/** ¿Se puede programar este tipo, en algún formato? */
+export function canScheduleType(type) {
+  return schedulableFormatsOf(type).length > 0;
+}
+
 /** Non-month params of a type, for the dialog and the summary. */
 export function scheduleParamDefs(type) {
   return (type?.params || []).filter((p) => p.kind !== "month");
