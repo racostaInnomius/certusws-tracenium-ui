@@ -82,6 +82,7 @@ import {
   Slider,
   Stack,
   Switch,
+  TextField,
   Tooltip,
   Typography
 } from "@mui/material";
@@ -335,6 +336,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   // El control automático ante la pantalla de login se aplica UNA vez por
   // sesión. Si el operador lo suelta con Esc, no se le vuelve a imponer.
   const autoControlDoneRef = React.useRef(false);
+  // «Type text»: el campo abierto y su contenido. El contenido es casi siempre
+  // una contraseña: vive sólo aquí, se vacía al mandarlo y al cerrar.
+  const [typeTextOpen, setTypeTextOpen] = React.useState(false);
+  const [typeTextValue, setTypeTextValue] = React.useState("");
 
   const canvasRef   = React.useRef(null);
   const dcRef       = React.useRef(null);   // RTCDataChannel
@@ -551,6 +556,12 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     if (!controlEnabled || state !== STATE.VIEWING) return;
 
     function onKeyDown(e) {
+      // ⚠️ Lo que se escribe en el campo «Type text» es para el campo. Este
+      // listener va en la ventana y en fase de captura, así que corre ANTES
+      // que el input: sin esta salida, cada letra de la contraseña se
+      // mandaba al servidor como tecla física — justo lo que el campo existe
+      // para evitar — y el campo se quedaba vacío.
+      if (e.target?.closest?.("[data-type-text]")) return;
       // Esc is the universal escape hatch: it leaves control mode
       // immediately instead of being forwarded to the remote.
       //
@@ -563,6 +574,8 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         e.preventDefault();
         e.stopPropagation();
         setControlEnabled(false);
+        setTypeTextOpen(false);
+        setTypeTextValue("");
         dcSend({ op: "releaseAll" });
         // ⚠️ `releaseAll` NO sirve para avisar de esto: también se manda al
         // perder el foco, cuando el control SIGUE puesto. Sin un mensaje
@@ -577,6 +590,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
       dcSend({ op: "keyDown", code: e.code });
     }
     function onKeyUp(e) {
+      if (e.target?.closest?.("[data-type-text]")) return;
       if (e.code === "Escape") return;
       e.preventDefault();
       dcSend({ op: "keyUp", code: e.code });
@@ -604,8 +618,21 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     if (controlEnabled) {
       dcSend({ op: "releaseAll" });
       dcSend({ op: "controlReleased" });
+      closeTypeText();
     }
     setControlEnabled((v) => !v);
+  }
+
+  function closeTypeText() {
+    setTypeTextOpen(false);
+    setTypeTextValue("");
+  }
+
+  function submitTypeText() {
+    if (!typeTextValue) return;
+    dcSend({ op: "typeText", text: typeTextValue });
+    // Fuera de la memoria en cuanto sale: es casi siempre una contraseña.
+    closeTypeText();
   }
 
   // ── Signaling + WebRTC setup ─────────────────────────────────────────
@@ -928,7 +955,9 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           height: Number(msg.height || 0),
           fps:    appliedFps,
           noUserSignedIn: msg.noUserSignedIn === true,
-          canSendSas:     msg.canSendSas === true
+          consoleLocked:  msg.consoleLocked === true,
+          canSendSas:     msg.canSendSas === true,
+          canTypeText:    msg.canTypeText === true
         });
         // ⭐ Sin nadie dentro, el acceso YA es teclado y ratón — decisión del
         // usuario, 29-sep-2026. Pedir «Take control» para poder pulsar
@@ -937,7 +966,12 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         // No es un permiso nuevo: el botón lo tiene cualquiera que abre la
         // sesión, y el agente sigue pasando cada evento por su puerta de
         // control. Sólo ahorra el clic. Una vez por sesión.
-        if (msg.noUserSignedIn === true && !autoControlDoneRef.current) {
+        // También con la consola BLOQUEADA de un servidor: mismo trato que
+        // «sin nadie dentro», decisión del usuario del mismo día. En los dos
+        // casos lo que hay delante es una pantalla de Windows que pide
+        // credenciales, y sin control no se pueden escribir.
+        if ((msg.noUserSignedIn === true || msg.consoleLocked === true) &&
+            !autoControlDoneRef.current) {
           autoControlDoneRef.current = true;
           setControlEnabled(true);
         }
@@ -1218,6 +1252,44 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           </Tooltip>
         )}
 
+        {/* «Type text»: el texto viaja como CARACTERES, no como teclas
+            físicas. Para usuario y contraseña: desde un Mac con teclado
+            español `@` es Option+2, y por teclas al servidor le llegaba
+            Alt+2 — «contraseña incorrecta» sin pista. Sirve también para
+            pegar (Cmd+V llegaba como Win+V). Sólo si el agente lo anuncia y
+            con control: es entrada. */}
+        {screenInfo?.canTypeText && (
+          <Tooltip
+            title={
+              controlEnabled
+                ? "Type text on the device — sent as characters, independent of keyboard layouts"
+                : "Take control first to type text"
+            }
+          >
+            <span>
+              <Button
+                size="small"
+                variant={typeTextOpen ? "contained" : "outlined"}
+                onClick={() => (typeTextOpen ? closeTypeText() : setTypeTextOpen(true))}
+                disabled={state !== STATE.VIEWING || !controlEnabled}
+                sx={{
+                  textTransform: "none",
+                  fontSize: TEXT.sm,
+                  py: 0.25,
+                  ml: 1,
+                  borderColor: BRAND.teal,
+                  ...(typeTextOpen
+                    ? { bgcolor: BRAND.teal, color: BRAND.dark }
+                    : { color: BRAND.teal }),
+                  "&:hover": { borderColor: BRAND.teal, bgcolor: "rgba(90,159,159,0.12)" }
+                }}
+              >
+                Type text
+              </Button>
+            </span>
+          </Tooltip>
+        )}
+
         <StatusChip state={state} />
         <Tooltip title="Close">
           <IconButton aria-label="Close screen share" size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
@@ -1225,6 +1297,50 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           </IconButton>
         </Tooltip>
       </Stack>
+
+      {typeTextOpen && controlEnabled && (
+        <Box
+          data-type-text
+          component="form"
+          onSubmit={(e) => { e.preventDefault(); submitTypeText(); }}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            px: 2,
+            py: 1,
+            bgcolor: BRAND.dark,
+            borderTop: `1px solid ${NEUTRAL[700]}`
+          }}
+        >
+          <TextField
+            autoFocus
+            size="small"
+            // Casi siempre es una contraseña: no se ve ni se autocompleta.
+            type="password"
+            autoComplete="off"
+            placeholder="Text to type on the device (e.g. user name, password)"
+            value={typeTextValue}
+            onChange={(e) => setTypeTextValue(e.target.value)}
+            onKeyDown={(e) => {
+              // Esc cierra el campo y NADA más: sin stopPropagation el
+              // Drawer lo vería y cerraría toda la sesión.
+              if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeTypeText(); }
+            }}
+            inputProps={{ "aria-label": "Text to type on the device", maxLength: 1024 }}
+            sx={{ flex: 1, input: { color: NEUTRAL[400], fontSize: TEXT.sm } }}
+          />
+          <Button
+            type="submit"
+            size="small"
+            variant="contained"
+            disabled={!typeTextValue}
+            sx={{ textTransform: "none", fontSize: TEXT.sm, bgcolor: BRAND.teal, color: BRAND.dark }}
+          >
+            Send
+          </Button>
+        </Box>
+      )}
 
       {/* ── Error / Ended overlays ── */}
       {(state === STATE.ERROR || state === STATE.ENDED) && (

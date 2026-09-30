@@ -230,3 +230,99 @@ describe("4 · los avisos sobre acciones no los borra un fotograma", () => {
     );
   });
 });
+
+// ── El recorrido entero, antes del siguiente despliegue ──────────────────
+//
+// «Seguimos tropezando con nuevos errores en cada deploy de fix, no estamos
+// viendo más allá de la corrección en turno.» Lo que venía después de
+// Ctrl+Alt+Supr: escribir la contraseña (distribuciones de teclado) y la
+// consola BLOQUEADA (muy común en servidores).
+
+describe("5 · consola bloqueada de un servidor", () => {
+  it("⭐ también arranca en control", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage({ ...LOGON_INFO, noUserSignedIn: false, consoleLocked: true });
+    expect(await screen.findByRole("button", { name: /Controlling/i })).toBeInTheDocument();
+  });
+});
+
+describe("6 · Type text: la contraseña como caracteres", () => {
+  const WITH_TEXT = { ...LOGON_INFO, canTypeText: true };
+
+  async function openField() {
+    const { dc } = await connect();
+    await dc.fireMessage(WITH_TEXT);
+    const btn = await screen.findByRole("button", { name: /Type text/i });
+    await waitFor(() => expect(btn).toBeEnabled());
+    fireEvent.click(btn);
+    const input = await screen.findByLabelText(/Text to type on the device/i);
+    return { dc, input };
+  }
+
+  it("⭐ manda el texto entero como {op:'typeText'} y se vacía", async () => {
+    const { dc, input } = await openField();
+    fireEvent.change(input, { target: { value: "admin@corp.local" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Send$/ }));
+    expect(dc.ops()).toContainEqual({ op: "typeText", text: "admin@corp.local" });
+    // Es casi siempre una contraseña: fuera de la pantalla en cuanto sale.
+    expect(screen.queryByLabelText(/Text to type on the device/i)).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain("admin@corp.local");
+  });
+
+  it("🔴 lo que se escribe en el campo NO se manda al servidor como teclas", async () => {
+    // El teclado del visor se captura en la ventana, en fase de captura: sin
+    // la excepción, cada letra salía como keyDown y el campo quedaba vacío.
+    const { dc, input } = await openField();
+    const before = dc.ops().filter((m) => m.op === "keyDown").length;
+    fireEvent.keyDown(input, { key: "a", code: "KeyA" });
+    fireEvent.keyUp(input, { key: "a", code: "KeyA" });
+    const after = dc.ops().filter((m) => m.op === "keyDown" || m.op === "keyUp").length;
+    expect(after).toBe(before);
+  });
+
+  it("🔴 Esc en el campo lo cierra y NO cierra la sesión ni suelta el control", async () => {
+    const onClose = vi.fn();
+    cleanup();
+    render(<ScreenShareViewer session={SESSION} device={DEVICE} onClose={onClose} />);
+    await waitFor(() => expect(sockets.at(-1)).toBeTruthy());
+    const ws = sockets.at(-1);
+    await ws.fireOpen();
+    await waitFor(() => expect(peers.at(-1)?.dc).toBeTruthy());
+    await ws.fireMessage({ type: "answer", sdp: "v=0" });
+    const dc = peers.at(-1).dc;
+    await dc.fireOpen();
+    await dc.fireMessage(WITH_TEXT);
+    const btn = await screen.findByRole("button", { name: /Type text/i });
+    await waitFor(() => expect(btn).toBeEnabled());
+    fireEvent.click(btn);
+    const input = await screen.findByLabelText(/Text to type on the device/i);
+
+    // Evento nativo con stopPropagation espiado, como la prueba de Esc de
+    // ScreenShareViewer.test.jsx: el Drawer que cierra la sesión no está en
+    // este render, así que lo que se comprueba es que el evento NO sigue
+    // subiendo hasta él.
+    const ev = new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true });
+    let propagationStopped = false;
+    const original = ev.stopPropagation.bind(ev);
+    ev.stopPropagation = () => { propagationStopped = true; original(); };
+    await act(async () => { input.dispatchEvent(ev); });
+
+    expect(propagationStopped, "sin esto el Drawer ve el Esc y cierra toda la sesión").toBe(true);
+    expect(screen.queryByLabelText(/Text to type on the device/i)).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Controlling/i })).toBeInTheDocument();
+  });
+
+  it("no aparece si el agente no lo anuncia", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage({ ...LOGON_INFO, canTypeText: false });
+    await dc.fireMessage(FRAME);
+    expect(screen.queryByRole("button", { name: /Type text/i })).not.toBeInTheDocument();
+  });
+
+  it("sin control está desactivado", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage({ ...WITH_TEXT, noUserSignedIn: false });
+    expect(await screen.findByRole("button", { name: /Type text/i })).toBeDisabled();
+  });
+});
