@@ -162,6 +162,7 @@ function AgentDetailWorkbench({
   // trata por separado porque el backend también.
   canCaptureEvidence = false,
   canReadEvidence = false,
+  onOpenJob,
 }) {
   const hostname = formatDetailValue(profile?.hostname || selectedHost?.hostname || selectedHost?.agent_id, "Unknown host");
   const agentId = formatDetailValue(profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId);
@@ -319,7 +320,7 @@ function AgentDetailWorkbench({
           {!loading && tab === EXPERIENCE_TAB ? <ExperienceTab agentId={rawAgentId} /> : null}
 
           {/* ADR-0031 — lo que se le envió al equipo y lo que se observó en él. */}
-          {!loading && tab === "activity" ? <ActivityTab agentId={rawAgentId} /> : null}
+          {!loading && tab === "activity" ? <ActivityTab agentId={rawAgentId} onOpenJob={onOpenJob} /> : null}
 
           {/* ADR-0032 — capturar el estado de AHORA antes de que lo reinicien. */}
           {!loading && tab === "evidence" ? (
@@ -811,6 +812,17 @@ export default function AssetsDashboard({
       if (!deviceId) return;
       updateSearchParams({ highlightAgentId: deviceId });
       onNavigate?.(pageKey);
+    },
+    [onNavigate]
+  );
+
+  // Activity › «View job»: el mismo salto que JobTracker — Jobs lee
+  // `highlightJobId` al montar y abre ese job.
+  const openJob = React.useCallback(
+    (jobId) => {
+      if (!jobId) return;
+      updateSearchParams({ highlightJobId: String(jobId) });
+      onNavigate?.("jobs");
     },
     [onNavigate]
   );
@@ -1793,6 +1805,7 @@ const osVersionItems = React.useMemo(() => {
           <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
             {selectedAgent ? (
               <AgentDetailWorkbench
+                onOpenJob={onNavigate ? openJob : undefined}
                 selectedHost={selectedAgent}
                 connected={connectedIds.has(String(selectedAgent.agent_id || selectedAgent.agentId))}
                 loading={agentDetailLoading}

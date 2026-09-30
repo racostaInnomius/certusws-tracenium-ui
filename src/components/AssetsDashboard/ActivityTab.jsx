@@ -13,7 +13,7 @@
 //     culpables, dice qué cambió y cuándo.
 
 import * as React from "react";
-import { Alert, Box, Chip, CircularProgress, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Chip, CircularProgress, Link, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { formatDate } from "../../utils/format";
 import DateRangeControl from "./DateRangeControl";
@@ -108,7 +108,7 @@ function AttributionChip({ attribution }) {
   );
 }
 
-function EventRow({ event }) {
+function EventRow({ event, onOpenJob }) {
   const sent = event.lane === "sent";
   return (
     <Stack
@@ -147,6 +147,17 @@ function EventRow({ event }) {
         {event.actor ? (
           <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>Requested by {event.actor}</Typography>
         ) : null}
+        {/* Lo que se envió tiene su job: el detalle (payload, resultado,
+            reintentos) vive en Jobs, a un clic en vez de a una búsqueda. */}
+        {onOpenJob && event.ref?.jobId ? (
+          <Link
+            component="button"
+            onClick={() => onOpenJob(event.ref.jobId)}
+            sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.tealText }}
+          >
+            View job
+          </Link>
+        ) : null}
       </Box>
     </Stack>
   );
@@ -156,7 +167,7 @@ function EventRow({ event }) {
  * La vista, sin fetch: recibe lo que haya y lo pinta. Separada a propósito
  * para poder probar los estados vacíos sin mocks.
  */
-export function ActivityView({ data, loading, error }) {
+export function ActivityView({ data, loading, error, onOpenJob }) {
   if (error) {
     return (
       <Box sx={{ minHeight: MIN_HEIGHT }}>
@@ -214,7 +225,7 @@ export function ActivityView({ data, loading, error }) {
               {g.day}
             </Typography>
             {g.events.map((e, i) => (
-              <EventRow key={`${e.source}-${e.at}-${i}`} event={e} />
+              <EventRow key={`${e.source}-${e.at}-${i}`} event={e} onOpenJob={onOpenJob} />
             ))}
           </Box>
         ))
@@ -229,7 +240,7 @@ export function ActivityView({ data, loading, error }) {
   );
 }
 
-export default function ActivityTab({ agentId }) {
+export default function ActivityTab({ agentId, onOpenJob }) {
   const [range, setRange] = React.useState(() => lastDaysRange(7));
   const [lane, setLane] = React.useState("all");
   const [data, setData] = React.useState(null);
@@ -284,7 +295,7 @@ export default function ActivityTab({ agentId }) {
         </ToggleButtonGroup>
       </Stack>
 
-      <ActivityView data={data} loading={loading} error={error} />
+      <ActivityView data={data} loading={loading} error={error} onOpenJob={onOpenJob} />
     </Box>
   );
 }

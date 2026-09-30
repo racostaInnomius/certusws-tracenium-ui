@@ -210,3 +210,39 @@ describe("ActivityTab — la petición", () => {
     expect(screen.getByText(/may not be the device/i)).toBeInTheDocument();
   });
 });
+
+describe("⭐ lo enviado lleva a su job", () => {
+  const instalacion = evento({
+    lane: "sent",
+    source: "device_jobs",
+    kind: "job.software_install",
+    title: "Install: Google Chrome 154.0.8037.58",
+    detail: null,
+    status: "completed",
+    ref: { jobId: "de368c95-6392-498d-bd4f-0d4280a70dbc" },
+  });
+
+  it("una fila con job enseña «View job» y lo abre", () => {
+    const onOpenJob = vi.fn();
+    render(<ActivityView data={{ events: [instalacion], sources: [] }} onOpenJob={onOpenJob} />);
+    expect(screen.getByText("Install: Google Chrome 154.0.8037.58")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View job" }));
+    expect(onOpenJob).toHaveBeenCalledWith("de368c95-6392-498d-bd4f-0d4280a70dbc");
+  });
+
+  it("lo observado no tiene job, y sin navegación no se ofrece el enlace", () => {
+    render(<ActivityView data={{ events: [evento()], sources: [] }} onOpenJob={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "View job" })).toBeNull();
+    cleanup();
+    render(<ActivityView data={{ events: [instalacion], sources: [] }} />);
+    expect(screen.queryByRole("button", { name: "View job" })).toBeNull();
+  });
+
+  it("la pestaña pasa el enlace hasta la fila", async () => {
+    getDeviceActivity.mockResolvedValue(respuesta({ events: [instalacion] }));
+    const onOpenJob = vi.fn();
+    render(<ActivityTab agentId={AG} onOpenJob={onOpenJob} />);
+    fireEvent.click(await screen.findByRole("button", { name: "View job" }));
+    expect(onOpenJob).toHaveBeenCalledWith("de368c95-6392-498d-bd4f-0d4280a70dbc");
+  });
+});
