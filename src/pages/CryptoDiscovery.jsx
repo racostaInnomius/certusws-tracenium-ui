@@ -106,6 +106,9 @@ import CdpSettingsTab from "../components/CryptoDiscovery/CdpSettingsTab";
 import { TrustAnchorsPanel } from "../components/CryptoDiscovery/PqcReadinessPanels";
 import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
 import { CHAIN_FILTER_LABELS, KEY_STORAGE, STORE_CHAIN_FLAG_LABELS } from "../components/CryptoDiscovery/certKeyStorage";
+// Una línea por celda (30-sep): una píldora por bandera partía la fila en dos
+// o tres y se montaban.
+import CertFlagSummary from "../components/CryptoDiscovery/CertFlagSummary";
 import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog";
 import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
 import SshUserKeysPanel from "../components/CryptoDiscovery/SshUserKeysPanel";
@@ -235,27 +238,6 @@ const FLAG_LABELS = {
   ...STORE_CHAIN_FLAG_LABELS,
 };
 
-function FlagChips({ flags }) {
-  if (!Array.isArray(flags) || flags.length === 0) return null;
-  return (
-    <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
-      {flags.map((flag) => (
-        <Tooltip key={flag} title={FLAG_LABELS[flag] ?? flag} arrow>
-          <Chip
-            size="small"
-            label={flag}
-            sx={{
-              bgcolor: BRAND.alert.highSoft,
-              color: BRAND.alert.high,
-              fontWeight: 700,
-              fontSize: TEXT.xs,
-            }}
-          />
-        </Tooltip>
-      ))}
-    </Stack>
-  );
-}
 
 function formatDate(value) {
   if (!value) return "—";
@@ -913,7 +895,7 @@ function CdpInventoryTab({ refreshNonce }) {
       flex: 1,
       minWidth: 140,
       sortable: false,
-      renderCell: (params) => <FlagChips flags={params.value} />,
+      renderCell: (params) => <CertFlagSummary flags={params.value} labels={FLAG_LABELS} />,
     },
   ];
   // La vista por equipo no ordena en servidor (todavía): sin flechas que
@@ -1378,7 +1360,7 @@ function CdpDeviceDrawerContent({ agentId, host, onShowCertificates }) {
                     <KeyOutlinedIcon sx={{ fontSize: ICON.sm }} />
                   </Tooltip>
                 ) : null}
-                <FlagChips flags={cert.flags} />
+                <CertFlagSummary flags={cert.flags} labels={FLAG_LABELS} />
               </Stack>
             </Box>
           ))}
