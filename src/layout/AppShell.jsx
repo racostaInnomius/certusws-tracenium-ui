@@ -1285,7 +1285,15 @@ export default function AppShell() {
                   minWidth: 0,
                   width: "100%",
                   filter: shouldShowNoInformationOverlay ? "blur(8px)" : "none",
-                  transform: "translateZ(0)",
+                  // ⚠️ La capa propia (translateZ) SÓLO mientras dura el
+                  // desenfoque. Un `transform` convierte este <main> en el
+                  // contenedor de todo lo `position: fixed` de dentro y encierra
+                  // su z-index: los avisos (Snackbar) de cualquier página se
+                  // colocaban al fondo del CONTENIDO —fuera de la pantalla en
+                  // una página larga— y por DEBAJO de un cajón o diálogo, que
+                  // se montan en <body>. «Add to macOS policy» guardaba y no se
+                  // veía el aviso (30-sep). Lo mismo el JobTracker de PMP.
+                  transform: shouldShowNoInformationOverlay ? "translateZ(0)" : "none",
                   transition: "filter 220ms ease",
                   pointerEvents: shouldShowNoInformationOverlay ? "none" : "auto",
                   userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
