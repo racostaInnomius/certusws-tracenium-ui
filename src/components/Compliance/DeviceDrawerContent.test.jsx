@@ -18,6 +18,8 @@ vi.mock("../../api/compliance", () => ({
 vi.mock("../../api/patchManagement", () => ({
   getAppliedFixes: vi.fn().mockResolvedValue({ ok: true, items: [] }),
   revertRemediationResult: vi.fn(),
+  remediateBatch: vi.fn().mockResolvedValue({ items: [{ id: 9, checkId: "cis:1.1", status: "queued", counts: {} }], skipped: [] }),
+  getRemediationsBatch: vi.fn().mockResolvedValue({ items: [{ id: 9, checkId: "cis:1.1", status: "queued", counts: {} }] }),
 }));
 import { getDeviceFleetRanking, getFrameworkControls } from "../../api/compliance";
 import DeviceDrawerContent from "./DeviceDrawerContent";
@@ -121,6 +123,22 @@ describe("DeviceDrawerContent", () => {
     render(<DeviceDrawerContent {...baseProps} onClose={onClose} data={deviceData} />);
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("⭐ «Apply fixes»: al lanzar se suelta la selección, y el diálogo sigue enseñando su lote", async () => {
+    // Volver a la ficha con los ya mandados marcados obligaba a pulsar
+    // «Clear» para elegir los siguientes.
+    const data = { ...deviceData, findings: [{ ...deviceData.findings[0], agentRemediable: true }, deviceData.findings[1]] };
+    render(<DeviceDrawerContent {...baseProps} data={data} onRemediateFinding={vi.fn()} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all findings" }));
+    expect(screen.getByText("1 of 1 selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /actions/i }));
+    fireEvent.click(await screen.findByText(/Apply fix/i));
+    fireEvent.click(await screen.findByRole("button", { name: /Apply 1/ }));
+    await waitFor(() => expect(screen.getByText("Select all (1 finding)")).toBeInTheDocument());
+    expect(screen.queryByText("1 of 1 selected")).toBeNull();
+    // El diálogo no se quedó vacío al soltar la selección.
+    expect(screen.getByRole("dialog")).toHaveTextContent("Check one");
   });
 
   it("selecting all then opening the actions menu shows bulk transitions", async () => {

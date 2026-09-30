@@ -77,6 +77,10 @@ export default function BulkFixDialog({
   onDownloadMacProfile = null,
   onClose,
   onChanged,         // el llamante recarga la ficha cuando algo se ha lanzado
+  // Se lanzó el lote de verdad (no la simulación): el llamante suelta la
+  // selección. Ya están mandados; volver a la ficha con ellos marcados
+  // obligaba a pulsar «Clear» para elegir los siguientes.
+  onLaunched,
   notify,
 }) {
   const plan = React.useMemo(() => bulkFixPlan(findings), [findings]);
@@ -137,6 +141,7 @@ export default function BulkFixDialog({
       setItems(listFrom(res, { context: "bulkFixCreate" }));
       setSkipped(Array.isArray(res?.skipped) ? res.skipped : []);
       onChanged?.();
+      if (theMode === "apply") onLaunched?.();
     } catch (err) {
       notify?.({
         severity: "error",

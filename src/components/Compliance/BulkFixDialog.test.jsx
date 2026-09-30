@@ -80,6 +80,27 @@ describe("lo que promete el botón", () => {
     });
   });
 
+  it("⭐ al APLICAR avisa al llamante (que suelta la selección); simular no", async () => {
+    const onLaunched = vi.fn();
+    open({ onLaunched });
+    fireEvent.click(screen.getByRole("button", { name: /Dry-run 2/ }));
+    await waitFor(() => expect(remediateBatch).toHaveBeenCalledTimes(1));
+    expect(onLaunched).not.toHaveBeenCalled();
+    cleanup();
+    open({ onLaunched });
+    fireEvent.click(screen.getByRole("button", { name: /Apply 2/ }));
+    await waitFor(() => expect(onLaunched).toHaveBeenCalledTimes(1));
+  });
+
+  it("si el lote no se pudo lanzar, la selección se queda", async () => {
+    const onLaunched = vi.fn();
+    remediateBatch.mockRejectedValueOnce(new Error("boom"));
+    open({ onLaunched });
+    fireEvent.click(screen.getByRole("button", { name: /Apply 2/ }));
+    await waitFor(() => expect(remediateBatch).toHaveBeenCalledTimes(1));
+    expect(onLaunched).not.toHaveBeenCalled();
+  });
+
   it("simular es un botón aparte, no un paso obligatorio", async () => {
     open();
     fireEvent.click(screen.getByRole("button", { name: /Dry-run 2/ }));

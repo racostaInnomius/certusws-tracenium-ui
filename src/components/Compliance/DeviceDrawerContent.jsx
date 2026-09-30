@@ -289,7 +289,10 @@ export default function DeviceDrawerContent({
   // «Apply fixes (N)»: arreglar lo marcado sin salir de la ficha. El reparto
   // se calcula AQUÍ, no dentro del diálogo, porque el propio menú dice cuántos
   // de los marcados se pueden aplicar de verdad — y se apaga si no hay ninguno.
-  const [bulkFixOpen, setBulkFixOpen] = React.useState(false);
+  // Los hallazgos del diálogo de «Apply fixes», fijados al abrirlo (null =
+  // cerrado). No la selección en vivo: al lanzar se suelta la selección
+  // (onLaunched) y el diálogo tiene que seguir enseñando su lote.
+  const [bulkFixFindings, setBulkFixFindings] = React.useState(null);
   const selectedFindings = React.useMemo(
     () => visibleFindings.filter((f) => selectedIds.has(f.id)),
     [visibleFindings, selectedIds]
@@ -585,7 +588,7 @@ export default function DeviceDrawerContent({
                 abajo es documentar. El rótulo dice cuántos de los marcados se
                 pueden aplicar de verdad, y se apaga cuando no hay ninguno. */}
             <MenuItem
-              onClick={() => { setBulkMenuAnchor(null); setBulkFixOpen(true); }}
+              onClick={() => { setBulkMenuAnchor(null); setBulkFixFindings(selectedFindings); }}
               disabled={selectedFixPlan.checkIds.length === 0}
             >
               <BuildOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
@@ -773,10 +776,10 @@ export default function DeviceDrawerContent({
           onCancel={() => setExceptionDialog(null)}
         />
       ) : null}
-      {bulkFixOpen ? (
+      {bulkFixFindings ? (
         <BulkFixDialog
           open
-          findings={selectedFindings}
+          findings={bulkFixFindings}
           deviceId={agentId}
           hostname={device?.hostname ?? null}
           canManage={canManage}
@@ -785,7 +788,8 @@ export default function DeviceDrawerContent({
           onDownloadMacProfile={onDownloadMacProfile}
           notify={onToast}
           onChanged={onRequestRefetch}
-          onClose={() => setBulkFixOpen(false)}
+          onLaunched={clearSelection}
+          onClose={() => setBulkFixFindings(null)}
         />
       ) : null}
       {bulkExceptionOpen ? (
