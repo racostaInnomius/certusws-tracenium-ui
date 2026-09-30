@@ -327,7 +327,12 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
       </TabPanel>
 
       <TabPanel value={visibleTab} index={5}>
-        <SoftwareInventory refreshNonce={refreshNonce} />
+        <SoftwareInventory
+          refreshNonce={refreshNonce}
+          onNavigate={onNavigate}
+          onOpenDevice={openDeviceFromTab}
+          canAdminister={canReport}
+        />
       </TabPanel>
 
       <TabPanel value={visibleTab} index={WINDOWS_TAB}>

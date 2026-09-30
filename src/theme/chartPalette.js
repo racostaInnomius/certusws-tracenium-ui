@@ -54,8 +54,11 @@ export const CHART_NEUTRAL = {
 // en BRAND ensancharía la superficie de tokens sin aclarar nada — que es
 // exactamente el criterio con el que este módulo se separó.
 export const SOFTWARE_ACCENTS = {
-  installed: "#4F9A96",
-  publishers: "#3E877F",
-  sources: "#536B82",
-  appsPerDevice: "#D7787C",
+  // Un color por PREGUNTA (29-sep). Antes eran tres teal casi iguales
+  // (#4F9A96, #3E877F, marca) y los cuatro gráficos parecían el mismo.
+  installed: BRAND.teal, // Top installed apps — alcance
+  publishers: "#6B7FD7", // Top publishers — de quién es (índigo de CHART_CATEGORICAL)
+  rare: "#6B7FD7", // Apps raras — la misma familia: qué hay y de quién
+  drift: "#D78B3E", // Detrás de la versión más nueva — riesgo (ámbar de CHART_CATEGORICAL)
+  spread: "#536B82", // Apps por equipo — forma de la flota
 };

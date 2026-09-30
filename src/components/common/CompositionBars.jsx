@@ -86,6 +86,9 @@ export default function CompositionBars({
   showPercentages = true,
   // `id` de la fila (o hija) del filtro activo: se pinta resaltada.
   activeItemId = null,
+  // Nota al pie, pegada abajo: lo que el ranking deja fuera a propósito
+  // (p. ej. las apps cuyo editor no se puede identificar).
+  footer = null,
 }) {
   const [expandedRows, setExpandedRows] = React.useState({});
   const safeItems = Array.isArray(items) ? items : [];
@@ -669,6 +672,7 @@ export default function CompositionBars({
           })}
         </Box>
       )}
+      {footer ? <Box sx={{ mt: "auto", pt: 1.5 }}>{footer}</Box> : null}
     </Paper>
   );
 }

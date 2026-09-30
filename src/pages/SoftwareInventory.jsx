@@ -36,7 +36,12 @@ import {
   getSoftwareInventoryDetail,
   getSoftwareInventoryHosts,
   getSoftwareInventoryHostApps,
+  getSoftwareInsights,
+  putAuthorizedRemoteTools,
 } from "../api/inventoryDashboard";
+import SoftwareInsightCards from "../components/inventory/SoftwareInsightCards";
+import BehindNewestCard from "../components/inventory/BehindNewestCard";
+import { updateSearchParams } from "../utils/browserState";
 import { listFrom } from "../api/shape";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
@@ -48,57 +53,34 @@ import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel
 import BrowserExtensionsPanel from "../components/inventory/BrowserExtensionsPanel";
 import { formatCalendarDay, formatDate } from "../utils/format";
 import { rankingSubtitle } from "../utils/rankingSubtitle";
-import { SOFTWARE_ACCENTS } from "../theme/chartPalette";
+import { CHART_NEUTRAL, SOFTWARE_ACCENTS } from "../theme/chartPalette";
 
 
-function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
+// Lo que el ranking de editores deja fuera a propósito: apps cuyo editor no
+// identifica a nadie. 352 de las 424 de T111 eran de la Store, que manda un ID
+// (`CN=eb51a5da-…`) en vez de un nombre. Se dice aquí y no como un editor
+// llamado «Unknown» que salía segundo.
+function renderUnattributedPublishers(unattributed) {
+  const apps = Number(unattributed?.apps || 0);
+  if (apps <= 0) return null;
+  const store = Number(unattributed?.storePublisherIdOnly || 0);
   return (
-    <Paper
-      sx={{
-        p: 2,
-        width: "100%",
-        minHeight: 132,
-        height: "100%",
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-    >
-      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", lineHeight: 1.4 }}>
-        {title}
+    <Stack direction="row" spacing={1} alignItems="flex-start">
+      <Box sx={{ mt: 0.4, width: 10, height: 10, flexShrink: 0, borderRadius: 0.5, bgcolor: CHART_NEUTRAL.other }} />
+      <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
+        {apps.toLocaleString("en-US")} apps without an identifiable publisher
+        {store > 0 ? ` (${store.toLocaleString("en-US")} Store apps carry only a publisher ID)` : ""} — not ranked
       </Typography>
-
-      <Box>
-        <Typography
-          sx={{
-            fontSize: TEXT["3xl"],
-            fontWeight: 800,
-            color: accent,
-            lineHeight: 1.1,
-            mt: 1,
-          }}
-        >
-          {value}
-        </Typography>
-
-        {subtitle ? (
-          <Typography
-            sx={{
-              fontSize: TEXT.sm,
-              color: "text.secondary",
-              mt: 0.75,
-              lineHeight: 1.45,
-            }}
-          >
-            {subtitle}
-          </Typography>
-        ) : null}
-      </Box>
-    </Paper>
+    </Stack>
   );
+}
+
+function appsPerDeviceSubtitle(rankings) {
+  const median = rankings?.appsPerDeviceMedian;
+  const heaviest = (Array.isArray(rankings?.appsPerDevice) ? rankings.appsPerDevice : []).slice(0, 2);
+  if (median == null) return "Where the fleet sits, and how long the tail is";
+  const tail = heaviest.length ? ` · heaviest: ${heaviest.map((d) => `${d.label} (${d.value})`).join(", ")}` : "";
+  return `Median ${median} apps${tail}`;
 }
 
 function SectionCard({ title, children }) {
@@ -332,7 +314,14 @@ function RankingViewAllButton({ disabled = false, onClick }) {
   );
 }
 
-export default function SoftwareInventory({ refreshNonce = 0 }) {
+export default function SoftwareInventory({
+  refreshNonce = 0,
+  onNavigate,
+  onOpenDevice,
+  // ADMIN/OWNER activo: puede marcar herramientas de acceso remoto como
+  // autorizadas. Sólo decide qué se PINTA; el backend gatea con ese rol.
+  canAdminister = false,
+}) {
   const theme = useTheme();
   const rankingDialogFullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -368,6 +357,9 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
 
   const [summary, setSummary] = React.useState(null);
   const [rankings, setRankings] = React.useState(null);
+  const [insights, setInsights] = React.useState(null);
+  const [loadingInsights, setLoadingInsights] = React.useState(true);
+  const [insightsError, setInsightsError] = React.useState("");
   const [rankingDialog, setRankingDialog] = React.useState(null);
   const [rankingDialogSearch, setRankingDialogSearch] = React.useState("");
 
@@ -443,6 +435,35 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
       setLoadingSummary(false);
     }
   };
+
+  // Las tarjetas van por separado: la exposición a CVE tarda unos segundos
+  // (cruza bases) y no debe retener los gráficos ni la tabla.
+  const loadInsights = async () => {
+    try {
+      setLoadingInsights(true);
+      setInsights((await getSoftwareInsights()) || null);
+      setInsightsError("");
+    } catch (e) {
+      console.error(e);
+      setInsightsError("Couldn't load the software insights.");
+    } finally {
+      setLoadingInsights(false);
+    }
+  };
+
+  const saveAuthorizedRemoteTools = async (tools) => {
+    await putAuthorizedRemoteTools(tools);
+    setSnackbar({ open: true, message: "Authorized remote-access tools saved", severity: "success" });
+    await loadInsights();
+  };
+
+  const openVulnerabilities = onNavigate
+    ? () => {
+        // Patch Management lee la pestaña de la URL al montar.
+        updateSearchParams({ pmTab: "vulnerabilities" });
+        onNavigate("patch");
+      }
+    : undefined;
 
   const loadRankings = async () => {
     try {
@@ -549,6 +570,7 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
   React.useEffect(() => {
     loadSummary();
     loadRankings();
+    loadInsights();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshNonce]);
 
@@ -586,6 +608,7 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
   const refreshAll = () => {
     loadSummary();
     loadRankings();
+    loadInsights();
 
     if (appLevelDetail) {
       loadDetail();
@@ -676,17 +699,8 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
     [topPublishersItems]
   );
 
-  const versionFragmentationRows = React.useMemo(
-    () =>
-      normalizeRankingRows(
-        getRankingItems(rankings, "versionFragmentation").map((f) => ({
-          ...f,
-          // La linea de apoyo lleva el alcance: "10 versiones" en 2 equipos y
-          // en 50 son problemas de tamano muy distinto.
-          sub: `${Number(f.deviceCount || 0)} device${Number(f.deviceCount || 0) === 1 ? "" : "s"}`,
-        })),
-        SOFTWARE_ACCENTS.installed
-      ),
+  const behindNewestRows = React.useMemo(
+    () => (Array.isArray(rankings?.behindNewest) ? rankings.behindNewest : []),
     [rankings]
   );
 
@@ -910,71 +924,37 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
 
   return (
     <Box sx={{ px: 0, py: 0 }}>
+      {/* Los totales ya no son tarjetas: contar registros no dice si algo va
+          bien o mal. Quedan como contexto; las tarjetas responden preguntas. */}
+      <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1.5 }}>
+        {loadingSummary
+          ? "\u00a0"
+          : [
+              `${Number(summary?.installedApps || 0).toLocaleString("en-US")} apps`,
+              rankings?.topInstalledAppsDistinct != null
+                ? `${Number(rankings.topInstalledAppsDistinct).toLocaleString("en-US")} distinct`
+                : null,
+              // La cifra del ranking, no la del resumen: el ranking fusiona
+              // variantes ("Microsoft Corporation" = "Microsoft").
+              rankings?.topPublishersDistinct != null
+                ? `${Number(rankings.topPublishersDistinct).toLocaleString("en-US")} publishers`
+                : null,
+              `${Number(summary?.devicesReportingSoftware || 0).toLocaleString("en-US")} devices reporting`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+      </Typography>
+
       <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
-            <SummaryCard
-              title="Devices Reporting Software"
-              value={loadingSummary ? "..." : Number(summary?.devicesReportingSoftware || 0)}
-              accent={SOFTWARE_ACCENTS.installed}
-              subtitle={
-                loadingSummary
-                  ? ""
-                  : "Devices with software inventory reported"
-              }
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
-            <SummaryCard
-              title="Installed Apps"
-              value={loadingSummary ? "..." : Number(summary?.installedApps || 0)}
-              accent={SOFTWARE_ACCENTS.installed}
-              subtitle={
-                loadingSummary
-                  ? ""
-                  : "Total installed application records"
-              }
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
-            <SummaryCard
-              title="Unique App Names"
-              value={loadingSummary ? "..." : Number(summary?.uniqueAppNames || 0)}
-              accent={SOFTWARE_ACCENTS.sources}
-              subtitle={
-                loadingSummary
-                  ? ""
-                  : "Distinct application names detected"
-              }
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
-            <SummaryCard
-              title="Publishers"
-              // ⚠️ La cifra del ranking, no la del resumen. El resumen cuenta
-              // la columna cruda `publisher`; el ranking fusiona variantes
-              // ("Microsoft Corporation" = "Microsoft") y deduce el editor del
-              // bundle id cuando falta. T1, 24-sep: tarjeta 107, «View all»
-              // «top 25 of 164» — dos cifras para la misma pregunta.
-              value={
-                rankings?.topPublishersDistinct != null
-                  ? Number(rankings.topPublishersDistinct)
-                  : loadingSummary
-                  ? "..."
-                  : Number(summary?.publishers || 0)
-              }
-              accent={SOFTWARE_ACCENTS.publishers}
-              subtitle={
-                loadingSummary
-                  ? ""
-                  : "Software publishers identified"
-              }
-            />
-          </Grid>
-        </Grid>
+        <SoftwareInsightCards
+          insights={insights}
+          loading={loadingInsights && !insights}
+          error={insightsError}
+          canAdminister={canAdminister}
+          onOpenVulnerabilities={openVulnerabilities}
+          onOpenDevice={onOpenDevice}
+          onSaveAuthorized={saveAuthorizedRemoteTools}
+        />
       </Box>
 
       {/* Browser posture — attack-surface lens over the installed-software
@@ -1043,6 +1023,7 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
                 reserveHeaderExtraSpace
                 maxItems={5}
                 totalValue={topPublishersTotal}
+                footer={renderUnattributedPublishers(rankings?.topPublishersUnattributed)}
                 headerExtra={renderViewAllButton({
                   title: "Top publishers",
                   subtitle: rankingSubtitle(topPublishersRows, rankings?.topPublishersDistinct, "publishers"),
@@ -1059,33 +1040,28 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
 
           <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
             <Box sx={{ width: "100%" }}>
-              {/* ⚠️ Reemplaza a "Top sources", que en el tenant 111 tenia DOS
-                  filas — la misma regla que retiro Platforms de Hardware:
-                  un ranking de dos no es un ranking.
-
-                  Esta es la lectura que ninguna grafica daba: "Chrome esta en
-                  24 equipos" no dice nada sobre si esos 24 estan
-                  sincronizados. Medido en el 111: Chrome con 10 versiones
-                  distintas, Edge con 9, y el propio Tracenium Agent con 7 en
-                  53 equipos. */}
-              <CompositionBars
-                title="Version fragmentation"
-                items={versionFragmentationRows}
-                totalLabel="versions"
-                emptyLabel="Every app runs a single version"
-                minHeight={260}
-                maxItems={5}
+              {/* Sustituye a «Version fragmentation» (29-sep): «RingCentral, 13
+                  versiones» no decía si el problema eran 2 equipos o 28. Esto
+                  sí: cuántos NO están en la versión más nueva de la flota.
+                  Una fila filtra la tabla por esa app. */}
+              <BehindNewestCard
+                rows={behindNewestRows}
+                onSelect={(label) => selectRankingFilter("app", label)}
+                activeLabel={rankingFilter?.kind === "app" ? rankingFilter.label : null}
                 headerExtra={renderViewAllButton({
-                  title: "Version fragmentation",
-                  subtitle: rankingSubtitle(
-                    versionFragmentationRows,
-                    rankings?.versionFragmentationTotal,
-                    "apps with 3+ versions"
-                  ),
-                  items: versionFragmentationRows,
-                  totalLabel: "versions",
+                  title: "Behind the newest version",
+                  subtitle: rankingSubtitle(behindNewestRows, rankings?.behindNewestDistinct, "apps behind"),
+                  items: behindNewestRows.map((r, i) => ({
+                    id: `${r.label}-${i}`,
+                    label: r.label,
+                    value: Number(r.behind || 0),
+                    sub: `of ${Number(r.deviceCount || 0)} devices · newest ${r.newest}`,
+                    color: SOFTWARE_ACCENTS.drift,
+                  })),
+                  totalLabel: "devices behind",
                   labelHeader: "Application",
-                  valueHeader: "Versions",
+                  valueHeader: "Behind",
+                  onSelect: (label) => selectRankingFilter("app", label),
                 })}
               />
             </Box>
@@ -1099,9 +1075,13 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
                   ordena; una distribucion tiene forma. */}
               <DistributionHistogram
                 title="Apps per device"
-                subtitle="Where the fleet sits, and how long the tail is"
+                subtitle={appsPerDeviceSubtitle(rankings)}
                 buckets={appsPerDeviceBuckets}
                 emptyLabel="No software inventory yet"
+                color={SOFTWARE_ACCENTS.spread}
+                tailColor={BRAND.dark}
+                markMedian
+                footnote="Dashed: the bucket holding the median · dark: the tail"
               />
             </Box>
           </Grid>

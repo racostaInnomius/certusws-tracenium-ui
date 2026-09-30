@@ -40,6 +40,18 @@ export async function getSoftwareInventoryHosts(params = {}) {
   return httpGetJson(`${BASE}/software-inventory/hosts${buildQuery(params)}`);
 }
 
+// Las cuatro tarjetas de Software Inventory: software vulnerable, acceso
+// remoto no autorizado, apps raras y frescura del inventario.
+export async function getSoftwareInsights() {
+  return httpGetJson(`${BASE}/software-inventory/insights`);
+}
+
+// Qué herramientas de acceso remoto usa el propio MSP (claves de
+// remote-access-tools en el backend). Sustituye la lista entera.
+export async function putAuthorizedRemoteTools(tools) {
+  return httpPutJson(`${BASE}/software-inventory/remote-access/authorized`, { tools });
+}
+
 export async function getSoftwareInventoryHostApps(agentId, params = {}) {
   return httpGetJson(
     `${BASE}/software-inventory/hosts/${encodeURIComponent(agentId)}/apps${buildQuery(params)}`

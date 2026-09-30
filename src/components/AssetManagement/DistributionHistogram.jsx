@@ -38,12 +38,24 @@ export default function DistributionHistogram({
   /** Nota al pie para lo que no cabe en ningún cubo (equipos sin medir). */
   footnote,
   onFootnoteClick,
+  /** Color de las columnas. Cada gráfico el suyo: todos en teal parecían el mismo. */
+  color = BRAND.teal,
+  /** Color del ÚLTIMO cubo (la cola), para que se lea como tal. */
+  tailColor = null,
+  /** Marca el cubo donde cae el equipo mediano (borde discontinuo). */
+  markMedian = false,
 }) {
   const rows = Array.isArray(buckets) ? buckets : [];
   const measured = rows.reduce((acc, b) => acc + Number(b?.count || 0), 0);
   // La columna más alta define la escala. Con `1` de piso, una flota con un
   // solo equipo no divide entre cero.
   const peak = Math.max(1, ...rows.map((b) => Number(b?.count || 0)));
+  // El cubo del equipo mediano: donde la suma acumulada llega a la mitad. No
+  // hacen falta los límites de cada cubo, sólo su orden.
+  let acc = 0;
+  const medianIndex =
+    markMedian && measured > 0 ? rows.findIndex((b) => (acc += Number(b?.count || 0)) >= measured / 2) : -1;
+  const clickable = typeof onSelect === "function";
 
   return (
     <Paper
@@ -89,31 +101,41 @@ export default function DistributionHistogram({
             gap: 0.75,
           }}
         >
-          {rows.map((b) => {
+          {rows.map((b, index) => {
             const count = Number(b?.count || 0);
             const active = activeFilter === b.key;
-            const color = b.alarming ? ROLE.critical : BRAND.teal;
+            const isTail = tailColor && index === rows.length - 1;
+            const barColor = b.alarming ? ROLE.critical : isTail ? tailColor : color;
+            const isMedian = index === medianIndex;
 
             return (
-              <Tooltip key={b.key} title={`${count} device${count === 1 ? "" : "s"} · ${b.label}`}>
+              <Tooltip
+                key={b.key ?? b.label}
+                title={`${count} device${count === 1 ? "" : "s"} · ${b.label}${isMedian ? " · holds the median" : ""}`}
+              >
                 <Box
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={active}
-                  aria-label={`${b.label}: ${count} devices`}
-                  onClick={() => onSelect?.(b.key)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSelect?.(b.key);
-                    }
-                  }}
+                  // Sin `onSelect` la columna no hace nada: no se anuncia como botón.
+                  {...(clickable
+                    ? {
+                        role: "button",
+                        tabIndex: 0,
+                        "aria-pressed": active,
+                        onClick: () => onSelect(b.key),
+                        onKeyDown: (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onSelect(b.key);
+                          }
+                        },
+                      }
+                    : {})}
+                  aria-label={`${b.label}: ${count} devices${isMedian ? " (median)" : ""}`}
                   sx={{
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "flex-end",
                     height: "100%",
-                    cursor: "pointer",
+                    cursor: clickable ? "pointer" : "default",
                     borderRadius: 1.5,
                     p: 0.5,
                     bgcolor: active ? BRAND.tealSoft : "transparent",
@@ -142,9 +164,11 @@ export default function DistributionHistogram({
                       // con pocos equipos siga siendo visible y clicable.
                       height: count === 0 ? 2 : Math.max(3, (count / peak) * CHART_HEIGHT),
                       borderRadius: 1,
-                      bgcolor: count === 0 ? BRAND.border : color,
-                      opacity: active ? 1 : 0.85,
+                      bgcolor: count === 0 ? BRAND.border : barColor,
+                      opacity: active || isTail ? 1 : 0.85,
                       transition: "opacity 160ms ease",
+                      outline: isMedian ? `2px dashed ${color}` : "none",
+                      outlineOffset: 2,
                     }}
                   />
 
