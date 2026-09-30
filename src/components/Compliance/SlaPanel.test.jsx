@@ -17,6 +17,8 @@ vi.mock("../../api/compliance", () => ({
   getComplianceSla: vi.fn(),
   updateComplianceSettings: vi.fn(),
 }));
+vi.mock("../../api/alerts", () => ({ getAlertRules: vi.fn() }));
+import { getAlertRules } from "../../api/alerts";
 
 import { getComplianceSla, updateComplianceSettings } from "../../api/compliance";
 import SlaPanel, { headline, targetText } from "./SlaPanel";
@@ -45,6 +47,7 @@ const sla = (over = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getAlertRules.mockResolvedValue({ rules: [] });
   getComplianceSla.mockResolvedValue(sla());
   updateComplianceSettings.mockResolvedValue({ ok: true });
 });
@@ -61,10 +64,19 @@ describe("el titular", () => {
     expect(headline({ configured: true, compliancePct: null, breached: 0 }).tone).toBe("info");
   });
 
-  it("con incumplimientos, los cuenta", () => {
-    const h = headline({ configured: true, compliancePct: 50, breached: 2 });
-    expect(h.tone).toBe("error");
-    expect(h.text).toMatch(/2 open findings past the committed time/i);
+  it("⭐ el tono es proporcional: vencidos = ámbar; rojo sólo si es crítico", () => {
+    // T1 el 30-sep: 99,9 % dentro de plazo y 6 vencidos se pintaban como una
+    // emergencia a todo lo ancho.
+    const h = headline({ configured: true, compliancePct: 99.9, breached: 6, atRisk: 9, bySeverity: [{ severity: "high", breached: 6 }] });
+    expect(h.tone).toBe("warning");
+    expect(h.text).toBe("6 past due · 9 due soon");
+    expect(headline({ configured: true, compliancePct: 90, breached: 1, bySeverity: [{ severity: "critical", breached: 1 }] }).tone).toBe("error");
+    expect(headline({ configured: true, compliancePct: 90, breached: 1, breachedOnCritical: 1 }).tone).toBe("error");
+  });
+
+  it("nada vencido pero algo por vencer: aviso, no verde", () => {
+    const h = headline({ configured: true, compliancePct: 100, breached: 0, atRisk: 3 });
+    expect(h).toEqual({ text: "None past due · 3 due soon", tone: "info" });
   });
 
   it("todo dentro de plazo sí es verde", () => {
@@ -156,7 +168,7 @@ describe("fijar los objetivos", () => {
 describe("la criticidad en el SLA", () => {
   it("el titular dice cuántos vencidos caen en equipos críticos", () => {
     const h = headline({ configured: true, compliancePct: 50, breached: 4, breachedOnCritical: 2 });
-    expect(h.text).toMatch(/4 open findings past the committed time — 2 on critical devices/);
+    expect(h.text).toMatch(/4 past due — 2 on critical devices/);
   });
 
   it("null o 0 no añaden nada: «0 on critical» afirmaría lo que no se sabe", () => {
@@ -164,3 +176,44 @@ describe("la criticidad en el SLA", () => {
     expect(headline({ configured: true, compliancePct: 50, breached: 4, breachedOnCritical: 0 }).text).not.toMatch(/critical/);
   });
 });
+
+describe("la franja y lo que se puede hacer", () => {
+  it("⭐ el % dentro de plazo manda; vencidos y por vencer al lado", async () => {
+    render(<SlaPanel />);
+    const strip = await screen.findByTestId("sla-summary");
+    expect(strip).toHaveTextContent("50%within target");
+    expect(strip).toHaveTextContent("2 of 4 measured findings");
+    expect(strip).toHaveTextContent("2past due");
+    expect(strip).toHaveTextContent("1due soon");
+    expect(strip).toHaveAttribute("data-tone", "error"); // hay un crítico vencido
+  });
+
+  it("⭐ «Due next»: los que todavía se pueden salvar, con lo que les queda", async () => {
+    getComplianceSla.mockResolvedValue(sla({
+      dueNext: [{ deviceId: "d9", checkId: "c9", hostname: "SRV-DC01", title: "LDAP signing", daysLeft: 0.7, criticality: "critical" }],
+    }));
+    render(<SlaPanel />);
+    expect(await screen.findByText(/Due next/)).toBeInTheDocument();
+    expect(screen.getByText(/SRV-DC01 · LDAP signing/)).toBeInTheDocument();
+    expect(screen.getByText("0.7 d")).toBeInTheDocument();
+  });
+
+  it("⭐ sin la alerta encendida, la ofrece; encendida, lo dice", async () => {
+    const onOpenAlertRules = vi.fn();
+    render(<SlaPanel onOpenAlertRules={onOpenAlertRules} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Alert me before targets are missed/ }));
+    expect(onOpenAlertRules).toHaveBeenCalledTimes(1);
+    cleanup();
+    getAlertRules.mockResolvedValue({ rules: [{ source: "compliance_sla", enabled: true }] });
+    render(<SlaPanel onOpenAlertRules={onOpenAlertRules} />);
+    expect(await screen.findByText("Alerting before targets are missed")).toBeInTheDocument();
+  });
+
+  it("sin permiso de alertas no ofrece nada (no un botón que da 403)", async () => {
+    getAlertRules.mockRejectedValue(Object.assign(new Error("forbidden"), { status: 403 }));
+    render(<SlaPanel onOpenAlertRules={vi.fn()} />);
+    await screen.findByTestId("sla-summary");
+    expect(screen.queryByRole("button", { name: /Alert me/ })).toBeNull();
+  });
+});
+

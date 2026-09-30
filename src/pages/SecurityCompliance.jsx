@@ -761,6 +761,8 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // tecla del buscador.
   const notifyToast = React.useCallback((severity, message) => showToast({ severity, message }), [showToast]);
   const hideToast = React.useCallback(() => setToast(null), []);
+  // «Remediation targets» ofrece encender su alerta: Alerts → Rules.
+  const openAlertRules = React.useCallback(() => navigateTo("alerts", { alertsTab: "rules" }), []);
 
   // ── macOS: lo que sólo cumple un perfil ─────────────────────────────
   //
@@ -1290,7 +1292,12 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         <Stack spacing={2}>
           {/* El compromiso va ENCIMA de la cola: es lo que decide qué se hace
               primero, así que se lee antes que la lista. */}
-          <SlaPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} />
+          <SlaPanel
+            reloadKey={refreshToken}
+            onToast={showToast}
+            canManage={canManage}
+            onOpenAlertRules={openAlertRules}
+          />
           <RemediationHubPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} />
         </Stack>
       ) : null}
