@@ -280,3 +280,56 @@ export function pendingRequestLine(pending) {
   if (to) parts.push(`would expire ${to}`);
   return parts.join(" · ");
 }
+
+/**
+ * Parte la tendencia en tramos que SÍ son comparables entre sí.
+ *
+ * ⚠️ El score es un ratio de aprobados ponderado, así que **se infla al ampliar
+ * el catálogo**: el 30-sep pasó de 68 a 75 al añadir 16 indicadores que el
+ * dominio pasa, sin que cambiara nada. Con la serie 51 → 65 → 68 → 75 unida por
+ * una línea, el cliente lee dos semanas de mejoras donde no hubo ninguna: los
+ * cuatro saltos son ampliaciones del catálogo (30 → 44 → 47 → 63).
+ *
+ * Así que sólo se unen los puntos medidos con el MISMO catálogo. Cuando cada
+ * punto trae una versión distinta el resultado son puntos sueltos, y eso es
+ * exactamente la verdad: no son comparables.
+ *
+ * Un punto sin versión (`null`) abre tramo propio: es anterior a la columna y no
+ * se puede afirmar que casara con el vecino.
+ */
+export function trendSegments(history) {
+  const rows = Array.isArray(history) ? history : [];
+  const points = rows.map((h, i) => ({
+    at: h?.scoredAt ?? null,
+    score: typeof h?.score === "number" ? h.score : null,
+    openFindings: typeof h?.openFindings === "number" ? h.openFindings : null,
+    catalogVersion: h?.catalogVersion ?? null,
+    i,
+  }));
+  const segments = [];
+  points.forEach((p, i) => {
+    const prev = points[i - 1];
+    const sigue = prev && prev.catalogVersion !== null && p.catalogVersion !== null && prev.catalogVersion === p.catalogVersion;
+    if (!sigue) segments.push({ key: `seg${segments.length}`, version: p.catalogVersion, from: i, to: i });
+    else segments[segments.length - 1].to = i;
+  });
+  // Cada tramo lleva su propio campo, con valor sólo dentro del tramo: así la
+  // gráfica no puede dibujar una línea entre dos catálogos ni por descuido.
+  for (const seg of segments) {
+    for (const p of points) p[seg.key] = p.i >= seg.from && p.i <= seg.to ? p.score : null;
+  }
+  return { points, segments };
+}
+
+/**
+ * Los cambios de catálogo, para marcarlos en el eje. Van como aviso visible y no
+ * como nota al pie: es la diferencia entre «aquí cambió lo que medimos» y dejar
+ * que alguien lea una mejora que no existe.
+ */
+export function catalogChanges(history) {
+  const { segments } = trendSegments(history);
+  return segments
+    .slice(1)
+    .filter((s) => s.version)
+    .map((s) => ({ at: (Array.isArray(history) ? history : [])[s.from]?.scoredAt ?? null, version: s.version }));
+}

@@ -336,6 +336,52 @@ describe("Assessment Suite — detalle", () => {
     await waitFor(() => expect(calls.some((c) => c.request?.riskOwner === "ciso@t111.example")).toBe(true));
   });
 
+  it("🔴 la tendencia NO une puntos de catálogos distintos, y lo dice", async () => {
+    // La serie real de T111: 51 → 65 → 68 → 75, cada punto con un catálogo
+    // distinto. Unida por una línea se lee como dos semanas de mejoras, y no hubo
+    // ninguna: los cuatro saltos son ampliaciones del catálogo y los 20 fallos
+    // siguen ahí. El score es un ratio, así que ensancharlo lo sube solo.
+    const conVersiones = {
+      ...DETAIL,
+      history: [
+        { runId: "h1", scoredAt: "2026-09-14T02:05:00Z", score: 51, openFindings: 14, catalogVersion: "1.0.0", bySeverity: {} },
+        { runId: "h2", scoredAt: "2026-09-21T02:03:00Z", score: 65, openFindings: 18, catalogVersion: "1.1.0", bySeverity: {} },
+        { runId: "h3", scoredAt: "2026-09-28T22:43:00Z", score: 68, openFindings: 20, catalogVersion: "1.2.0", bySeverity: {} },
+        { runId: "h4", scoredAt: "2026-09-30T00:49:00Z", score: 75, openFindings: 23, catalogVersion: "1.7.0", bySeverity: {} },
+      ],
+    };
+    const user = userEvent.setup();
+    mount({ detail: conVersiones });
+    await user.click(await screen.findByText("mountainside-investment.com"));
+
+    // El aviso tiene que estar en la página, no en una nota que nadie lee.
+    expect(await screen.findByText(/widening the catalogue raises it on its own/)).toBeTruthy();
+    expect(screen.getByText(/are not joined, and are not comparable/)).toBeTruthy();
+
+    // Y la segunda serie: la que NO se infla.
+    expect(screen.getByText("Open findings over time")).toBeTruthy();
+    expect(screen.getByText(/does not go up just because the catalogue grew/)).toBeTruthy();
+  });
+
+  it("⚠️ con un solo catálogo en toda la serie no hay aviso: ahí la comparación sí vale", async () => {
+    const mismoCatalogo = {
+      ...DETAIL,
+      history: [
+        { runId: "h1", scoredAt: "2026-09-21T02:03:00Z", score: 68, openFindings: 20, catalogVersion: "1.7.0", bySeverity: {} },
+        { runId: "h2", scoredAt: "2026-09-28T02:03:00Z", score: 71, openFindings: 18, catalogVersion: "1.7.0", bySeverity: {} },
+      ],
+    };
+    const user = userEvent.setup();
+    mount({ detail: mismoCatalogo });
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    await screen.findByText("Score over time");
+    // Sin cambio de catálogo, sin aviso — no hay que asustar cuando el número sí
+    // es comparable.
+    expect(screen.queryByText(/are not joined, and are not comparable/)).toBeNull();
+    // Pero la serie de hallazgos se enseña igual: es la útil para el cliente.
+    expect(screen.getByText("Open findings over time")).toBeTruthy();
+  });
+
   it("⭐ Set target guarda el objetivo de la instancia", async () => {
     const user = userEvent.setup();
     const calls = mount();
