@@ -694,7 +694,15 @@ export default function DeviceDrawerContent({
                     {items.length} {items.length === 1 ? "control" : "controls"}
                     {!showOnlyFailures && failing.length > 0 ? ` · ${failing.length} failing` : ""}
                   </Typography>
+                  {/* El chip va el ÚLTIMO, pegado a la derecha: así los de todas
+                      las categorías quedan en una columna, haya o no texto de
+                      críticos delante. */}
                   <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1 }}>
+                    {severe > 0 ? (
+                      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.errorText, fontWeight: 700 }}>
+                        {severe} critical/high
+                      </Typography>
+                    ) : null}
                     {autoFixable > 0 ? (
                       <Chip
                         size="small"
@@ -702,11 +710,6 @@ export default function DeviceDrawerContent({
                         label={`${autoFixable} auto-fixable`}
                         sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText, "& .MuiChip-icon": { color: BRAND.tealText } }}
                       />
-                    ) : null}
-                    {severe > 0 ? (
-                      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.errorText, fontWeight: 700 }}>
-                        {severe} critical/high
-                      </Typography>
                     ) : null}
                   </Box>
                 </ButtonBase>
