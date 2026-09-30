@@ -16,8 +16,10 @@ import CatalogCoveragePanel, {
   catalogLine,
   coverageSegments,
   eligibleOf,
+  labelWidthPx,
   versionSummary,
 } from "./CatalogCoveragePanel";
+import { TEXT_MUTED } from "../../theme/brand";
 
 afterEach(cleanup);
 
@@ -259,5 +261,95 @@ describe("CatalogCoveragePanel", () => {
     row.focus();
     await userEvent.keyboard("{Enter}");
     expect(onNavigateTab).toHaveBeenCalledWith("catalog");
+  });
+});
+
+
+// ── El número dentro de cada tramo (30-sep) ─────────────────────────
+//
+// 🔴 EL DEFECTO. El número de un tramo se ocultaba con `pct >= 12`: un umbral
+// en PORCENTAJE para algo que depende de PÍXELES. A 1440 px la barra mide 829,
+// así que un tramo necesitaba 99 px para enseñar un «2» que ocupa 6. El tramo
+// amarillo de Edge —2 equipos por detrás, 30 px— salía vacío. Y son justo los
+// tramos pequeños los que piden acción.
+//
+// Ahora decide el propio tramo con una container query de CSS: esconde el
+// número sólo si no cabe. jsdom no evalúa container queries, así que aquí se
+// fija que el número ESTÉ en el DOM (antes se quitaba) y el cálculo de lo que
+// necesita; el ocultar/mostrar se comprobó en un navegador en el límite exacto
+// (un «2» necesita 14 px: con 13 se oculta, con 14 se ve).
+
+describe("labelWidthPx", () => {
+  it("8 px por cifra y 3 de aire a cada lado", () => {
+    // Medido con la fuente del tramo (bold 11 px): la cifra más ancha ocupa
+    // 7,6 px; «29» = 14,7; «100» = 20,9.
+    expect(labelWidthPx(2)).toBe(14);
+    expect(labelWidthPx(29)).toBe(22);
+    expect(labelWidthPx(100)).toBe(30);
+  });
+
+  it("🔴 un «2» cabe en mucho menos de lo que exigía el 12 % de una barra de 829 px", () => {
+    expect(labelWidthPx(2)).toBeLessThan(829 * 0.12);
+  });
+
+  it("no revienta con basura", () => {
+    expect(labelWidthPx(undefined)).toBe(14);
+    expect(labelWidthPx(-3)).toBe(14);
+  });
+});
+
+describe("el número dentro de la barra", () => {
+  /** El caso de campo: Edge con 53 al día y 2 por detrás, sobre 56. */
+  const edge = {
+    titleKey: "microsoft-edge",
+    name: "Microsoft Edge",
+    catalogVersion: "153.0.4234.48",
+    catalogVersions: [{ platform: "windows", version: "153.0.4234.48" }],
+    platforms: ["windows"],
+    eligibleDevices: 56,
+    installedDevices: 55,
+    missingDevices: 1,
+    current: 53,
+    ahead: 0,
+    behind: 2,
+    unknown: 0,
+    versions: [],
+  };
+
+  /** Los tramos de la barra, en orden, con el número que llevan dentro. */
+  function tramos() {
+    return [...document.querySelectorAll(".seg-count")].map((n) => n.textContent);
+  }
+
+  it("🔴 el tramo pequeño de «Behind» LLEVA su número (antes se quitaba del DOM)", async () => {
+    // 2 de 56 son el 3,6 %: con `pct >= 12` el tramo salía vacío.
+    render(<CatalogCoveragePanel coverage={{ totalDevices: 56, items: [edge], truncated: false }} />);
+    await screen.findByText("55/56");
+    expect(tramos()).toEqual(["53", "2", "1"]);
+  });
+
+  it("⚠️ un tramo con 0 equipos no pinta un «0»", async () => {
+    // `ahead` y `unknown` están a cero: ni ocupan sitio ni dicen nada.
+    render(<CatalogCoveragePanel coverage={{ totalDevices: 56, items: [edge], truncated: false }} />);
+    await screen.findByText("55/56");
+    expect(tramos()).not.toContain("0");
+  });
+
+  it("⚠️ el número de «Not installed» va en gris de TEXTO, no en blanco", async () => {
+    // No tiene relleno: es la trama gris clara de debajo. En blanco era
+    // invisible, y con `BRAND.gray` —que es un RELLENO— daba 1,5:1.
+    render(<CatalogCoveragePanel coverage={{ totalDevices: 56, items: [edge], truncated: false }} />);
+    await screen.findByText("55/56");
+    const hueco = [...document.querySelectorAll(".seg-count")].find((n) => n.textContent === "1");
+    const color = getComputedStyle(hueco.parentElement).color;
+    const esperado = (() => {
+      const d = document.createElement("div");
+      d.style.color = TEXT_MUTED;
+      document.body.appendChild(d);
+      const c = getComputedStyle(d).color;
+      d.remove();
+      return c;
+    })();
+    expect(color).toBe(esperado);
   });
 });

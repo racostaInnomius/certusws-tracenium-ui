@@ -45,7 +45,7 @@ import * as React from "react";
 import { Box, Skeleton, Stack, Tooltip, Typography } from "@mui/material";
 
 import SectionPaper from "../common/SectionPaper";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, ROLE, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 /** Cómo se pinta cada estado. El orden ES el de la barra, de mejor a peor. */
 const STATES = [
@@ -119,6 +119,22 @@ export function coverageSegments(item, totalDevices) {
     segments.push({ key: "missing", label: "Not installed", color: null, devices: missing, pct: pct(missing) });
   }
   return segments;
+}
+
+/**
+ * Los píxeles que necesita un tramo para enseñar su número sin cortarlo.
+ *
+ * 🔴 POR QUÉ EXISTE (30-sep). El número se ocultaba con `pct >= 12`: un umbral
+ * en PORCENTAJE para algo que depende de PÍXELES. A 1440 px la barra mide 829,
+ * así que hacían falta 99 px para ver un «2» que ocupa 6. El tramo amarillo de
+ * Edge —2 equipos por detrás, 30 px de ancho— salía vacío. Y son justo los
+ * tramos pequeños los que piden acción.
+ *
+ * Medido con la fuente del tramo (bold 11 px): la cifra más ancha ocupa 7,6 px
+ * («29» = 14,7; «100» = 20,9). 8 px por cifra y 3 de aire a cada lado.
+ */
+export function labelWidthPx(devices) {
+  return String(Math.max(0, Math.trunc(Number(devices) || 0))).length * 8 + 6;
 }
 
 /**
@@ -228,13 +244,38 @@ function CoverageRow({ item, totalDevices, onOpen, onOpenCell }) {
                   bgcolor: seg.color ?? "transparent",
                   display: "grid",
                   placeItems: "center",
-                  color: seg.key === "behind" ? BRAND.alert.warningText : BRAND.surface,
+                  // ⚠️ «Not installed» no tiene relleno: es la trama gris clara
+                  // de debajo. Con el blanco de los demás tramos su número era
+                  // invisible —pasaba ya antes, con los tramos ≥ 12 %—.
+                  // `TEXT_MUTED` y NO `BRAND.gray`: ése es un RELLENO (#BEBEBE)
+                  // y sobre la trama daba 1,5:1, igual de ilegible.
+                  color:
+                    seg.key === "behind"
+                      ? BRAND.alert.warningText
+                      : seg.key === "missing"
+                        ? TEXT_MUTED
+                        : BRAND.surface,
                   fontSize: TEXT.xs,
                   fontWeight: 700,
                   cursor: onOpenCell ? "pointer" : "default",
+                  overflow: "hidden",
+                  // ⚠️ EL NÚMERO SE OCULTA SÓLO SI NO CABE, y lo decide el
+                  // propio tramo con su ancho real. Antes era `pct >= 12`, que
+                  // a 1440 px exigía 99 px para un «2» de 6: el tramo amarillo
+                  // de 2 equipos por detrás salía vacío. Una container query y
+                  // no un ResizeObserver: es CSS, no mide nada en JavaScript y
+                  // no depende del ancho de la pantalla.
+                  containerType: "inline-size",
+                  [`@container (max-width: ${labelWidthPx(seg.devices) - 0.5}px)`]: {
+                    // ⚠️ Clase propia, no «n»: ése es el nombre del título de
+                    // la fila, con su propia regla de hover.
+                    "& .seg-count": { visibility: "hidden" },
+                  },
                 }}
               >
-                {seg.pct >= 12 ? seg.devices : ""}
+                {/* Sin guarda de «> 0»: coverageSegments ya descarta los
+                    tramos vacíos, y aquí sería código que nunca decide nada. */}
+                <span className="seg-count">{seg.devices}</span>
               </Box>
             </Tooltip>
           ))}
