@@ -60,12 +60,12 @@ export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
               </Grid>
             ) : null}
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <Field label="Commands and policies to devices">
+              <Field label="Commands to devices">
                 {commands ? (
                   <StatusChip
                     status={commands.deliverable
-                      ? { label: "Delivered", tone: "positive" }
-                      : { label: "Not delivered yet", tone: "caution" }}
+                      ? { label: "Within seconds", tone: "positive" }
+                      : { label: "On check-in, ~4 h", tone: "info" }}
                   />
                 ) : "—"}
               </Field>
@@ -84,15 +84,17 @@ export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
           ) : null}
           {commands && !commands.deliverable && commands.reason === "sender_not_available" ? (
             <Typography variant="body2" sx={{ color: "text.secondary", mt: 1.5 }}>
-              The Apple push certificate is installed. Sending commands and policies to Macs, iPhones
-              and iPads isn&apos;t available yet; enrolled devices keep reporting in the meantime.
+              The Apple push certificate is installed. Commands reach Macs, iPhones and iPads on their
+              automatic check-in, about every 4 hours: delivery within seconds through Apple push
+              isn&apos;t switched on yet.
             </Typography>
           ) : null}
           {commands && !commands.deliverable && commands.reason !== "sender_not_available" ? (
             <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, mt: 1.5 }}>
               <Typography variant="body2" sx={{ color: "text.secondary", flex: "1 1 320px" }}>
-                Macs, iPhones and iPads can enroll and report, but Tracenium can&apos;t wake them to
-                deliver commands or policies until the Apple push certificate is set up.
+                Commands reach Macs, iPhones and iPads on their automatic check-in, about every 4
+                hours. With the Apple push certificate set up, Tracenium wakes them and commands
+                arrive within seconds.
               </Typography>
               {pushCertificate ? (
                 <Button

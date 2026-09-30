@@ -237,3 +237,43 @@ export function formatDeviceLocalDateTime(value) {
   const month = new Date(Date.UTC(2000, +m[2] - 1, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
   return `${month} ${m[3]}, ${m[1]} at ${m[4]}:${m[5]}`;
 }
+
+// ── La versión, del escaneo del agente (30-sep) ─────────────────────────────
+//
+// El backend busca el agente de Tracenium con el mismo número de serie y
+// devuelve las actualizaciones de macOS que su escaneo encontró
+// (detected-os-updates.ts). Elegir una evita teclear versión y build: una
+// errata sólo se vería horas después, cuando el Mac dice que falló.
+
+/** Las actualizaciones que se pueden elegir, o [] si no hay escaneo que las respalde. */
+export function detectedOsUpdates(detected) {
+  return detected?.status === "linked" && Array.isArray(detected.updates) ? detected.updates : [];
+}
+
+export function detectedUpdateKey(u) {
+  return `${u.version}-${u.build}`;
+}
+
+/** «macOS Tahoe 26.7.1 (25G241)»: el nombre que da Apple y el build. */
+export function detectedUpdateLabel(u) {
+  return `${u.title || `macOS ${u.version}`} (${u.build})`;
+}
+
+/**
+ * Por qué se escribe a mano, o null si no hay nada que decir (un backend
+ * anterior que no manda `detected`). `when` es la hora del escaneo ya
+ * formateada, o null.
+ */
+export function manualVersionNote(detected, { chosen = false, when = null } = {}) {
+  if (!detected) return null;
+  if (chosen) {
+    return "Not confirmed by a scan of this Mac: a typo only shows up hours later, when the Mac reports that the update failed.";
+  }
+  if (detected.status === "linked") {
+    return `The agent's last scan of this Mac${when ? ` (${when})` : ""} found no macOS update. Enter one only if Software Update on the Mac offers it.`;
+  }
+  if (detected.status === "no_agent") {
+    return "No Tracenium agent reports this Mac's serial number, so no scan confirms the version. Copy it from Software Update on the Mac.";
+  }
+  return "Couldn't read this Mac's scan. Copy the version from Software Update on the Mac.";
+}

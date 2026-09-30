@@ -15,6 +15,9 @@ import {
   pushCertificateStatus,
   requestBlocker,
   STALE_AFTER_MS,
+  detectedOsUpdates,
+  detectedUpdateLabel,
+  manualVersionNote,
 } from "./mdmModel";
 
 const NOW = Date.parse("2026-09-28T20:00:00Z");
@@ -159,5 +162,28 @@ describe("actualización del sistema (DDM)", () => {
     expect(osUpdateInstallState("failed").tone).toBe("critical");
     expect(osUpdateInstallState(undefined).label).toBe("No report yet");
     expect(formatDeviceLocalDateTime("2026-10-02T18:00:00")).toBe("Oct 02, 2026 at 18:00");
+  });
+});
+
+describe("versión del escaneo del agente", () => {
+  const U = { version: "26.7.1", build: "25G241", label: "macOS Tahoe 26.7.1-25G241", title: "macOS Tahoe 26.7.1" };
+
+  it("sólo un Mac enlazado ofrece candidatas", () => {
+    expect(detectedOsUpdates({ status: "linked", updates: [U] })).toEqual([U]);
+    expect(detectedOsUpdates({ status: "no_agent" })).toEqual([]);
+    expect(detectedOsUpdates(undefined)).toEqual([]);
+  });
+
+  it("la etiqueta: el nombre de Apple y el build", () => {
+    expect(detectedUpdateLabel(U)).toBe("macOS Tahoe 26.7.1 (25G241)");
+    expect(detectedUpdateLabel({ ...U, title: null })).toBe("macOS 26.7.1 (25G241)");
+  });
+
+  it("a mano, dice por qué — y nada si el backend no manda `detected`", () => {
+    expect(manualVersionNote(undefined)).toBeNull();
+    expect(manualVersionNote({ status: "linked", updates: [U] }, { chosen: true })).toMatch(/not confirmed by a scan/i);
+    expect(manualVersionNote({ status: "linked", updates: [] }, { when: "2 hours ago" })).toMatch(/last scan of this Mac \(2 hours ago\) found no macOS update/);
+    expect(manualVersionNote({ status: "no_agent" })).toMatch(/no tracenium agent reports this mac's serial number/i);
+    expect(manualVersionNote({ status: "unavailable" })).toMatch(/couldn't read this mac's scan/i);
   });
 });

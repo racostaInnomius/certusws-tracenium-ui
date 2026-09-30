@@ -148,11 +148,12 @@ function mount(search = "") {
 }
 
 describe("MDM / MAM — Overview", () => {
-  it("dice lo que funciona hoy: se enrola, los comandos no se entregan", async () => {
+  it("❗ dice lo que funciona hoy: los comandos llegan; sin push, en la conexión automática (~4 h)", async () => {
     mount();
     expect(await screen.findByText("Available")).toBeTruthy();
-    expect(screen.getByText("Not delivered yet")).toBeTruthy();
-    expect(screen.getByText(/can't wake them to deliver commands/i)).toBeTruthy();
+    expect(screen.getByText("On check-in, ~4 h")).toBeTruthy();
+    expect(screen.getByText(/automatic check-in, about every 4 hours/i)).toBeTruthy();
+    expect(screen.queryByText(/can't wake them to deliver commands/i)).toBeNull();
   });
 
   it("sin configuración de alta, dice qué falta", async () => {
@@ -241,7 +242,7 @@ describe("MDM / MAM — Enrollment", () => {
 
   it("avisa de que lo enrolado hoy tendrá que re-enrolarse con el certificado", async () => {
     mount("&mdmTab=enrollment");
-    expect(await screen.findByText(/will need to enroll again then/i)).toBeTruthy();
+    expect(await screen.findByText(/after enrolling again, because push is tied to the certificate/i)).toBeTruthy();
   });
 });
 
@@ -364,6 +365,74 @@ describe("MDM / MAM — forzar una actualización del sistema (DDM)", () => {
     await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
     return screen.findByLabelText("OS update");
   }
+  const MAC_27 = { version: "27.0.1", build: "26A434", label: "macOS 27.0.1-26A434", title: "macOS 27.0.1" };
+  const TAHOE = { version: "26.7.1", build: "25G241", label: "macOS Tahoe 26.7.1-25G241", title: "macOS Tahoe 26.7.1" };
+  const linked = (updates) => ({ status: "linked", agentId: "mac-1", scannedAt: new Date().toISOString(), updates });
+  async function pickDateTime(panel) {
+    const due = new Date(Date.now() + 2 * 86_400_000);
+    const day = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
+    fireEvent.change(within(panel).getByLabelText("Install by"), { target: { value: day } });
+    fireEvent.change(within(panel).getByLabelText("Device time"), { target: { value: "21:00" } });
+    return day;
+  }
+
+  it("❗ el cajón no dice que no se le pueden mandar comandos: llegan en su conexión automática", async () => {
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    expect(await screen.findByText(/they arrive on its automatic check-in, about every 4 hours; with the apple push certificate set up, within seconds/i)).toBeTruthy();
+    expect(screen.queryByText(/once the Apple push certificate is set up/i)).toBeNull();
+  });
+
+  it("⭐ la versión sale del escaneo del agente: una sola candidata va elegida y se manda tal cual", async () => {
+    const user = userEvent.setup();
+    state.osUpdate.detected = linked([MAC_27]);
+    const panel = await openMac();
+    expect(await within(panel).findByText("macOS 27.0.1 (26A434)")).toBeTruthy();
+    expect(within(panel).getByText(/from the tracenium agent's scan of this mac/i)).toBeTruthy();
+    expect(within(panel).queryByLabelText("Version")).toBeNull();
+    const day = await pickDateTime(panel);
+    await user.click(within(panel).getByRole("button", { name: "Schedule update" }));
+    await user.click(await screen.findByRole("button", { name: "Schedule update", hidden: false }));
+    await waitFor(() => expect(state.osPuts).toHaveLength(1));
+    expect(state.osPuts[0].body).toEqual({ targetOSVersion: "27.0.1", targetBuildVersion: "26A434", targetLocalDateTime: `${day}T21:00:00` });
+  });
+
+  it("❗ con varias candidatas (26.7.1 o 27.0.1) no se elige por el operador", async () => {
+    const user = userEvent.setup();
+    state.osUpdate.detected = linked([MAC_27, TAHOE]);
+    const panel = await openMac();
+    await within(panel).findByLabelText("Update");
+    await pickDateTime(panel);
+    await user.click(within(panel).getByRole("button", { name: "Schedule update" }));
+    expect(await within(panel).findByText("Choose the update to force.")).toBeTruthy();
+    expect(state.osPuts).toHaveLength(0);
+
+    await user.click(within(panel).getByLabelText("Update"));
+    await user.click(await screen.findByRole("option", { name: "macOS Tahoe 26.7.1 (25G241)" }));
+    await user.click(within(panel).getByRole("button", { name: "Schedule update" }));
+    await user.click(await screen.findByRole("button", { name: "Schedule update", hidden: false }));
+    await waitFor(() => expect(state.osPuts).toHaveLength(1));
+    expect(state.osPuts[0].body).toMatchObject({ targetOSVersion: "26.7.1", targetBuildVersion: "25G241" });
+  });
+
+  it("escribirla a mano sigue ahí, con el aviso de que ningún escaneo la confirma", async () => {
+    const user = userEvent.setup();
+    state.osUpdate.detected = linked([MAC_27]);
+    const panel = await openMac();
+    await user.click(await within(panel).findByRole("button", { name: "Enter a version manually" }));
+    expect(within(panel).getByLabelText("Version")).toBeTruthy();
+    expect(within(panel).getByText(/not confirmed by a scan of this mac/i)).toBeTruthy();
+    await user.click(within(panel).getByRole("button", { name: "Pick a detected update" }));
+    expect(within(panel).queryByLabelText("Version")).toBeNull();
+  });
+
+  it("un Mac sin agente: a mano, y dice por qué", async () => {
+    state.osUpdate.detected = { status: "no_agent" };
+    const panel = await openMac();
+    expect(await within(panel).findByText(/no tracenium agent reports this mac's serial number/i)).toBeTruthy();
+    expect(within(panel).getByLabelText("Version")).toBeTruthy();
+    expect(within(panel).queryByRole("button", { name: "Enter a version manually" })).toBeNull();
+  });
 
   it("enseña lo que informa el Mac: versión y estado de la instalación", async () => {
     state.osUpdate.device = { ...state.osUpdate.device, installState: "downloading", pendingVersion: { "os-version": "27.0.1" } };

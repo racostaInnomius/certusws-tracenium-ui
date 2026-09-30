@@ -582,7 +582,7 @@ export default function DeviceManagement({ onNavigate }) {
             iOS settings aren&apos;t equivalent.{" "}
             {mdm.status?.commands?.deliverable
               ? "Delivered to enrolled devices as configuration profiles."
-              : "Saved, not delivered yet: they reach devices as configuration profiles once Tracenium can send commands to them."}
+              : "Saved. Sending them to devices as configuration profiles isn't available yet."}
           </Typography>
 
           <Tabs

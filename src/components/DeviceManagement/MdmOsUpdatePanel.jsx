@@ -10,15 +10,26 @@
 //
 // Mirar lo puede cualquiera con acceso a MDM; programar o cancelar, sólo
 // ADMIN/OWNER (el servidor lo exige; aquí sólo se deshabilita).
+//
+// La versión se ELIGE de lo que el escaneo del agente encontró en ese Mac
+// (`detected`); escribirla a mano queda para un Mac sin agente, con aviso.
 
 import * as React from "react";
-import { Alert, Box, Button, Divider, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Divider, MenuItem, TextField, Typography } from "@mui/material";
 
 import { useConfirm } from "../common/ConfirmDialog";
 import { BRAND } from "../../theme/brand";
 import { formatRelative } from "../../utils/format";
 import { cancelMdmOsUpdate, getMdmOsUpdate, scheduleMdmOsUpdate } from "../../api/mdm";
-import { buildOsUpdateRequest, formatDeviceLocalDateTime, osUpdateInstallState } from "./mdmModel";
+import {
+  buildOsUpdateRequest,
+  detectedOsUpdates,
+  detectedUpdateKey,
+  detectedUpdateLabel,
+  formatDeviceLocalDateTime,
+  manualVersionNote,
+  osUpdateInstallState,
+} from "./mdmModel";
 import { Field, StatusChip } from "./mdmAtoms";
 
 const buttonSx = { textTransform: "none", fontWeight: 800, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } };
@@ -36,6 +47,20 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
   const [form, setForm] = React.useState({ version: "", build: "", date: localDay(2), time: "18:00" });
   const [formError, setFormError] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
+  const [choice, setChoice] = React.useState("");
+  const [typing, setTyping] = React.useState(false);
+
+  const detected = view?.detected;
+  const updates = detectedOsUpdates(detected);
+  const manual = updates.length === 0 || typing;
+  const detectedKeys = updates.map(detectedUpdateKey).join(",");
+
+  // Una sola candidata va elegida; con varias (26.7.1 o 27.0.1), que se elija.
+  // Una elección que el escaneo ya no trae se olvida.
+  React.useEffect(() => {
+    const keys = detectedKeys ? detectedKeys.split(",") : [];
+    setChoice((c) => (keys.includes(c) ? c : keys.length === 1 ? keys[0] : ""));
+  }, [detectedKeys]);
 
   const load = React.useCallback(async ({ fresh = false } = {}) => {
     try {
@@ -52,7 +77,12 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
 
   async function schedule() {
     setFormError(null);
-    const built = buildOsUpdateRequest(form);
+    const picked = manual ? null : updates.find((u) => detectedUpdateKey(u) === choice);
+    if (!manual && !picked) {
+      setFormError("Choose the update to force.");
+      return;
+    }
+    const built = buildOsUpdateRequest(picked ? { ...form, version: picked.version, build: picked.build } : form);
     if (built.error) {
       setFormError(built.error);
       return;
@@ -101,6 +131,8 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
   const scheduled = view?.scheduled;
   const state = osUpdateInstallState(device?.installState);
   const pending = device?.pendingVersion?.["os-version"];
+  const scannedWhen = detected?.scannedAt ? formatRelative(detected.scannedAt) : null;
+  const manualNote = manual ? manualVersionNote(detected, { chosen: updates.length > 0, when: scannedWhen }) : null;
 
   return (
     <Box aria-label="OS update" sx={{ display: "grid", gap: 1.5 }}>
@@ -145,11 +177,27 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {scheduled ? "Schedule a different update:" : "Force an update. The device downloads it, reminds the user and, if it's still not installed at that time, installs it and restarts. On Apple silicon it needs no password."}
           </Typography>
+          {manual ? null : (
+            <TextField select size="small" label="Update" value={choice} disabled={busy}
+              onChange={(e) => setChoice(e.target.value)}
+              helperText={`From the Tracenium agent's scan of this Mac${scannedWhen ? `, ${scannedWhen}` : ""}.`}>
+              {updates.map((u) => (
+                <MenuItem key={detectedUpdateKey(u)} value={detectedUpdateKey(u)}>{detectedUpdateLabel(u)}</MenuItem>
+              ))}
+            </TextField>
+          )}
+          {manualNote ? (
+            <Typography variant="body2" sx={{ color: BRAND.alert.warningText }}>{manualNote}</Typography>
+          ) : null}
           <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.25 }}>
-            <TextField size="small" label="Version" placeholder="27.0.1" value={form.version}
-              onChange={(e) => setForm((f) => ({ ...f, version: e.target.value }))} disabled={busy} />
-            <TextField size="small" label="Build (optional)" placeholder="26A434" value={form.build}
-              onChange={(e) => setForm((f) => ({ ...f, build: e.target.value }))} disabled={busy} />
+            {manual ? (
+              <>
+                <TextField size="small" label="Version" placeholder="27.0.1" value={form.version}
+                  onChange={(e) => setForm((f) => ({ ...f, version: e.target.value }))} disabled={busy} />
+                <TextField size="small" label="Build (optional)" placeholder="26A434" value={form.build}
+                  onChange={(e) => setForm((f) => ({ ...f, build: e.target.value }))} disabled={busy} />
+              </>
+            ) : null}
             <TextField size="small" type="date" label="Install by" InputLabelProps={{ shrink: true }} value={form.date}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} disabled={busy} />
             <TextField size="small" type="time" label="Device time" InputLabelProps={{ shrink: true }} value={form.time}
@@ -158,10 +206,16 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
           {formError ? (
             <Typography role="alert" variant="body2" sx={{ color: BRAND.alert.errorText, fontWeight: 600 }}>{formError}</Typography>
           ) : null}
-          <Box>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Button type="submit" variant="contained" disabled={busy} sx={buttonSx}>
               {busy ? "Scheduling…" : "Schedule update"}
             </Button>
+            {updates.length > 0 ? (
+              <Button variant="text" disabled={busy} onClick={() => { setTyping((t) => !t); setFormError(null); }}
+                sx={{ textTransform: "none", fontWeight: 700, color: BRAND.tealText }}>
+                {typing ? "Pick a detected update" : "Enter a version manually"}
+              </Button>
+            ) : null}
           </Box>
         </Box>
       ) : (

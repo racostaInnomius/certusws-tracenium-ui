@@ -207,6 +207,7 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, 
           <DeviceDetail
             row={selected}
             commandsReason={mdm.status?.commands?.reason ?? null}
+            commandsDeliverable={mdm.status?.commands?.deliverable === true}
             onClose={() => setSelected(null)}
             onNavigate={onNavigate}
             onOpenTab={onOpenTab}
@@ -219,19 +220,25 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, 
   );
 }
 
-/** Qué puede recibir un equipo MDM hoy. Hechos del servidor, no promesas. */
-function commandsText(device, commandsReason) {
+/**
+ * Cómo le llegan los comandos a un equipo MDM. Llegan SIEMPRE —la cola se
+ * entrega cuando el equipo se conecta—; Apple push sólo cambia CUÁNDO: en
+ * segundos, o en su conexión automática, cada unas 4 h (30-sep: el texto
+ * anterior decía que no se le podían mandar, y el DDM de macOS ya salía así).
+ */
+function commandsText(device, commandsReason, deliverable) {
   if (device.needsReEnrollment === true) {
-    return "This device enrolled with a different push topic than your organization's Apple push certificate, so Tracenium can't wake it. Enroll it again with a new link to manage it.";
+    return "Commands reach this device on its automatic check-in, about every 4 hours. It enrolled with a different push topic than your organization's Apple push certificate, so Tracenium can't wake it to deliver them within seconds — enroll it again with a new link for that.";
   }
   if (!device.pushReady) return "The device hasn't registered for push yet.";
+  if (deliverable) return "Tracenium sends commands to this device through Apple push: they arrive within seconds.";
   if (commandsReason === "sender_not_available") {
-    return "The device registered for push with your organization's certificate. Sending commands isn't available yet.";
+    return "Tracenium sends commands to this device. They arrive on its automatic check-in, about every 4 hours: delivery within seconds through Apple push isn't switched on yet.";
   }
-  return "The device registered for push. Tracenium can send it commands once the Apple push certificate is set up.";
+  return "Tracenium sends commands to this device. They arrive on its automatic check-in, about every 4 hours; with the Apple push certificate set up, within seconds.";
 }
 
-function DeviceDetail({ row, commandsReason, onClose, onNavigate, onOpenTab, canConfigure, notify }) {
+function DeviceDetail({ row, commandsReason, commandsDeliverable, onClose, onNavigate, onOpenTab, canConfigure, notify }) {
   const d = row.device;
   return (
     <Box sx={{ display: "grid", gap: 2 }} aria-label="Device detail">
@@ -275,7 +282,7 @@ function DeviceDetail({ row, commandsReason, onClose, onNavigate, onOpenTab, can
               Commands
             </Typography>
             <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-              {commandsText(d, commandsReason)}
+              {commandsText(d, commandsReason, commandsDeliverable)}
             </Typography>
             {d.needsReEnrollment === true ? (
               <Button
