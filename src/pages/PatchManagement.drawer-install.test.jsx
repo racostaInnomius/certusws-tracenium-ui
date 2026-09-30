@@ -43,8 +43,13 @@ function mount({ jobResponse, outlook = null, devices = DEVICES }) {
   server.use(
     http.all(/.*\/api\/.*/, async ({ request }) => {
       const url = new URL(request.url);
-      if (outlook && url.pathname.endsWith("/patch-management/action-outlook")) {
-        return HttpResponse.json({ ok: true, ...outlook });
+      // La previsión llega DESPUÉS de abrirse el diálogo, como en la red de
+      // verdad. Sin esto el orden dependía de la versión de Node: con 22 llegaba
+      // antes y los tests pasaban; con 20 (la del CI) no, y `getByText` síncrono
+      // no encontraba lo que sólo sale tras cargarla (rojo desde 0845441).
+      if (url.pathname.endsWith("/patch-management/action-outlook")) {
+        await new Promise((r) => setTimeout(r, 50));
+        if (outlook) return HttpResponse.json({ ok: true, ...outlook });
       }
       if (request.method === "POST" && /\/orchestrator\/devices\/[^/]+\/jobs$/.test(url.pathname)) {
         posted.push(await request.json());
@@ -98,7 +103,7 @@ describe("Patch Management — instalar desde el panel lateral", () => {
     const dialog = await openDrawerAndInstallAll();
 
     expect(posted).toEqual([]);
-    expect(within(dialog).getByText(/maintenance windows/i)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/maintenance windows/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/snapshot is taken first/i)).toBeInTheDocument();
   });
 
@@ -130,7 +135,7 @@ describe("Patch Management — instalar desde el panel lateral", () => {
   it("⭐ «conservar hasta validar» viaja sólo si se pide, y no se hereda del envío anterior", async () => {
     mount({ jobResponse: HELD });
     let dialog = await openDrawerAndInstallAll();
-    expect(within(dialog).getByText(/gateway's retention/i)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/gateway's retention/i)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByLabelText(/Keep the snapshot until I validate/i));
     expect(within(dialog).getByText(/up to 72 h/i)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /^Install$/ }));
@@ -143,7 +148,7 @@ describe("Patch Management — instalar desde el panel lateral", () => {
     // transición sigue en el DOM, y `findByRole("dialog")` podía devolver ése.
     await waitFor(() => expect(screen.queryByLabelText(/Keep the snapshot until I validate/i)).toBeNull());
     dialog = await openDrawerAndInstallAll();
-    expect(within(dialog).getByLabelText(/Keep the snapshot until I validate/i)).not.toBeChecked();
+    expect(await within(dialog).findByLabelText(/Keep the snapshot until I validate/i)).not.toBeChecked();
   }, 15_000);
 
   it("🔴 MSIG-DOMAIN fuera de ventana: la UI dice RETENIDO, no «queued»", async () => {
