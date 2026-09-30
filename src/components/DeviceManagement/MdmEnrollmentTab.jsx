@@ -45,6 +45,7 @@ import SectionPaper from "../common/SectionPaper";
 import { useConfirm } from "../common/ConfirmDialog";
 import { BRAND, TEXT } from "../../theme/brand";
 import { formatDate, formatRelative } from "../../utils/format";
+import { copyText } from "../../utils/clipboard";
 import { createMdmEnrollment, revokeMdmEnrollment } from "../../api/mdm";
 import {
   CLIENT_IDENTIFIER_RE,
@@ -85,7 +86,7 @@ export default function MdmEnrollmentTab({ mdm, canEnroll, onChanged, notify, on
 
   const copy = React.useCallback(
     (text) => {
-      navigator.clipboard?.writeText(text).then(
+      copyText(text).then(
         () => notify("Link copied", "success"),
         () => notify("Could not copy — select the link and copy it", "warning")
       );
