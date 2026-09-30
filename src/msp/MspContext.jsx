@@ -20,8 +20,22 @@ import {
   normalizeTenantId,
 } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
+import { getSearchParam, searchForPage } from "../utils/browserState";
 
 const MspContext = React.createContext(null);
+
+// ⚠️ Lo que la URL dice de la página (`?device=`, un grupo, un hallazgo…) es
+// del cliente ANTERIOR. Se deja sólo la página, y ANTES de cambiar de cliente:
+// el shell remonta la página con la clave del cliente nuevo, y sus efectos
+// leen la URL al montarse — si se limpiara en un efecto del shell, los de la
+// página (que corren antes) ya habrían leído el `device` viejo. Sin esto,
+// recargar tras el cambio abría la ficha de un equipo de T1 en Gtec: 404 y
+// una ficha fantasma («Offline», «0 apps», el UUID por nombre), 30-sep.
+function dropPreviousClientUrlState() {
+  if (typeof window === "undefined") return;
+  const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
+  window.history.replaceState({}, "", `${pathname}${searchForPage(getSearchParam("page", "overview"))}`);
+}
 
 const ACTIVE_META_KEY = "tr_active_tenant_meta";   // { id, name } for labels
 const SWITCHABLE_KEY = "tr_switchable_clients";    // sibling clients for the switcher
@@ -134,6 +148,7 @@ export function MspProvider({ children }) {
     const id = normalizeTenantId(rawId);
     if (!id) return;
     const changed = String(getActiveTenantId() ?? "") !== String(id ?? "");
+    if (changed) dropPreviousClientUrlState();
     setActiveTenantId(id);
     // Switching the active tenant invalidates every cached GET — they were
     // keyed under the previous tenant context. The cache keys are now
@@ -172,6 +187,7 @@ export function MspProvider({ children }) {
   // different client) never reads it back.
   const exitTenant = React.useCallback(() => {
     const had = getActiveTenantId() != null;
+    if (had) dropPreviousClientUrlState();
     setActiveTenantId(null);
     if (had) {
       clearApiCache({ keepInFlight: true });

@@ -1280,7 +1280,14 @@ export default function AppShell() {
                 // con otra etiqueta — cero cambio visual.
                 component="main"
                 id="contenido-principal"
-                key={`${selectedPage}-${viewReloadToken}`}
+                // ⚠️ El cliente activo va en la clave. Cambiar de cliente sólo
+                // cambiaba la cabecera X-Tenant-Id: las páginas que no dependen
+                // del cliente en sus efectos seguían pintando los datos del
+                // anterior — Asset Management mostraba los 18 equipos de T1 y
+                // la ficha de un Mac de T1 bajo la etiqueta «Gtec» (30-sep).
+                // Remontar es la única garantía que no depende de que cada
+                // página se acuerde.
+                key={`${selectedPage}-${activeTenantKey}-${viewReloadToken}`}
                 sx={{
                   minWidth: 0,
                   width: "100%",

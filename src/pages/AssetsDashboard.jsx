@@ -53,8 +53,15 @@ import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 
 import { dashboardApi } from "../api/dashboard";
-import { httpGetJson } from "../api/http";
+import { httpGetJson, isTemporaryApiError } from "../api/http";
 import { useAuthContext } from "../auth/AuthContext";
+import { useMspOptional } from "../msp/MspContext";
+import {
+  describeDetailFailures,
+  isNotFound,
+  loadWithOneRetry,
+  resolveDeviceName,
+} from "../components/AssetsDashboard/deviceDetailLoad";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 import {
@@ -136,9 +143,12 @@ import EvidenceTab from "../components/AssetsDashboard/EvidenceTab";
 
 function AgentDetailWorkbench({
   selectedHost,
+  hostRow = null,
   connected,
   loading,
-  error,
+  failures = [],
+  notFound = false,
+  onRetry,
   profile,
   timeline = null,
   hardware,
@@ -164,7 +174,13 @@ function AgentDetailWorkbench({
   canReadEvidence = false,
   onOpenJob,
 }) {
-  const hostname = formatDetailValue(profile?.hostname || selectedHost?.hostname || selectedHost?.agent_id, "Unknown host");
+  // ⚠️ Nunca el id como nombre: va en su propia línea debajo. Ver
+  // deviceDetailLoad.js — con el detalle caído, la ficha era UUID de título y
+  // UUID en «Hostname» aunque el nombre hubiera llegado por otra vía.
+  const deviceName = resolveDeviceName({ profile, selectedHost, hostRow, hardware });
+  const title = deviceName ?? (loading ? "Loading device…" : notFound ? "Device not found" : "Unknown device");
+  const clientName = useMspOptional()?.activeTenant?.name || null;
+  const failureText = describeDetailFailures(failures);
   const agentId = formatDetailValue(profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId);
   const platform = formatDetailValue(profile?.platform || hardware?.platform);
   const rawAgentVersion = profile?.agentVersion || selectedHost?.agent_version || null;
@@ -217,12 +233,16 @@ function AgentDetailWorkbench({
           </IconButton>
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", gap: 0.75 }}>
-              <Typography sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 900, color: BRAND.dark }} noWrap title={hostname}>
-                {hostname}
+              <Typography
+                sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 900, color: deviceName ? BRAND.dark : "text.secondary" }}
+                noWrap
+                title={title}
+              >
+                {title}
               </Typography>
               {/* El estado vive en la pestaña Agent; aquí, copiar el nombre,
                   que es lo que se pega en un ticket o en otra consola. */}
-              {hostname && hostname !== "Unknown host" ? <CopyButton value={hostname} label="Hostname" /> : null}
+              {deviceName ? <CopyButton value={deviceName} label="Hostname" /> : null}
             </Stack>
             <Typography sx={{ mt: 0.5, fontSize: TEXT.sm, color: "text.secondary", fontFamily: "monospace" }} noWrap title={agentId}>
               {agentId}
@@ -232,14 +252,41 @@ function AgentDetailWorkbench({
 
       </Stack>
 
-      {error ? (
-        <Paper elevation={0} sx={{ p: 1.5, mb: 2, borderRadius: 2, border: `1px solid ${ROLE.caution}55`, bgcolor: ROLE.cautionSoft }}>
-          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
-            Some agent detail data could not be loaded. Showing the available device information.
-          </Typography>
+      {!notFound && failureText ? (
+        <Paper
+          elevation={0}
+          role="alert"
+          sx={{ p: 1.5, mb: 2, borderRadius: 2, border: `1px solid ${ROLE.caution}55`, bgcolor: ROLE.cautionSoft }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
+            <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
+              {failureText} Showing what did load.
+            </Typography>
+            {onRetry ? (
+              <Button size="small" variant="outlined" onClick={onRetry} sx={{ flexShrink: 0, textTransform: "none", fontWeight: 700 }}>
+                Retry
+              </Button>
+            ) : null}
+          </Stack>
         </Paper>
       ) : null}
 
+      {/* ⚠️ Un 404 no es «falta una parte»: el equipo no está en este cliente
+          (lo quitaron, o el enlace era de otro). Pintar la ficha igual daba un
+          equipo fantasma — «Offline», «0 apps», el UUID por nombre. */}
+      {notFound ? (
+        <Paper elevation={0} sx={{ p: 2.5, borderRadius: 3, border: `1px solid ${BRAND.border}`, bgcolor: BRAND.surface }}>
+          <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
+            {clientName ? `This device isn't in ${clientName}.` : "This device isn't in the current client."}
+          </Typography>
+          <Typography sx={{ mt: 0.5, fontSize: TEXT.md, color: "text.secondary" }}>
+            It may have been removed, or the link points to a device of another client.
+          </Typography>
+          <Button variant="outlined" onClick={onBack} sx={{ mt: 2, textTransform: "none", fontWeight: 700 }}>
+            Back to devices
+          </Button>
+        </Paper>
+      ) : (
       <Paper elevation={0} sx={{ borderRadius: 3, border: `1px solid ${BRAND.border}`, overflow: "hidden", bgcolor: BRAND.surface }}>
         <Tabs
           value={tab}
@@ -268,7 +315,7 @@ function AgentDetailWorkbench({
 
           {!loading && tab === "agent" ? (
             <AgentTab
-              hostname={hostname}
+              hostname={formatDetailValue(deviceName)}
               agentId={agentId}
               platform={platform}
               agentVersion={agentVersion}
@@ -328,6 +375,7 @@ function AgentDetailWorkbench({
           ) : null}
         </Box>
       </Paper>
+      )}
     </Box>
   );
 }
@@ -522,7 +570,25 @@ export default function AssetsDashboard({
   const [selectedAgent, setSelectedAgent] = React.useState(null);
   const [agentDetailTab, setAgentDetailTab] = React.useState("agent");
   const [agentDetailLoading, setAgentDetailLoading] = React.useState(false);
-  const [agentDetailError, setAgentDetailError] = React.useState("");
+  // Qué partes de la ficha NO llegaron (ver DETAIL_PART_LABEL) — el aviso las
+  // nombra. `agentDetailNotFound`: el detalle dijo 404, el equipo no está en
+  // este cliente. `agentDetailReload`: «Retry» vuelve a pedir la ficha.
+  const [agentDetailFailures, setAgentDetailFailures] = React.useState([]);
+  const [agentDetailNotFound, setAgentDetailNotFound] = React.useState(false);
+  const [agentDetailReload, setAgentDetailReload] = React.useState(0);
+  const markDetailPart = React.useCallback((part, failed) => {
+    setAgentDetailFailures((prev) => {
+      if (failed) return prev.includes(part) ? prev : [...prev, part];
+      return prev.includes(part) ? prev.filter((p) => p !== part) : prev;
+    });
+  }, []);
+  const retryAgentDetail = React.useCallback(() => setAgentDetailReload((n) => n + 1), []);
+  // Qué partes de la ficha hay en pantalla y de qué equipo. Un «Refresh» de la
+  // página o un «Retry» vuelven a pedir la ficha SIN vaciarla: con datos ya
+  // pintados no hay spinner (desmontaría la pestaña abierta, con lo que se
+  // estuviera escribiendo en ella), y una parte que ya estaba no se da por
+  // perdida porque su recarga falle.
+  const detailShownRef = React.useRef({ agentId: null, profile: false, hardware: false });
   const [agentProfile, setAgentProfile] = React.useState(null);
   const [agentHardware, setAgentHardware] = React.useState(null);
   const [agentSoftwareRows, setAgentSoftwareRows] = React.useState([]);
@@ -1136,7 +1202,9 @@ export default function AssetsDashboard({
   const handleAgentSelect = React.useCallback((host) => {
     setSelectedAgent(host || null);
     setAgentDetailTab("agent");
-    setAgentDetailError("");
+    setAgentDetailFailures([]);
+    setAgentDetailNotFound(false);
+    detailShownRef.current = { agentId: null, profile: false, hardware: false };
     setAgentSoftwarePaginationModel({ page: 0, pageSize: SOFTWARE_PAGE_SIZE });
     setAgentSoftwareSort(DEFAULT_SOFTWARE_SORT);
     setAgentSoftwareSearch("");
@@ -1194,7 +1262,9 @@ export default function AssetsDashboard({
     updateSearchParams({ device: "" });
     setSelectedAgent(null);
     setAgentDetailTab("agent");
-    setAgentDetailError("");
+    setAgentDetailFailures([]);
+    setAgentDetailNotFound(false);
+    detailShownRef.current = { agentId: null, profile: false, hardware: false };
     setAgentProfile(null);
     setAgentHardware(null);
     setAgentSoftwareRows([]);
@@ -1227,12 +1297,16 @@ export default function AssetsDashboard({
     if (!agentId) return undefined;
 
     let cancelled = false;
-    setAgentDetailLoading(true);
-    setAgentDetailError("");
-    setAgentProfile(normalizeHostDetailPayload(null, selectedAgent));
-    setAgentHardware(null);
-
-    setAgentTimeline(null);
+    const shown = detailShownRef.current.agentId === agentId ? detailShownRef.current : null;
+    if (!shown) {
+      detailShownRef.current = { agentId, profile: false, hardware: false };
+      setAgentDetailLoading(true);
+      setAgentDetailFailures([]);
+      setAgentDetailNotFound(false);
+      setAgentProfile(normalizeHostDetailPayload(null, selectedAgent));
+      setAgentHardware(null);
+      setAgentTimeline(null);
+    }
 
     // ⚠️ En su propia promesa y no en el allSettled de abajo: un backend sin la
     // migración de episodios responde 500, y eso no puede marcar el detalle
@@ -1245,35 +1319,39 @@ export default function AssetsDashboard({
       .catch(() => {
         // Sin línea de tiempo el drawer sigue mostrando la lista de lugares,
         // que es exactamente la ventana de transición prevista.
-        if (!cancelled) setAgentTimeline(null);
+        if (!cancelled && !shown) setAgentTimeline(null);
       });
 
+    // Un reintento si el fallo es pasajero: un arranque en frío del API pasa
+    // del corte de 15 s del cliente, y era la causa de la ficha con el UUID.
+    const retry = { isTemporary: isTemporaryApiError };
     Promise.allSettled([
-      dashboardApi.getHostDetail(agentId),
-      getHardwareInventoryDetail({ search: agentId, page: 1, pageSize: 10 }),
+      loadWithOneRetry(() => dashboardApi.getHostDetail(agentId), retry),
+      loadWithOneRetry(() => getHardwareInventoryDetail({ search: agentId, page: 1, pageSize: 10 }), retry),
     ])
       .then(([profileRes, hardwareRes]) => {
         if (cancelled) return;
+        const parts = detailShownRef.current;
 
         if (profileRes.status === "fulfilled") {
           setAgentProfile(normalizeHostDetailPayload(profileRes.value, selectedAgent));
-        } else {
-          setAgentProfile(normalizeHostDetailPayload(null, selectedAgent));
+          parts.profile = true;
+          setAgentDetailNotFound(false);
+          markDetailPart("profile", false);
+        } else if (isNotFound(profileRes.reason)) {
+          setAgentDetailNotFound(true);
+        } else if (!parts.profile) {
+          console.warn("agent detail load failed:", profileRes.reason?.message || profileRes.reason);
+          markDetailPart("profile", true);
         }
 
         if (hardwareRes.status === "fulfilled") {
           setAgentHardware(normalizeHardwareDetailPayload(hardwareRes.value, agentId));
+          parts.hardware = true;
+          markDetailPart("hardware", false);
+        } else if (!parts.hardware) {
+          markDetailPart("hardware", true);
         }
-
-        const failed = [profileRes, hardwareRes].some((res) => res.status === "rejected");
-        if (failed) {
-          setAgentDetailError("partial");
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.warn("agent detail load failed:", err?.message || err);
-        setAgentDetailError("full");
       })
       .finally(() => {
         if (!cancelled) setAgentDetailLoading(false);
@@ -1282,7 +1360,10 @@ export default function AssetsDashboard({
     return () => {
       cancelled = true;
     };
-  }, [selectedAgent]);
+    // `refreshNonce` y `agentDetailReload`: el «Refresh» de la página no
+    // volvía a pedir la ficha — con el detalle caído, sólo recargar el
+    // navegador la recuperaba (prod, 30-sep).
+  }, [selectedAgent, refreshNonce, agentDetailReload, markDetailPart]);
 
   React.useEffect(() => {
     const agentId = selectedAgent?.agent_id || selectedAgent?.agentId;
@@ -1303,13 +1384,14 @@ export default function AssetsDashboard({
         const rows = listFrom(res, { context: "hostRows" });
         setAgentSoftwareRows(rows);
         setAgentSoftwareTotal(Number(res?.total ?? rows.length));
+        markDetailPart("software", false);
       })
       .catch((err) => {
         if (cancelled) return;
         console.warn("agent software inventory load failed:", err?.message || err);
         setAgentSoftwareRows([]);
         setAgentSoftwareTotal(0);
-        setAgentDetailError((prev) => prev || "partial");
+        markDetailPart("software", true);
       })
       .finally(() => {
         if (!cancelled) setAgentSoftwareLoading(false);
@@ -1325,6 +1407,9 @@ export default function AssetsDashboard({
     agentSoftwareSort.by,
     agentSoftwareSort.dir,
     agentSoftwareQuery,
+    refreshNonce,
+    agentDetailReload,
+    markDetailPart,
   ]);
 
   // Otro orden u otra búsqueda es otra lista: se vuelve a la primera página.
@@ -1340,7 +1425,7 @@ export default function AssetsDashboard({
   // Printers loader. Single fetch when selectedAgent changes (no
   // pagination needed — small list per device). Failure does NOT
   // surface as a hard error on the detail view (just keeps empty
-  // array + sets the soft "partial" flag), so a pre-1.1.19 agent or
+  // array + names "printers" in the detail warning), so a pre-1.1.19 agent or
   // a tenant whose backend is still mid-deploy don't break the
   // whole detail experience.
   React.useEffect(() => {
@@ -1363,12 +1448,13 @@ export default function AssetsDashboard({
         const { rows, scan } = normalizeHostPrintersResponse(res);
         setAgentPrinterRows(rows);
         setAgentPrinterScan(scan);
+        markDetailPart("printers", false);
       })
       .catch((err) => {
         if (cancelled) return;
         console.warn("agent printers load failed:", err?.message || err);
         setAgentPrinterRows([]);
-        setAgentDetailError((prev) => prev || "partial");
+        markDetailPart("printers", true);
       })
       .finally(() => {
         if (!cancelled) setAgentPrintersLoading(false);
@@ -1377,7 +1463,14 @@ export default function AssetsDashboard({
     return () => {
       cancelled = true;
     };
-  }, [selectedAgent]);
+  }, [selectedAgent, refreshNonce, agentDetailReload, markDetailPart]);
+
+  // La fila de la tabla del equipo abierto, si está en la página cargada: por
+  // `?device=` la ficha llega sólo con el id, y la fila ya trae el nombre.
+  const selectedHostRow = React.useMemo(() => {
+    const id = selectedAgent ? String(getHostDeviceId(selectedAgent) ?? "") : "";
+    return id ? hosts.find((h) => String(getHostDeviceId(h)) === id) ?? null : null;
+  }, [hosts, selectedAgent]);
 
   const selectedGroup = React.useMemo(
     () => groupCatalog.find((g) => String(g.id) === String(groupFilter)) || null,
@@ -1807,9 +1900,12 @@ const osVersionItems = React.useMemo(() => {
               <AgentDetailWorkbench
                 onOpenJob={onNavigate ? openJob : undefined}
                 selectedHost={selectedAgent}
+                hostRow={selectedHostRow}
                 connected={connectedIds.has(String(selectedAgent.agent_id || selectedAgent.agentId))}
                 loading={agentDetailLoading}
-                error={agentDetailError}
+                failures={agentDetailFailures}
+                notFound={agentDetailNotFound}
+                onRetry={retryAgentDetail}
                 profile={agentProfile}
                 timeline={agentTimeline}
                 hardware={agentHardware}

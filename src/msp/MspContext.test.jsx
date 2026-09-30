@@ -91,3 +91,47 @@ describe("enterTenant desde el selector", () => {
     expect(getActiveTenantId()).toBe("111");
   });
 });
+
+// 30-sep, prod: con la ficha de un Mac de T1 abierta, cambiar a Gtec dejaba
+// `?device=<id de T1>` en la URL; al recargar, la ficha pedía ese equipo a Gtec
+// (404) y pintaba un equipo fantasma.
+describe("cambiar de cliente deja sólo la página en la URL", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    setActiveTenantId(null);
+  });
+
+  function mount() {
+    const box = { msp: null };
+    render(
+      <MspProvider>
+        <Probe onValue={(v) => (box.msp = v)} />
+      </MspProvider>
+    );
+    return box;
+  }
+
+  it("⭐ otro cliente: fuera `device` y los filtros; se quedan la página y el auto-refresco", async () => {
+    const box = mount();
+    await act(async () => box.msp.enterTenant(1, "Certus", []));
+    window.history.replaceState({}, "", "/?page=assets&device=8200bb2b&assetsTab=software&assetsAutoRefresh=1200");
+    await act(async () => box.msp.enterTenant(113, "Gtec", []));
+    expect(window.location.search).toBe("?assetsAutoRefresh=1200&page=assets");
+  });
+
+  it("volver al portfolio también la limpia", async () => {
+    const box = mount();
+    await act(async () => box.msp.enterTenant(1, "Certus", []));
+    window.history.replaceState({}, "", "/?page=assets&device=8200bb2b");
+    await act(async () => box.msp.exitTenant());
+    expect(window.location.search).toBe("?page=assets");
+  });
+
+  it("volver a entrar al MISMO cliente no toca la URL (la ficha abierta sigue)", async () => {
+    const box = mount();
+    await act(async () => box.msp.enterTenant(1, "Certus", []));
+    window.history.replaceState({}, "", "/?page=assets&device=8200bb2b");
+    await act(async () => box.msp.enterTenant(1, "Certus", []));
+    expect(window.location.search).toBe("?page=assets&device=8200bb2b");
+  });
+});
