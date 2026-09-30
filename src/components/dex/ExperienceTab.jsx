@@ -10,7 +10,9 @@
 //   · un equipo que aún no informa dice «sin datos», no «todo bien».
 
 import * as React from "react";
-import { Alert, Box, Chip, CircularProgress, Grid, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, Grid, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
+import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
 import { BRAND, ROLE, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
@@ -47,6 +49,10 @@ export default function ExperienceTab({ agentId }) {
   const [days, setDays] = React.useState(7);
   const [data, setData] = React.useState(null);
   const [error, setError] = React.useState(null);
+  // Plegada por defecto: en un equipo de trabajo son decenas de filas por
+  // semana, y empujaban la estabilidad fuera de la pantalla. Se abre cuando se
+  // busca el relato de un incidente, no para el vistazo diario.
+  const [timelineOpen, setTimelineOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (!agentId) return undefined;
@@ -185,8 +191,22 @@ export default function ExperienceTab({ agentId }) {
       </Box>
 
       <Box>
-        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>Timeline ({RANGES.find((r) => r.days === days)?.label})</Typography>
-        <ExperienceTimeline windows={data.windows} events={timelineEvs} fromMs={fromMs} />
+        <Button
+          size="small"
+          onClick={() => setTimelineOpen((v) => !v)}
+          aria-expanded={timelineOpen}
+          endIcon={timelineOpen ? <ExpandLessOutlinedIcon fontSize="small" /> : <ExpandMoreOutlinedIcon fontSize="small" />}
+          sx={{ textTransform: "none", fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, px: 0, minWidth: 0 }}
+        >
+          Timeline ({RANGES.find((r) => r.days === days)?.label})
+        </Button>
+        {timelineOpen ? (
+          <ExperienceTimeline windows={data.windows} events={timelineEvs} fromMs={fromMs} />
+        ) : (
+          <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
+            When the device was awake or asleep, what failed and when it restarted.
+          </Typography>
+        )}
       </Box>
 
       <Box>

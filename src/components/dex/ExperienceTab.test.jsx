@@ -109,6 +109,7 @@ describe("ExperienceTab", () => {
       // En un Mac el arranque de DEX va vacío (sin duración que leer).
       getDeviceExperience.mockResolvedValue({ ok: true, device: device({ signals: [], windows, events, status: { ...device().status, lastBootUtc: null } }) });
       render(<ExperienceTab agentId="8200bb2b" />);
+      (await screen.findByRole("button", { name: /Timeline/ })).click();
       const tl = await screen.findByTestId("dex-timeline");
 
       // Lo más reciente arriba, por días, en la hora de quien mira (UTC-6).
@@ -140,6 +141,7 @@ describe("ExperienceTab", () => {
       const status = { ...device().status, lastBootUtc: null, bootDurationMs: null, inventoryLastBootUtc: "2026-09-29T06:34:00.000Z", scope: { resources: "collected", events: "collected", boot: "unsupported", battery: "collected" } };
       getDeviceExperience.mockResolvedValue({ ok: true, device: device({ signals: [], windows, events: [], status }) });
       render(<ExperienceTab agentId="8200bb2b" />);
+      (await screen.findByRole("button", { name: /Timeline/ })).click();
       const tl = await screen.findByTestId("dex-timeline");
       expect(within(tl).getAllByTestId(/^dex-tl-/).map((r) => r.textContent)).toEqual([
         // (42·10 + 31·15) / 25 muestras = 35,4
@@ -153,5 +155,16 @@ describe("ExperienceTab", () => {
       vi.useRealTimers();
     }
   });
-});
 
+  it("la cronología empieza PLEGADA y se abre con su botón", async () => {
+    getDeviceExperience.mockResolvedValue({ ok: true, device: device() });
+    render(<ExperienceTab agentId="pc-1" />);
+    const toggle = await screen.findByRole("button", { name: /Timeline/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("dex-timeline")).toBeNull();
+    expect(screen.getByText(/what failed and when it restarted/)).toBeInTheDocument();
+    toggle.click();
+    expect(await screen.findByTestId("dex-timeline")).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+});
