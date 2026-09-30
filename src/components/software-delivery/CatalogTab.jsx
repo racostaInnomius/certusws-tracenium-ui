@@ -76,6 +76,32 @@ import DeletePackageDialog from "./DeletePackageDialog";
 import IntakeUploadDialog from "./IntakeUploadDialog";
 import { isVerifiedPackage, originLabel } from "./packageOrigin";
 
+/**
+ * Cuántos botones puede llevar como mucho una fila del catálogo (con permiso
+ * de gestión y el paquete activo): Provenance, Install on devices, Edit,
+ * Archive y Delete.
+ *
+ * 🔴 POR QUÉ EXISTE (30-sep). La columna medía 150 px a mano. Cabían cuatro
+ * botones; cuando se añadió «Archive» pasaron a cinco y el último —justo
+ * «Delete»— quedó cortado en todas las filas activas: medido en producción a
+ * 1440 px, celda de 150 px con 168 px de contenido y 4 de 5 botones visibles.
+ * Nada dio error y ningún test se enteró, porque el ancho era un número suelto
+ * sin relación con lo que se pinta.
+ *
+ * ⚠️ Si añades un botón a la fila, SUBE ESTO. Hay un test que cuenta los
+ * botones que se pintan y falla si pasan de aquí.
+ */
+export const CATALOG_ROW_ACTIONS = 5;
+
+/**
+ * El ancho que necesita la columna para `n` botones, medido en el portal:
+ * cada IconButton `small` ocupa 30 px, el `spacing={0.25}` deja 2 px entre
+ * ellos y la celda del DataGrid pone 10 px por lado. Más 2 px de holgura.
+ */
+export function actionsColumnWidth(n) {
+  return n * 30 + (n - 1) * 2 + 20 + 2;
+}
+
 export default function CatalogTab({ canManage, notify, onOpenInstall, openReviewQueue, onConsumedReviewQueue, openGlobalCatalog, onConsumedGlobalCatalog, refreshNonce = 0 }) {
   // La cola de revisión cuelga del catálogo desde la fase 3.
   const [reviewOpen, setReviewOpen] = React.useState(false);
@@ -359,7 +385,9 @@ export default function CatalogTab({ canManage, notify, onOpenInstall, openRevie
       field: "name",
       headerName: "Name",
       flex: 1,
-      minWidth: 220,
+      // 200 es el nombre más ancho medido. Con 220, a 1440 px la columna no
+      // podía encoger y empujaba la tabla 12 px fuera del contenedor.
+      minWidth: 200,
       renderCell: (params) => {
         // ⚠️ WHICH DOOR DID THIS COME THROUGH?
         //
@@ -471,7 +499,10 @@ export default function CatalogTab({ canManage, notify, onOpenInstall, openRevie
     {
       field: "isActive",
       headerName: "Status",
-      width: 100,
+      // 76, no 100: su contenido —el chip y la cabecera— mide 48 px. Los 24 px
+      // que sobraban son los que necesitaba la columna de acciones para que la
+      // tabla siga cabiendo a 1440 px sin barra horizontal.
+      width: 76,
       // ⚠️ «Archived», NO «inactive». El filtro de arriba, este chip y el botón
       // de la fila son el MISMO estado (`is_active`), así que tienen que
       // llamarlo igual: con dos nombres, el operador que archiva desde la fila
@@ -535,7 +566,8 @@ export default function CatalogTab({ canManage, notify, onOpenInstall, openRevie
     {
       field: "actions",
       headerName: "",
-      width: 150,
+      // Derivado del número de botones, no a ojo: ver CATALOG_ROW_ACTIONS.
+      width: actionsColumnWidth(CATALOG_ROW_ACTIONS),
       sortable: false,
       renderCell: (p) => (
         <Stack direction="row" spacing={0.25}>
