@@ -122,6 +122,13 @@ describe("FindingCard (render smoke)", () => {
     expect(screen.getByText("V-253000 · CAT I")).toBeInTheDocument();
   });
 
+  it("la descripción larga va en Details, no en la tarjeta", () => {
+    renderCard();
+    expect(screen.queryByText("PermitRootLogin should be 'no'.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByText("PermitRootLogin should be 'no'.")).toBeInTheDocument();
+  });
+
   it("un clic en la línea de frameworks abre Details", () => {
     renderCard();
     fireEvent.click(screen.getByText("CIS"));

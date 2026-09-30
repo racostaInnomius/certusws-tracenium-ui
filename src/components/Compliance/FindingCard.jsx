@@ -298,11 +298,9 @@ export default function FindingCard({
           <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600 }}>
             {finding.title}
           </Typography>
-          {finding.description ? (
-            <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mt: 0.25 }}>
-              {finding.description}
-            </Typography>
-          ) : null}
+          {/* La descripción («CIS benchmark control (…). Backed by the
+              registry value HKLM\…») va en Details: eran 3–5 líneas por
+              tarjeta que el título ya resume. */}
 
           {/* Frameworks: una línea (un chip por estándar, con cuántos
               controles). Eran una pill por control —hasta ~30— y la tarjeta
@@ -643,6 +641,11 @@ export default function FindingCard({
 
       {open ? (
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px dashed ${BRAND.border}` }}>
+          {finding.description ? (
+            <Typography variant="body2" sx={{ color: BRAND.gray, mb: 1 }}>
+              {finding.description}
+            </Typography>
+          ) : null}
           <FrameworkDetail frameworks={finding.frameworks} sx={{ mt: 0, mb: 1 }} />
           {finding.remediationSummary ? (
             <Box sx={{ mb: 1 }}>
