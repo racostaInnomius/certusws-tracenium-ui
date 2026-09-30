@@ -41,6 +41,12 @@ export function useBulkSelection({ findings, resetKey, onToast, onRequestRefetch
     setSelectedIds(new Set(findings.map((f) => f.id).filter(Boolean)));
   }, [findings]);
   const clearSelection = React.useCallback(() => setSelectedIds(new Set()), []);
+  // Quita estos de la selección y deja el resto: tras «Apply fixes» se van los
+  // mandados y se quedan los que no se pudieron enviar.
+  const deselect = React.useCallback((ids) => {
+    const drop = new Set(ids);
+    setSelectedIds((prev) => new Set([...prev].filter((id) => !drop.has(id))));
+  }, []);
 
   // Each bulk handler: (1) finding-id array from the selection, (2)
   // bulkFindingOp + unpack the per-item summary, (3) toast "X ok, Y
@@ -112,6 +118,7 @@ export function useBulkSelection({ findings, resetKey, onToast, onRequestRefetch
     toggleSelected,
     selectAll,
     clearSelection,
+    deselect,
     bulkStatusDialog,
     setBulkStatusDialog,
     bulkMenuAnchor,

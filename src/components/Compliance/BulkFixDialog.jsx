@@ -77,8 +77,9 @@ export default function BulkFixDialog({
   onDownloadMacProfile = null,
   onClose,
   onChanged,         // el llamante recarga la ficha cuando algo se ha lanzado
-  // Se lanzó el lote de verdad (no la simulación): el llamante suelta la
-  // selección. Ya están mandados; volver a la ficha con ellos marcados
+  // Se lanzó de verdad (no la simulación): recibe los checkIds que SALIERON,
+  // para que el llamante los quite de la selección y deje marcados sólo los
+  // que no se pudieron enviar. Volver a la ficha con los mandados marcados
   // obligaba a pulsar «Clear» para elegir los siguientes.
   onLaunched,
   notify,
@@ -137,11 +138,12 @@ export default function BulkFixDialog({
     setSubmitting(true);
     try {
       const res = await remediateBatch({ checkIds: plan.checkIds, deviceIds: [deviceId], mode: theMode });
+      const launchedItems = listFrom(res, { context: "bulkFixCreate" });
       setMode(theMode);
-      setItems(listFrom(res, { context: "bulkFixCreate" }));
+      setItems(launchedItems);
       setSkipped(Array.isArray(res?.skipped) ? res.skipped : []);
       onChanged?.();
-      if (theMode === "apply") onLaunched?.();
+      if (theMode === "apply") onLaunched?.(launchedItems.map((r) => r.checkId).filter(Boolean));
     } catch (err) {
       notify?.({
         severity: "error",
@@ -170,6 +172,8 @@ export default function BulkFixDialog({
         });
       }
       setItems((prev) => [...prev, ...fresh]);
+      // Los que salieron ahora (tras instalar auditd) también dejan la selección.
+      if (mode === "apply") onLaunched?.(fresh.map((r) => r.checkId).filter(Boolean));
       const retried = new Set(offer.checkIds);
       setSkipped((prev) => [
         ...prev.filter((s) => !retried.has(s.checkId)),

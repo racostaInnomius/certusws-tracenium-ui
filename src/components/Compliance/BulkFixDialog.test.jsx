@@ -90,6 +90,8 @@ describe("lo que promete el botón", () => {
     open({ onLaunched });
     fireEvent.click(screen.getByRole("button", { name: /Apply 2/ }));
     await waitFor(() => expect(onLaunched).toHaveBeenCalledTimes(1));
+    // Dice QUÉ salió, para que el llamante deje marcados los que no.
+    expect(onLaunched).toHaveBeenCalledWith(["a", "b"]);
   });
 
   it("si el lote no se pudo lanzar, la selección se queda", async () => {

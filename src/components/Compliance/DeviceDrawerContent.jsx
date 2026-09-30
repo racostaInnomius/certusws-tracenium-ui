@@ -262,6 +262,7 @@ export default function DeviceDrawerContent({
     toggleSelected,
     selectAll,
     clearSelection,
+    deselect,
     bulkStatusDialog,
     setBulkStatusDialog,
     bulkMenuAnchor,
@@ -788,7 +789,18 @@ export default function DeviceDrawerContent({
           onDownloadMacProfile={onDownloadMacProfile}
           notify={onToast}
           onChanged={onRequestRefetch}
-          onLaunched={clearSelection}
+          onLaunched={(sentCheckIds) => {
+            // Se quedan marcados sólo los que no se pudieron enviar y siguen
+            // fallando (guardados, a mano, rechazados por el backend): son lo
+            // siguiente que hay que resolver. Los mandados y los que ya no
+            // fallan, fuera.
+            const sent = new Set(sentCheckIds);
+            deselect(
+              bulkFixFindings
+                .filter((f) => sent.has(f.checkId) || f.status !== "fail")
+                .map((f) => f.id)
+            );
+          }}
           onClose={() => setBulkFixFindings(null)}
         />
       ) : null}

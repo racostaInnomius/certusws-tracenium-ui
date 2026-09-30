@@ -141,6 +141,31 @@ describe("DeviceDrawerContent", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("Check one");
   });
 
+  it("⭐ tras aplicar se quedan marcados SÓLO los que no se pudieron enviar", async () => {
+    const { remediateBatch } = await import("../../api/patchManagement");
+    // Tres fallando: uno sale, otro lo rechaza el backend, el tercero no se
+    // arregla desde aquí (se exporta o lo hace una persona).
+    remediateBatch.mockResolvedValueOnce({
+      items: [{ id: 9, checkId: "c.sent", status: "queued", counts: {} }],
+      skipped: [{ checkId: "c.rejected", error: "AGENT_TOO_OLD", message: "Update the agent" }],
+    });
+    const data = {
+      ...deviceData,
+      findings: [
+        { id: 1, checkId: "c.sent", title: "Sent", severity: "high", status: "fail", category: "a", agentRemediable: true },
+        { id: 2, checkId: "c.rejected", title: "Rejected", severity: "high", status: "fail", category: "a", agentRemediable: true },
+        { id: 3, checkId: "c.manual", title: "Manual", severity: "high", status: "fail", category: "a", agentRemediable: false },
+      ],
+    };
+    render(<DeviceDrawerContent {...baseProps} data={data} onRemediateFinding={vi.fn()} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all findings" }));
+    expect(screen.getByText("3 of 3 selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /actions/i }));
+    fireEvent.click(await screen.findByText(/Apply fix/i));
+    fireEvent.click(await screen.findByRole("button", { name: /Apply 2/ }));
+    await waitFor(() => expect(screen.getByText("2 of 3 selected")).toBeInTheDocument());
+  });
+
   it("selecting all then opening the actions menu shows bulk transitions", async () => {
     render(<DeviceDrawerContent {...baseProps} data={deviceData} />);
     // Select all via the toolbar checkbox, then open the Actions menu.
