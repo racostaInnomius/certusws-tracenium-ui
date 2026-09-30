@@ -45,10 +45,10 @@ import * as React from "react";
 import { Box, Skeleton, Stack, Tooltip, Typography } from "@mui/material";
 
 import SectionPaper from "../common/SectionPaper";
-import { BRAND, ROLE, TEXT, TEXT_MUTED } from "../../theme/brand";
+import { BRAND, NEUTRAL, ROLE, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 /** Cómo se pinta cada estado. El orden ES el de la barra, de mejor a peor. */
-const STATES = [
+export const STATES = [
   { key: "current", label: "On the catalog version", color: ROLE.positive },
   { key: "ahead", label: "Ahead (self-updated)", color: BRAND.teal },
   { key: "behind", label: "Behind", color: ROLE.caution },
@@ -135,6 +135,28 @@ export function coverageSegments(item, totalDevices) {
  */
 export function labelWidthPx(devices) {
   return String(Math.max(0, Math.trunc(Number(devices) || 0))).length * 8 + 6;
+}
+
+/**
+ * El color del número que va DENTRO de cada tramo.
+ *
+ * 🔴 POR QUÉ ES UNO SOLO (30-sep). Iba en blanco sobre casi todo, y el verde
+ * (`ROLE.positive`) y el verde azulado (`BRAND.teal`) son tonos MEDIOS: el
+ * blanco daba 2,5:1 y 3,1:1, y ni el texto más oscuro de la paleta —
+ * `BRAND.dark`— llegaba a 4,5:1 (4,2 y 3,4). El amarillo usaba su propio
+ * `warningText` y se quedaba en 4,3; el gris de «not comparable» iba en blanco
+ * sobre `#BEBEBE` (1,9).
+ *
+ * `NEUTRAL[900]` pasa sobre los CUATRO rellenos: verde 6,9 · verde azulado 5,6 ·
+ * amarillo 11,8 · gris 9,2. Un color para todos es más simple que una tabla por
+ * tramo, y no se desincroniza cuando cambie la paleta: el test comprueba el
+ * contraste contra cada relleno de `STATES`.
+ *
+ * ⚠️ Salvo «Not installed», que no tiene relleno —es la trama gris clara— y va
+ * en `TEXT_MUTED` (6,3:1). No en `BRAND.gray`, que es un RELLENO y daba 1,5.
+ */
+export function segmentLabelColor(key) {
+  return key === "missing" ? TEXT_MUTED : NEUTRAL[900];
 }
 
 /**
@@ -244,17 +266,7 @@ function CoverageRow({ item, totalDevices, onOpen, onOpenCell }) {
                   bgcolor: seg.color ?? "transparent",
                   display: "grid",
                   placeItems: "center",
-                  // ⚠️ «Not installed» no tiene relleno: es la trama gris clara
-                  // de debajo. Con el blanco de los demás tramos su número era
-                  // invisible —pasaba ya antes, con los tramos ≥ 12 %—.
-                  // `TEXT_MUTED` y NO `BRAND.gray`: ése es un RELLENO (#BEBEBE)
-                  // y sobre la trama daba 1,5:1, igual de ilegible.
-                  color:
-                    seg.key === "behind"
-                      ? BRAND.alert.warningText
-                      : seg.key === "missing"
-                        ? TEXT_MUTED
-                        : BRAND.surface,
+                  color: segmentLabelColor(seg.key),
                   fontSize: TEXT.xs,
                   fontWeight: 700,
                   cursor: onOpenCell ? "pointer" : "default",

@@ -17,6 +17,8 @@ import CatalogCoveragePanel, {
   coverageSegments,
   eligibleOf,
   labelWidthPx,
+  segmentLabelColor,
+  STATES,
   versionSummary,
 } from "./CatalogCoveragePanel";
 import { TEXT_MUTED } from "../../theme/brand";
@@ -351,5 +353,57 @@ describe("el número dentro de la barra", () => {
       return c;
     })();
     expect(color).toBe(esperado);
+  });
+});
+
+
+// ── Contraste del número sobre cada relleno (30-sep) ────────────────
+//
+// 🔴 EL DEFECTO. El número iba en blanco sobre el verde (2,5:1) y el verde
+// azulado (3,1:1); el amarillo en su `warningText` (4,3); el gris en blanco
+// (1,9). Ninguno llegaba al 4,5:1 que pide WCAG AA para texto de 11 px. Son
+// rellenos de tono MEDIO: ni el blanco ni `BRAND.dark` (4,2 / 3,4) alcanzan.
+//
+// ⚠️ SE COMPRUEBA CONTRA LOS RELLENOS DE `STATES`, no contra una lista copiada
+// aquí: si alguien cambia la paleta y el número deja de leerse, esto falla.
+
+const hexChannels = (h) => {
+  const x = String(h).replace("#", "");
+  return [0, 2, 4].map((i) => parseInt(x.slice(i, i + 2), 16));
+};
+const luminance = (hex) =>
+  hexChannels(hex)
+    .map((v) => v / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+const contrast = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+describe("segmentLabelColor", () => {
+  it("🔴 el número se lee (≥ 4,5:1) sobre TODOS los rellenos de la barra", () => {
+    for (const s of STATES) {
+      const ratio = contrast(segmentLabelColor(s.key), s.color);
+      expect(ratio, `${s.key} (${s.color})`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("⚠️ el verde y el verde azulado —los que pediste— en concreto", () => {
+    const fill = (k) => STATES.find((s) => s.key === k).color;
+    expect(contrast(segmentLabelColor("current"), fill("current"))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(segmentLabelColor("ahead"), fill("ahead"))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("⚠️ «Not installed» no tiene relleno: va en el gris de TEXTO", () => {
+    // Sobre la trama gris clara (#E5E5E5 en su tono más oscuro).
+    expect(segmentLabelColor("missing")).toBe(TEXT_MUTED);
+    expect(contrast(TEXT_MUTED, "#E5E5E5")).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("el blanco de antes NO pasaba: el test habría cazado el defecto", () => {
+    // Fija que la comprobación de arriba muerde de verdad.
+    const verde = STATES.find((s) => s.key === "current").color;
+    expect(contrast("#FFFFFF", verde)).toBeLessThan(4.5);
   });
 });
