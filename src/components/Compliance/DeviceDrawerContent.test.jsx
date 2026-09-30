@@ -245,15 +245,43 @@ describe("DeviceDrawerContent — hallazgos por sección, plegables", () => {
     ],
   };
 
-  it("⭐ abre sólo la sección más grave; la cabecera dice cuántos y cuántos graves", () => {
+  it("⭐ todas empiezan plegadas; la cabecera dice cuántos y cuántos graves", () => {
+    // Abrir la primera de oficio empujaba el resto fuera de la vista (29-sep):
+    // el operador elige por dónde empezar.
     render(<DeviceDrawerContent {...baseProps} data={many} />);
+    for (const name of [/firewall/i, /^audit/i, /^services/i]) {
+      expect(screen.getByRole("button", { name })).toHaveAttribute("aria-expanded", "false");
+    }
     const fw = screen.getByRole("button", { name: /firewall/i });
-    expect(fw).toHaveAttribute("aria-expanded", "true");
     expect(fw).toHaveTextContent("2 controls");
     expect(fw).toHaveTextContent("2 critical/high");
-    expect(screen.getByRole("button", { name: /^audit/i })).toHaveAttribute("aria-expanded", "false");
-    // Lo plegado no se ve.
-    expect(screen.getByRole("region", { name: /firewall/i })).toBeVisible();
+  });
+
+  it("⭐ la cabecera plegada dice cuántos se arreglan solos — los mismos que enseñan «Fix now»", async () => {
+    const fixable = {
+      ...many,
+      findings: [
+        { ...many.findings[0], agentRemediable: true },
+        { ...many.findings[1], agentRemediable: true, remediationStatus: "remediated", remediationStatusChangedAt: new Date().toISOString() },
+        { ...many.findings[2], agentRemediable: false },
+        // Un «pass» no tiene nada que arreglar (y con el filtro por defecto ni se lista).
+        { ...many.findings[3], agentRemediable: true, status: "pass" },
+      ],
+    };
+    render(<DeviceDrawerContent {...baseProps} data={fixable} onRemediateFinding={vi.fn()} />);
+    // Firewall: A se arregla; B ya está «remediated» esperando el escaneo (sin botón).
+    expect(screen.getByRole("button", { name: /firewall/i })).toHaveTextContent("1 auto-fixable");
+    expect(screen.getByRole("button", { name: /^audit/i })).not.toHaveTextContent("auto-fixable");
+    // Abrir la sección enseña exactamente ese botón.
+    fireEvent.click(screen.getByRole("button", { name: /firewall/i }));
+    // Por el texto: el Tooltip del botón le pone su propio nombre accesible.
+    expect(await screen.findAllByText("Fix now")).toHaveLength(1);
+  });
+
+  it("sin permiso para arreglar no promete arreglos", () => {
+    const fixable = { ...many, findings: [{ ...many.findings[0], agentRemediable: true }] };
+    render(<DeviceDrawerContent {...baseProps} data={fixable} onRemediateFinding={vi.fn()} canManage={false} />);
+    expect(screen.getByRole("button", { name: /firewall/i })).not.toHaveTextContent("auto-fixable");
   });
 
   it("se abre una sección, y «Expand all» / «Collapse all» las mueven todas", () => {

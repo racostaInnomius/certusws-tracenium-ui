@@ -110,10 +110,22 @@ describe("FindingCard (render smoke)", () => {
     expect(screen.getByText("Fail")).toBeInTheDocument(); // StatusChip
   });
 
-  it("renders a framework chip per mapping, with CIS/STIG control levels", () => {
+  it("⭐ frameworks: plegados, un chip por estándar; la lista con niveles CIS/STIG, en Details", () => {
+    // Una pill por control doblaba la altura de la tarjeta (hasta ~30).
     renderCard();
-    expect(screen.getByText("CIS 5.2.4 · L1")).toBeInTheDocument();
-    expect(screen.getByText("STIG V-253000 · CAT I")).toBeInTheDocument();
+    expect(screen.getByText("CIS")).toBeInTheDocument();
+    expect(screen.getByText("STIG")).toBeInTheDocument();
+    expect(screen.queryByText("5.2.4 · L1")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByText("FRAMEWORKS")).toBeInTheDocument();
+    expect(screen.getByText("5.2.4 · L1")).toBeInTheDocument();
+    expect(screen.getByText("V-253000 · CAT I")).toBeInTheDocument();
+  });
+
+  it("un clic en la línea de frameworks abre Details", () => {
+    renderCard();
+    fireEvent.click(screen.getByText("CIS"));
+    expect(screen.getByText("5.2.4 · L1")).toBeInTheDocument();
   });
 
   it("shows the remediation status", () => {

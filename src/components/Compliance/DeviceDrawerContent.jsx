@@ -16,6 +16,7 @@ import {
   Box,
   Button,
   ButtonBase,
+  Chip,
   CircularProgress,
   Collapse,
   FormControl,
@@ -59,6 +60,7 @@ import { useBulkSelection } from "./useBulkSelection";
 import { PatchLevelSection } from "./PatchLevel";
 import DeviceScoreTrend from "./DeviceScoreTrend";
 import { platformLabel } from "../../utils/platform";
+import { remediationVerification } from "./complianceHelpers";
 
 export default function DeviceDrawerContent({
   agentId,
@@ -209,17 +211,16 @@ export default function DeviceDrawerContent({
 
   // ── Una sección por categoría, plegada ─────────────────────────────
   // Con 40 hallazgos en 12 categorías la lista era un muro. La cabecera de
-  // cada una dice cuántos tiene y cuántos son graves, así que se decide qué
-  // abrir sin abrirlo todo. Abierta de entrada sólo la PRIMERA — la más
-  // grave, por el orden de arriba —: es por donde va a empezar el operador.
-  // Lo que se abre o cierra a mano se respeta al cambiar el filtro.
-  const [openCategories, setOpenCategories] = React.useState(null);
-  const firstCategory = byCategory[0]?.[0] ?? null;
-  const isCategoryOpen = (category) =>
-    openCategories ? openCategories.has(category) : category === firstCategory;
+  // cada una dice cuántos tiene, cuántos son graves y cuántos se arreglan
+  // solos, así que se decide qué abrir sin abrirlo todo. TODAS empiezan
+  // plegadas (29-sep): abrir la primera de oficio empujaba el resto fuera de
+  // la vista, y el operador elige por dónde empezar. Lo que se abre o cierra
+  // a mano se respeta al cambiar el filtro.
+  const [openCategories, setOpenCategories] = React.useState(() => new Set());
+  const isCategoryOpen = (category) => openCategories.has(category);
   const toggleCategory = (category) =>
     setOpenCategories((prev) => {
-      const next = new Set(prev ?? (firstCategory ? [firstCategory] : []));
+      const next = new Set(prev);
       if (next.has(category)) next.delete(category);
       else next.add(category);
       return next;
@@ -648,6 +649,11 @@ export default function DeviceDrawerContent({
             const open = isCategoryOpen(category);
             const failing = items.filter((f) => f.status === "fail" || f.status === "error");
             const severe = failing.filter((f) => f.severity === "critical" || f.severity === "high").length;
+            // Los que enseñarían «Fix now» dentro: la MISMA condición que la
+            // tarjeta (FindingCard), para que la cifra y los botones cuadren.
+            const autoFixable = canManage && onRemediateFinding
+              ? items.filter((f) => f.agentRemediable && f.status === "fail" && remediationVerification(f) !== "awaiting").length
+              : 0;
             const headerId = `cat-${agentId}-${category}`;
             return (
               <Box key={category} sx={{ mb: 1.5, border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}>
@@ -684,11 +690,21 @@ export default function DeviceDrawerContent({
                     {items.length} {items.length === 1 ? "control" : "controls"}
                     {!showOnlyFailures && failing.length > 0 ? ` · ${failing.length} failing` : ""}
                   </Typography>
-                  {severe > 0 ? (
-                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.errorText, fontWeight: 700, ml: "auto" }}>
-                      {severe} critical/high
-                    </Typography>
-                  ) : null}
+                  <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1 }}>
+                    {autoFixable > 0 ? (
+                      <Chip
+                        size="small"
+                        icon={<BuildOutlinedIcon sx={{ fontSize: ICON.xs }} />}
+                        label={`${autoFixable} auto-fixable`}
+                        sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText, "& .MuiChip-icon": { color: BRAND.tealText } }}
+                      />
+                    ) : null}
+                    {severe > 0 ? (
+                      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.errorText, fontWeight: 700 }}>
+                        {severe} critical/high
+                      </Typography>
+                    ) : null}
+                  </Box>
                 </ButtonBase>
                 <Collapse in={open} timeout="auto" id={`${headerId}-body`} role="region" aria-labelledby={headerId}>
                   <Stack spacing={1} sx={{ p: 1 }}>

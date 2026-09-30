@@ -31,11 +31,11 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import FindingExplanation from "./FindingExplanation";
+import { FrameworkDetail, FrameworkSummary } from "./FrameworkMappings";
 import EvidenceView from "./EvidenceView";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import {
   SeverityChip,
-  FrameworkChip,
   StatusChip,
   RemediationStatusChip,
   REMEDIATION_STATUS_META,
@@ -304,24 +304,14 @@ export default function FindingCard({
             </Typography>
           ) : null}
 
-          {/* Framework chips */}
+          {/* Frameworks: una línea (un chip por estándar, con cuántos
+              controles). Eran una pill por control —hasta ~30— y la tarjeta
+              doblaba su altura; la lista, una línea por benchmark y con sus
+              enlaces, está en Details. Un clic en la línea la abre. */}
           {Array.isArray(finding.frameworks) && finding.frameworks.length > 0 ? (
-            <Stack
-              direction="row"
-              spacing={0.5}
-              sx={{ mt: 1, flexWrap: "wrap", gap: 0.5 }}
-            >
-              {finding.frameworks.map((fw, idx) => (
-                <FrameworkChip
-                  key={`${fw.framework}:${fw.control_id}:${idx}`}
-                  framework={fw.framework}
-                  controlId={fw.control_id}
-                  controlLevel={fw.control_level}
-                  controlTitle={fw.control_title}
-                  referenceUrl={fw.reference_url}
-                />
-              ))}
-            </Stack>
+            <Box sx={{ mt: 1 }}>
+              <FrameworkSummary frameworks={finding.frameworks} onOpen={() => setOpen(true)} emptyDash={false} />
+            </Box>
           ) : null}
 
           {/* Sprint 3 — action row. Sits between framework chips and
@@ -653,6 +643,7 @@ export default function FindingCard({
 
       {open ? (
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px dashed ${BRAND.border}` }}>
+          <FrameworkDetail frameworks={finding.frameworks} sx={{ mt: 0, mb: 1 }} />
           {finding.remediationSummary ? (
             <Box sx={{ mb: 1 }}>
               <Typography variant="caption" sx={{ color: BRAND.tealText, fontWeight: 700, textTransform: "uppercase" }}>
