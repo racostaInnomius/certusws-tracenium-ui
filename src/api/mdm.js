@@ -47,3 +47,23 @@ export function requestMdmPushCertificate() {
 export function installMdmPushCertificate(payload) {
   return httpPutJson("/api/v1/mdm/push-certificate", payload);
 }
+
+// ── Actualización de macOS forzada (DDM) ────────────────────────────────────
+// Programar o cancelar piden además ADMIN/OWNER: a la hora indicada el Mac
+// instala y reinicia.
+
+const osUpdatePath = (udid) => `/api/v1/mdm/devices/${encodeURIComponent(udid)}/os-update`;
+
+/** → { scheduled: {targetOSVersion, targetBuildVersion, targetLocalDateTime, requestedAt} | null, device: {...} | null } */
+export function getMdmOsUpdate(udid, { fresh = false } = {}) {
+  return httpGetJson(osUpdatePath(udid), opts(fresh));
+}
+
+/** { targetOSVersion, targetBuildVersion?, targetLocalDateTime: "yyyy-mm-ddThh:mm:ss" (hora local del Mac) } */
+export function scheduleMdmOsUpdate(udid, body) {
+  return httpPutJson(osUpdatePath(udid), body);
+}
+
+export function cancelMdmOsUpdate(udid) {
+  return httpDeleteJson(osUpdatePath(udid));
+}

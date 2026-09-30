@@ -9,6 +9,9 @@ import {
   mdmOverview,
   mdmPlatform,
   looksLikePem,
+  buildOsUpdateRequest,
+  formatDeviceLocalDateTime,
+  osUpdateInstallState,
   pushCertificateStatus,
   requestBlocker,
   STALE_AFTER_MS,
@@ -131,5 +134,30 @@ describe("Apple setup", () => {
   it("un .pem se reconoce antes de mandarlo", () => {
     expect(looksLikePem("-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n")).toBe(true);
     expect(looksLikePem("hola")).toBe(false);
+  });
+});
+
+describe("actualización del sistema (DDM)", () => {
+  const now = new Date("2026-09-30T15:00:00Z");
+  it("❗ la hora va tal cual la escribe el operador: es la del Mac, no la del navegador", () => {
+    expect(buildOsUpdateRequest({ version: "27.0.1", build: "26A434", date: "2026-10-02", time: "18:00" }, now)).toEqual({
+      body: { targetOSVersion: "27.0.1", targetBuildVersion: "26A434", targetLocalDateTime: "2026-10-02T18:00:00" },
+    });
+    expect(buildOsUpdateRequest({ version: "27.0.1", build: "", date: "2026-10-02", time: "18:00" }, now).body).not.toHaveProperty("targetBuildVersion");
+  });
+
+  it("rechaza lo que el servidor rechazaría", () => {
+    expect(buildOsUpdateRequest({ version: "27", date: "2026-10-02", time: "18:00" }, now).error).toMatch(/27\.0\.1/);
+    expect(buildOsUpdateRequest({ version: "27.0.1", build: "26A 4", date: "2026-10-02", time: "18:00" }, now).error).toMatch(/build/);
+    expect(buildOsUpdateRequest({ version: "27.0.1", date: "2026-09-28", time: "18:00" }, now).error).toMatch(/next 60 days/);
+    expect(buildOsUpdateRequest({ version: "27.0.1", date: "2026-02-30", time: "18:00" }, now).error).toMatch(/valid date/);
+    expect(buildOsUpdateRequest({ version: "27.0.1", date: "", time: "18:00" }, now).error).toMatch(/date and time/);
+  });
+
+  it("estados que informa el Mac y fecha legible", () => {
+    expect(osUpdateInstallState("downloading")).toMatchObject({ label: "Downloading", tone: "info" });
+    expect(osUpdateInstallState("failed").tone).toBe("critical");
+    expect(osUpdateInstallState(undefined).label).toBe("No report yet");
+    expect(formatDeviceLocalDateTime("2026-10-02T18:00:00")).toBe("Oct 02, 2026 at 18:00");
   });
 });

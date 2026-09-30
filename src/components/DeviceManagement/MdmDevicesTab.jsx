@@ -44,6 +44,7 @@ import {
   ownershipLabel,
 } from "./mdmModel";
 import { Field, StatusChip } from "./mdmAtoms";
+import MdmOsUpdatePanel from "./MdmOsUpdatePanel";
 
 function rowsFrom(mdmDevices, appDevices) {
   const mdm = mdmDevices.map((d) => ({
@@ -74,7 +75,7 @@ function rowsFrom(mdmDevices, appDevices) {
   return [...mdm, ...app];
 }
 
-export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab }) {
+export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, canConfigure = false, notify }) {
   const [channel, setChannel] = React.useState("all");
   const [query, setQuery] = React.useState("");
   const [selected, setSelected] = React.useState(null);
@@ -209,6 +210,8 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab }
             onClose={() => setSelected(null)}
             onNavigate={onNavigate}
             onOpenTab={onOpenTab}
+            canConfigure={canConfigure}
+            notify={notify}
           />
         ) : null}
       </Drawer>
@@ -228,7 +231,7 @@ function commandsText(device, commandsReason) {
   return "The device registered for push. Tracenium can send it commands once the Apple push certificate is set up.";
 }
 
-function DeviceDetail({ row, commandsReason, onClose, onNavigate, onOpenTab }) {
+function DeviceDetail({ row, commandsReason, onClose, onNavigate, onOpenTab, canConfigure, notify }) {
   const d = row.device;
   return (
     <Box sx={{ display: "grid", gap: 2 }} aria-label="Device detail">
@@ -284,6 +287,9 @@ function DeviceDetail({ row, commandsReason, onClose, onNavigate, onOpenTab }) {
               </Button>
             ) : null}
           </Box>
+          {d.enrollmentState === "enrolled" ? (
+            <MdmOsUpdatePanel udid={d.udid} canConfigure={canConfigure} notify={notify} />
+          ) : null}
         </>
       ) : (
         <>

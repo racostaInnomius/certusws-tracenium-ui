@@ -6,7 +6,7 @@
 // página, y que sin la capacidad `enrollment` no se llame a la API.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { server, http, HttpResponse } from "../test/msw/server";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
@@ -73,6 +73,12 @@ beforeEach(() => {
     requests: 0,
     puts: [],
     putReplies: [],
+    osUpdate: {
+      scheduled: null,
+      device: { osVersion: "27.0", buildVersion: "26A428", installState: "none", pendingVersion: null, failureReason: null, reportedAt: new Date().toISOString() },
+    },
+    osPuts: [],
+    osDeletes: 0,
   };
   downloads.length = 0;
 });
@@ -104,6 +110,18 @@ function mount(search = "") {
       return HttpResponse.json(created, { status: 201 });
     }),
     http.get(/\/api\/v1\/mdm\/push-certificate$/, () => HttpResponse.json(state.setup)),
+    http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/os-update$/, () => HttpResponse.json(state.osUpdate)),
+    http.put(/\/api\/v1\/mdm\/devices\/[^/]+\/os-update$/, async ({ request }) => {
+      const body = await request.json();
+      state.osPuts.push({ path: new URL(request.url).pathname, body });
+      state.osUpdate = { ...state.osUpdate, scheduled: { ...body, requestedAt: new Date().toISOString() } };
+      return HttpResponse.json({ ...state.osUpdate, commandUuid: "cmd-1" });
+    }),
+    http.delete(/\/api\/v1\/mdm\/devices\/[^/]+\/os-update$/, () => {
+      state.osDeletes += 1;
+      state.osUpdate = { ...state.osUpdate, scheduled: null };
+      return HttpResponse.json({ cancelled: true });
+    }),
     http.post(/\/api\/v1\/mdm\/push-certificate\/request$/, () => {
       state.requests += 1;
       return HttpResponse.json(
@@ -337,5 +355,65 @@ describe("MDM / MAM — Apple setup", () => {
     mount("&mdmTab=devices");
     const row = (await screen.findByText("JPR-MacBookPro")).closest("tr");
     expect(within(row).getByText("Re-enroll needed")).toBeTruthy();
+  });
+});
+
+describe("MDM / MAM — forzar una actualización del sistema (DDM)", () => {
+  async function openMac() {
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    return screen.findByLabelText("OS update");
+  }
+
+  it("enseña lo que informa el Mac: versión y estado de la instalación", async () => {
+    state.osUpdate.device = { ...state.osUpdate.device, installState: "downloading", pendingVersion: { "os-version": "27.0.1" } };
+    const panel = await openMac();
+    expect(await within(panel).findByText("Downloading")).toBeTruthy();
+    expect(within(panel).getByText("27.0.1")).toBeTruthy();
+  });
+
+  it("❗ programar manda la hora TAL CUAL (hora del Mac, no del navegador), tras confirmar", async () => {
+    const user = userEvent.setup();
+    const panel = await openMac();
+    await user.type(within(panel).getByLabelText("Version"), "27.0.1");
+    await user.type(within(panel).getByLabelText("Build (optional)"), "26A434");
+    const due = new Date(Date.now() + 2 * 86_400_000);
+    const day = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
+    fireEvent.change(within(panel).getByLabelText("Install by"), { target: { value: day } });
+    fireEvent.change(within(panel).getByLabelText("Device time"), { target: { value: "18:00" } });
+    await user.click(within(panel).getByRole("button", { name: "Schedule update" }));
+
+    expect(await screen.findByText(/installs it and restarts on its own/)).toBeTruthy();
+    expect(state.osPuts).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Schedule update", hidden: false }));
+    await waitFor(() => expect(state.osPuts).toHaveLength(1));
+    expect(state.osPuts[0].path).toMatch(/\/devices\/36F3B382-4B4B-5025-89CC-115DD69E4F67\/os-update$/);
+    expect(state.osPuts[0].body).toEqual({ targetOSVersion: "27.0.1", targetBuildVersion: "26A434", targetLocalDateTime: `${day}T18:00:00` });
+    expect(await within(panel).findByText(/is forced by/)).toBeTruthy();
+  });
+
+  it("una versión mal escrita no llega al servidor", async () => {
+    const user = userEvent.setup();
+    const panel = await openMac();
+    await user.type(within(panel).getByLabelText("Version"), "27");
+    await user.click(within(panel).getByRole("button", { name: "Schedule update" }));
+    expect(await within(panel).findByText(/for example 27\.0\.1/)).toBeTruthy();
+    expect(state.osPuts).toHaveLength(0);
+  });
+
+  it("cancelar pide confirmación y llama al servidor", async () => {
+    const user = userEvent.setup();
+    state.osUpdate.scheduled = { targetOSVersion: "27.0.1", targetBuildVersion: null, targetLocalDateTime: "2026-10-02T18:00:00" };
+    const panel = await openMac();
+    await user.click(await within(panel).findByRole("button", { name: "Cancel update" }));
+    await user.click(await screen.findByRole("button", { name: /^cancel update$/i, hidden: false }));
+    await waitFor(() => expect(state.osDeletes).toBe(1));
+  });
+
+  it("❗ sin ADMIN/OWNER se ve el estado, pero no se puede programar", async () => {
+    capabilities = { role: "Mobile Operator", permissions: ["device_management", "enrollment"] };
+    const panel = await openMac();
+    expect(await within(panel).findByText(/only tenant admins and owners can force/i)).toBeTruthy();
+    expect(within(panel).queryByRole("button", { name: "Schedule update" })).toBeNull();
   });
 });

@@ -181,3 +181,59 @@ export function looksLikePem(text) {
 }
 
 export const APPLE_ACCOUNT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ── Actualización del sistema forzada (DDM) ─────────────────────────────────
+
+const INSTALL_STATES = {
+  none: { label: "Up to date", tone: "positive" },
+  downloading: { label: "Downloading", tone: "info" },
+  prepared: { label: "Ready to install", tone: "info" },
+  installing: { label: "Installing", tone: "info" },
+  failed: { label: "Failed", tone: "critical" },
+};
+
+/** Lo que dice el propio equipo (softwareupdate.install-state). */
+export function osUpdateInstallState(state) {
+  return INSTALL_STATES[state] ?? { label: "No report yet", tone: "muted" };
+}
+
+const OS_VERSION_RE = /^\d{1,3}(\.\d{1,3}){1,2}$/;
+const OS_BUILD_RE = /^[0-9A-Za-z]{4,12}$/;
+export const OS_UPDATE_MAX_DAYS = 60;
+
+/**
+ * El cuerpo de la petición, o `{ error }`. La hora es la LOCAL del equipo
+ * (Apple: `yyyy-mm-ddThh:mm:ss` sin zona), no la del navegador: se envía tal
+ * cual la escribe el operador. Mismas reglas que el servidor
+ * (os-update.service.ts, validateOsUpdateRequest).
+ */
+export function buildOsUpdateRequest({ version, build, date, time }, now = new Date()) {
+  const v = String(version || "").trim();
+  if (!OS_VERSION_RE.test(v)) return { error: "Enter the version as it appears in Software Update, for example 27.0.1." };
+  const b = String(build || "").trim();
+  if (b && !OS_BUILD_RE.test(b)) return { error: "The build looks like 26A434, or leave it empty." };
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+  const t = /^(\d{2}):(\d{2})$/.exec(String(time || ""));
+  if (!d || !t) return { error: "Choose the date and time." };
+  const asUtc = Date.UTC(+d[1], +d[2] - 1, +d[3], +t[1], +t[2], 0);
+  if (new Date(asUtc).getUTCDate() !== +d[3]) return { error: "Choose a valid date." };
+  const ms = now.getTime();
+  if (asUtc < ms - 14 * 3600 * 1000 || asUtc > ms + OS_UPDATE_MAX_DAYS * 24 * 3600 * 1000) {
+    return { error: `Choose a time in the next ${OS_UPDATE_MAX_DAYS} days.` };
+  }
+  return {
+    body: {
+      targetOSVersion: v,
+      ...(b ? { targetBuildVersion: b } : {}),
+      targetLocalDateTime: `${d[0]}T${t[1]}:${t[2]}:00`,
+    },
+  };
+}
+
+/** «Oct 02, 2026 at 18:00» a partir de `yyyy-mm-ddThh:mm:ss` sin zona (hora del equipo). */
+export function formatDeviceLocalDateTime(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(value || ""));
+  if (!m) return "—";
+  const month = new Date(Date.UTC(2000, +m[2] - 1, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  return `${month} ${m[3]}, ${m[1]} at ${m[4]}:${m[5]}`;
+}

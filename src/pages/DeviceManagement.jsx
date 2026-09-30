@@ -481,7 +481,14 @@ export default function DeviceManagement({ onNavigate }) {
       </TabPanel>
 
       <TabPanel value={shownTab} tab="devices">
-        <MdmDevicesTab mdm={mdm} appDevices={mobileDevices} onNavigate={onNavigate} onOpenTab={setTab} />
+        <MdmDevicesTab
+          mdm={mdm}
+          appDevices={mobileDevices}
+          onNavigate={onNavigate}
+          onOpenTab={setTab}
+          canConfigure={canConfigurePush}
+          notify={(message, severity) => showSnack(message, severity)}
+        />
       </TabPanel>
 
       <TabPanel value={shownTab} tab="enrollment">
