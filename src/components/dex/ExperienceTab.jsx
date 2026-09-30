@@ -11,12 +11,13 @@
 
 import * as React from "react";
 import { Alert, Box, Chip, CircularProgress, Grid, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
-import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
 import { BRAND, ROLE, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { formatDate, formatRelative } from "../../utils/format";
 import { getDeviceExperience } from "../../api/dex";
-import { EVENT_KIND_LABEL, SCOPE_NOTE, dayTicks, formatDuration, groupEvents, periodSummary, seriesWithGaps } from "./dexModel";
+import { EVENT_KIND_LABEL, SCOPE_NOTE, dayTicks, formatDuration, groupEvents, periodSummary, seriesWithGaps, timelineEvents, withLastBoot } from "./dexModel";
+import ExperienceTimeline from "./ExperienceTimeline";
 
 const RANGES = [
   { days: 1, label: "24 h" },
@@ -90,7 +91,13 @@ export default function ExperienceTab({ agentId }) {
   const scope = status.scope ?? {};
   const summary = periodSummary(data.windows);
   const series = seriesWithGaps(data.windows);
-  const groups = groupEvents(data.events, data.loadedAt - days * 86_400_000);
+  const fromMs = data.loadedAt - days * 86_400_000;
+  const groups = groupEvents(data.events, fromMs);
+  // Los reinicios, marcados en la gráfica: sin ellos, la bajada de memoria de
+  // un reinicio se leía como el equipo «mejorando solo».
+  const lastBootUtc = status.lastBootUtc ?? status.inventoryLastBootUtc ?? null;
+  const timelineEvs = withLastBoot(data.events, lastBootUtc);
+  const bootMarks = timelineEvents(timelineEvs, fromMs).filter((e) => e.kind === "restart" || e.kind === "unexpected_shutdown" || e.kind === "os_crash");
   const battery = status.battery;
   const notes = ["events", "boot", "battery"].map((k) => SCOPE_NOTE[k]?.[scope[k]]).filter(Boolean);
 
@@ -138,7 +145,7 @@ export default function ExperienceTab({ agentId }) {
           <Stat label="Memory" value={summary.memAvg == null ? "—" : `${summary.memAvg}% avg`} helper={summary.memPeak == null ? null : `peak ${summary.memPeak}%`} />
         </Grid>
         <Grid size={{ xs: 6, md: 3 }}>
-          <Stat label="Last boot" value={formatDuration(status.bootDurationMs)} helper={status.lastBootUtc ? formatDate(status.lastBootUtc) : null} />
+          <Stat label="Last boot" value={formatDuration(status.bootDurationMs)} helper={lastBootUtc ? formatDate(lastBootUtc) : null} />
         </Grid>
         <Grid size={{ xs: 6, md: 3 }}>
           <Stat
@@ -162,6 +169,9 @@ export default function ExperienceTab({ agentId }) {
                 <Area type="monotone" dataKey="cpuAvg" name="CPU (avg)" stroke={BRAND.teal} fill={BRAND.teal} fillOpacity={0.15} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={false} />
                 <Line type="monotone" dataKey="cpuMax" name="CPU (peak)" stroke={BRAND.teal} strokeDasharray="3 3" strokeWidth={1} dot={false} isAnimationActive={false} connectNulls={false} />
                 <Area type="monotone" dataKey="memAvg" name="Memory (avg)" stroke={ROLE.caution} fill={ROLE.caution} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={false} />
+                {bootMarks.map((e) => (
+                  <ReferenceLine key={`${e.kind}-${e.t}`} x={e.t} stroke={e.kind === "restart" ? TEXT_MUTED : ROLE.critical} strokeDasharray="4 3" ifOverflow="hidden" />
+                ))}
               </AreaChart>
             </ResponsiveContainer>
           </Box>
@@ -170,7 +180,13 @@ export default function ExperienceTab({ agentId }) {
         )}
         <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
           15-minute averages. A gap means the device was off or asleep — it is not filled in.
+          {bootMarks.length ? " Dashed lines mark restarts (red: unexpected shutdown or system crash)." : ""}
         </Typography>
+      </Box>
+
+      <Box>
+        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>Timeline ({RANGES.find((r) => r.days === days)?.label})</Typography>
+        <ExperienceTimeline windows={data.windows} events={timelineEvs} fromMs={fromMs} />
       </Box>
 
       <Box>
