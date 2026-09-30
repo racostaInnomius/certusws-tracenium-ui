@@ -256,6 +256,14 @@ function DeviceDetail({ row, commandsReason, onClose, onNavigate, onOpenTab }) {
             <Field label="Ownership">{ownershipLabel(d.ownership)}</Field>
             <Field label="Enrolled">{formatDate(d.enrolledAt)}</Field>
             <Field label="Last check-in">{formatRelative(d.lastSeenAt)}</Field>
+            {row.platform === "macos" ? (
+              // La credencial de propietario del volumen que el Mac nos confía:
+              // en Apple silicon autoriza actualizaciones de macOS sin contraseña.
+              // Sólo la fecha — el token no sale nunca del servidor.
+              <Field label="Bootstrap token">
+                {d.bootstrapTokenEscrowedAt ? `Escrowed ${formatDate(d.bootstrapTokenEscrowedAt)}` : "Not escrowed"}
+              </Field>
+            ) : null}
           </Box>
           <Field label="UDID" mono>{d.udid}</Field>
           <Divider sx={{ borderColor: BRAND.border }} />

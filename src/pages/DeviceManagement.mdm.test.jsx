@@ -159,6 +159,23 @@ describe("MDM / MAM — Devices", () => {
   });
 });
 
+describe("MDM / MAM — Bootstrap token", () => {
+  it("el cajón de un Mac dice si su Bootstrap Token está custodiado", async () => {
+    state.devices = [{ ...MAC, bootstrapTokenEscrowedAt: "2026-09-30T20:00:00.000Z" }];
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    const detail = await screen.findByLabelText("Device detail");
+    expect(within(detail).getByText(/^Escrowed /)).toBeTruthy();
+  });
+
+  it("sin token, lo dice", async () => {
+    state.devices = [{ ...MAC, bootstrapTokenEscrowedAt: null }];
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    expect(within(await screen.findByLabelText("Device detail")).getByText("Not escrowed")).toBeTruthy();
+  });
+});
+
 describe("MDM / MAM — Enrollment", () => {
   it("❗ el alta manda serie, propiedad y caducidad — y enseña el enlace", async () => {
     const user = userEvent.setup();
