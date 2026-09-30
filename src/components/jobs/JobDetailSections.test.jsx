@@ -8,6 +8,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { JobOutcomeSection, JobRawDataSection, JobRequestSection } from "./JobDetailSections";
+import { failedRemediationBatchJob } from "../../test/fixtures/failedRemediationBatch";
 
 afterEach(cleanup);
 
@@ -178,5 +179,34 @@ describe("What was requested", () => {
   it("sin payload: «No parameters.»", () => {
     render(<JobRequestSection job={{ job_type: "patch_scan", payload_json: {} }} />);
     expect(screen.getByText("No parameters.")).toBeInTheDocument();
+  });
+});
+
+describe("🔴 un lote FALLIDO (ack en last_error, 69b4aa78)", () => {
+  it("«What happened» sale, y el fix que falló va PRIMERO con su motivo", () => {
+    render(<JobOutcomeSection job={failedRemediationBatchJob()} />);
+    expect(screen.getByText("Batch finished — 25 fixes: 1 failed, 21 applied, 3 already compliant")).toBeInTheDocument();
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveAttribute("data-tone", "error");
+    expect(within(rows[0]).getByText(/Fix failed/)).toBeInTheDocument();
+    expect(within(rows[0]).getByText(/syscall fchmodat2 does not exist/)).toBeInTheDocument();
+    // Los que salieron bien no llevan motivo.
+    expect(within(rows[1]).queryByText(/expected value/)).not.toBeInTheDocument();
+  });
+
+  it("el crudo va plegado como «Raw error»; no hay «Raw result»", async () => {
+    const user = userEvent.setup();
+    render(<JobRawDataSection job={failedRemediationBatchJob()} />);
+    const toggle = screen.getByRole("button", { name: "Raw error" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/patch_remediate_batch:done;items=/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Raw result" })).not.toBeInTheDocument();
+    await user.click(toggle);
+    expect(screen.getByText(/patch_remediate_batch:done;items=/)).toBeInTheDocument();
+  });
+
+  it("un error de texto libre no se duplica en Raw data", () => {
+    render(<JobRawDataSection job={{ job_type: "patch_install", last_error: "PrivSvc timeout: x", payload_json: {} }} />);
+    expect(screen.queryByRole("button", { name: "Raw error" })).not.toBeInTheDocument();
   });
 });

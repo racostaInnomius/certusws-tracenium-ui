@@ -17,7 +17,7 @@ import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
 
 import { BRAND, ICON, NEUTRAL, TEXT, TEXT_MUTED } from "../../theme/brand";
-import { describeJobPayload, describeJobResult, rawJsonText } from "../../utils/jobDescribe";
+import { describeJobPayload, describeJobResult, isAckError, rawJsonText } from "../../utils/jobDescribe";
 import { hasJobResult } from "../../utils/jobResult";
 
 export function DetailRow({ label, value, mono = false }) {
@@ -216,6 +216,7 @@ function ChangesTable({ changes }) {
 }
 
 const BATCH_VISIBLE = 25;
+const ITEM_RANK = { error: 4, warning: 3, info: 2, neutral: 1, success: 0 };
 
 /** What happened — `null` si el agente no ha devuelto nada todavía. */
 export function JobOutcomeSection({ job }) {
@@ -223,7 +224,14 @@ export function JobOutcomeSection({ job }) {
   const [showAllItems, setShowAllItems] = React.useState(false);
   if (!d) return null;
 
-  const items = showAllItems ? d.items : d.items.slice(0, BATCH_VISIBLE);
+  // Lo que falló, PRIMERO: en un lote de 25 con un fallo, el que importa
+  // quedaba el 22.º, debajo del corte de «Show all». El orden dentro de cada
+  // tono se mantiene (es el del lote).
+  const ordered = d.items
+    .map((it, i) => ({ it, i }))
+    .sort((a, b) => (ITEM_RANK[b.it.tone] ?? 1) - (ITEM_RANK[a.it.tone] ?? 1) || a.i - b.i)
+    .map(({ it }) => it);
+  const items = showAllItems ? ordered : ordered.slice(0, BATCH_VISIBLE);
 
   return (
     <Box>
@@ -299,6 +307,8 @@ export function JobOutcomeSection({ job }) {
             {items.map((it, i) => {
               const remediation = it.facts.find((x) => x.key === "remediationId")?.value;
               const setting = it.changes?.rows[0]?.setting;
+              // El motivo sólo en lo que no salió bien: en 21 «applied» es ruido.
+              const reason = it.tone === "error" || it.tone === "warning" ? it.facts.find((x) => x.key === "reason")?.value : null;
               return (
                 <Box component="li" key={i} data-tone={it.tone} sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
                   <Box
@@ -309,6 +319,11 @@ export function JobOutcomeSection({ job }) {
                     {it.headline}
                     {setting ? <Box component="span" sx={{ color: TEXT_MUTED }}>{` · ${setting}`}</Box> : null}
                     {remediation ? <Box component="span" sx={{ color: TEXT_MUTED }}>{` · ${remediation}`}</Box> : null}
+                    {reason ? (
+                      <Box component="span" sx={{ display: "block", color: BRAND.alert.errorText }}>
+                        {reason}
+                      </Box>
+                    ) : null}
                   </Typography>
                 </Box>
               );
@@ -395,10 +410,14 @@ export function JobRequestSection({ job }) {
 /** Raw data — los dos JSON, plegados y con lo sensible tapado. */
 export function JobRawDataSection({ job }) {
   const hasResult = hasJobResult(job?.result_json);
+  // Un error que es un ack ya se lee arriba; su crudo va aquí, plegado. Uno de
+  // texto libre sale entero en «Last Error» y no se repite.
+  const ackError = isAckError(job);
   return (
     <Box>
       <SectionTitle color={TEXT_MUTED}>Raw data</SectionTitle>
       <Box sx={{ display: "grid", gap: 0.25 }}>
+        {ackError ? <RawToggle label="Raw error" text={rawJsonText(job.last_error)} /> : null}
         {hasResult ? <RawToggle label="Raw result" text={rawJsonText(job.result_json)} /> : null}
         <RawToggle label="Raw payload" text={rawJsonText(job?.payload_json ?? {})} />
       </Box>

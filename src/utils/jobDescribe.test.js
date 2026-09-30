@@ -6,16 +6,19 @@
 
 import { describe, expect, it } from "vitest";
 
+import { FAILED_REASON, failedRemediationBatchJob } from "../test/fixtures/failedRemediationBatch";
 import {
   decodeBlob,
   describeDesiredWrite,
   describeJobPayload,
   describeJobResult,
   formatDurationMs,
+  isAckError,
   parseAckMessage,
   rawJsonText,
   redactForDisplay,
   splitHead,
+  summarizeJobError,
 } from "./jobDescribe";
 
 // base64url como lo escribe el agente (sin relleno).
@@ -296,9 +299,10 @@ describe("remediaciones — antes → después", () => {
     expect(d.items).toHaveLength(4);
     expect(d.tone).toBe("warning");
     // `applied` y `applied_reboot_required` son grupos DISTINTOS: agrupando
-    // por la frase recortada salían dos «fix applied» indistinguibles.
+    // por la frase recortada salían dos «fix applied» indistinguibles. Y el
+    // peor tono va delante (el aviso de reinicio antes que los aplicados).
     expect(d.headline).toBe(
-      "Batch finished — 4 fixes: 2 applied, 1 applied (reboot required), 1 already compliant"
+      "Batch finished — 4 fixes: 1 applied (reboot required), 2 applied, 1 already compliant"
     );
     // El blob de items no se repite como detalle.
     expect(d.details).toEqual([]);
@@ -549,4 +553,74 @@ describe("formatDurationMs", () => {
     [112268, "1 min 52 s"],
     [120000, "2 min"],
   ])("%s → %s", (ms, text) => expect(formatDurationMs(ms)).toBe(text));
+});
+
+describe("🔴 un job FALLIDO trae su ack en last_error (69b4aa78, 30-sep)", () => {
+  it.each([
+    ["patch_remediate", "patch_remediate_batch:done;items=xx", true],
+    ["software_install", "software_install:failed;deploymentId=26;exit=1603", true],
+    ["patch_install", "patch_install failed; installed=0; failed=1; rebootRequired=false", true],
+    ["device_reboot", "device_reboot failed: the operating system did not accept the restart", true],
+    // Texto libre: NO es un ack y no se interpreta.
+    ["patch_install", "PrivSvc timeout: patch.install did not answer within 5700000ms", false],
+    ["software_install", "closed_manually_2026-09-27; agent_retry_exhausted_after_5_attempts: agent_retry:software_install", false],
+    ["agent_update", "update_failed: connect ETIMEDOUT 20.60.178.4:443", false],
+    ["patch_install", "", false],
+  ])("%s · %s → %s", (job_type, last_error, expected) => {
+    expect(isAckError({ job_type, last_error })).toBe(expected);
+  });
+
+  it("⭐ se lee: 25 fixes, el fallo PRIMERO en el titular, en rojo", () => {
+    const d = describeJobResult(failedRemediationBatchJob());
+    expect(d.fromError).toBe(true);
+    expect(d.tone).toBe("error");
+    expect(d.headline).toBe("Batch finished — 25 fixes: 1 failed, 21 applied, 3 already compliant");
+    expect(d.items).toHaveLength(25);
+    // Ya es un fallo: no se añade «ended as failed».
+    expect(d.endedAs).toBeUndefined();
+  });
+
+  it("el motivo conserva su detalle literal (fchmodat2, x86_64)", () => {
+    const failed = describeJobResult(failedRemediationBatchJob()).items.find((it) => it.tone === "error");
+    expect(failed.headline).toBe("Fix failed");
+    expect(failed.facts.find((f) => f.key === "reason").value).toBe(
+      "The setting did not have the expected value after applying — syscall fchmodat2 does not exist for arch b64 on this machine (x86_64)"
+    );
+  });
+
+  it("result_json sigue mandando si existe", () => {
+    const job = { ...failedRemediationBatchJob(), result_json: { message: "patch_remediate:applied" } };
+    expect(describeJobResult(job).headline).toBe("Fix applied");
+  });
+
+  it("un error de texto libre NO produce «What happened»", () => {
+    expect(describeJobResult({ job_type: "patch_install", status: "failed", result_json: null, last_error: "PrivSvc timeout: x" })).toBeNull();
+  });
+
+  it("patch_install failed dice cuántas fallaron", () => {
+    const d = describeJobResult({
+      job_type: "patch_install",
+      status: "failed",
+      last_error: "patch_install failed; installed=0; failed=1; rebootRequired=false",
+    });
+    expect(d.headline).toBe("1 update failed to install");
+    expect(d.tone).toBe("error");
+  });
+});
+
+describe("summarizeJobError — la línea de la tabla", () => {
+  it("un lote fallido: titular + el motivo del que falló, nunca el base64", () => {
+    const line = summarizeJobError(failedRemediationBatchJob());
+    expect(line).toBe(
+      `Batch finished — 25 fixes: 1 failed, 21 applied, 3 already compliant · The setting did not have the expected value after applying — ${FAILED_REASON.split(": ")[1]}`
+    );
+    expect(line).not.toMatch(/items=|WyJ/);
+  });
+
+  it("texto libre tal cual; muy largo, recortado", () => {
+    expect(summarizeJobError({ job_type: "x", last_error: "boom" })).toBe("boom");
+    const long = summarizeJobError({ job_type: "x", last_error: "a".repeat(1000) });
+    expect(long).toHaveLength(301);
+    expect(summarizeJobError({ job_type: "x", last_error: null })).toBe("");
+  });
 });

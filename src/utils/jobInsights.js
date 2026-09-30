@@ -6,6 +6,8 @@
 // Lives outside the page for the same reason jobBatches / jobResult / jobForm
 // do: Jobs.jsx is 2400 lines and nothing inside it can be tested.
 
+import { decodeBlob, isAckError, splitHead } from "./jobDescribe";
+
 const IN_FLIGHT = ["pending", "sent", "running", "retrying"];
 const FAILED = ["failed", "timeout"];
 
@@ -157,13 +159,50 @@ export function deriveTriage(jobs, { now = Date.now(), windowHours = 24, staleHo
   return { failed, timedOut, stuck, successRate, completed, terminal: settled };
 }
 
+const ITEM_FAILED = /fail|error|timed_out|reject|invalid/i;
+
+/**
+ * Las causas de UN job fallido.
+ *
+ * 🔴 Un lote de remediaciones fallido (30-sep) llevaba en `last_error`
+ * `patch_remediate_batch:done;items=<base64>`, y la causa salía como
+ * «patch_remediate_batch:done» — que se lee como un éxito. La causa de verdad
+ * estaba DENTRO: el fix que falló y su `reason=`. Aquí se abre el lote y se
+ * cuenta cada fix fallido por su motivo. Si el lote no trae ninguno legible,
+ * se cae a la cabeza, como antes: nunca se pierde una fila.
+ *
+ * Se exporta porque la búsqueda de la tabla casa contra ESTO: pulsar una causa
+ * busca su texto, y ni una causa normalizada (`…_N_…`) ni una de lote aparece
+ * literal en el `last_error` crudo.
+ */
+export function failureCausesOf(job) {
+  const raw = String(job?.last_error ?? "");
+  const type = lower(job?.job_type);
+  if (type && isAckError(job) && lower(raw).startsWith(`${type}_batch:`)) {
+    const blob = raw.match(/(?:^|;)\s*items=([^;]+)/);
+    const items = blob ? decodeBlob(blob[1]) : null;
+    if (Array.isArray(items)) {
+      const causes = items
+        .map(String)
+        .filter((m) => ITEM_FAILED.test(splitHead(m.split(";")[0], type).verdict))
+        .map((m) => normalizeFailureCause(m))
+        .filter(Boolean);
+      if (causes.length) return causes;
+    }
+  }
+  const one = normalizeFailureCause(raw);
+  return one ? [one] : [];
+}
+
 /** Failure causes, most frequent first. */
 export function groupFailureCauses(jobs, { limit = 5 } = {}) {
   const counts = new Map();
   for (const job of Array.isArray(jobs) ? jobs : []) {
     if (!FAILED.includes(lower(job.status))) continue;
-    const cause = normalizeFailureCause(job.last_error) || "unreported";
-    counts.set(cause, (counts.get(cause) || 0) + 1);
+    const causes = failureCausesOf(job);
+    for (const cause of causes.length ? causes : ["unreported"]) {
+      counts.set(cause, (counts.get(cause) || 0) + 1);
+    }
   }
   return [...counts.entries()]
     .map(([cause, count]) => ({ cause, count }))

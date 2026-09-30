@@ -85,7 +85,8 @@ import {
   validateNumericField,
   resolveTypeFilter,
 } from "../utils/jobForm";
-import { deriveTriage, groupFailingDevices, groupFailureCauses, isStuckJob } from "../utils/jobInsights";
+import { deriveTriage, failureCausesOf, groupFailingDevices, groupFailureCauses, isStuckJob } from "../utils/jobInsights";
+import { describeJobResult, isAckError, summarizeJobError } from "../utils/jobDescribe";
 import { CHART_CATEGORICAL } from "../theme/chartPalette";
 import {
   DetailRow,
@@ -93,7 +94,6 @@ import {
   JobRawDataSection,
   JobRequestSection,
 } from "../components/jobs/JobDetailSections";
-import { hasJobResult } from "../utils/jobResult";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -1293,7 +1293,12 @@ export default function Jobs({ onNavigate }) {
         String(row.device_id || "").toLowerCase().includes(needle) ||
         hostname.includes(needle) ||
         String(row.job_type || "").toLowerCase().includes(needle) ||
-        String(row.last_error || "").toLowerCase().includes(needle)
+        String(row.last_error || "").toLowerCase().includes(needle) ||
+        // Pulsar una causa de «Failures» busca su texto, y la causa está
+        // NORMALIZADA (`…_N_…`) o sale de DENTRO de un lote en base64: ninguna
+        // de las dos aparece literal en `last_error`, y la búsqueda daba 0.
+        failureCausesOf(row).some((c) => c.toLowerCase().includes(needle)) ||
+        summarizeJobError(row).toLowerCase().includes(needle)
       );
     };
 
@@ -1427,7 +1432,9 @@ export default function Jobs({ onNavigate }) {
       flex: 0.95,
       renderCell: (params) => {
         if (params.row.__isBatch) return renderBatchStatusChip(params.row);
-        const error = params.row.last_error;
+        // La línea legible, no el volcado: un lote fallido traía 23 KB de
+        // base64 aquí y en el `title` (ver summarizeJobError).
+        const error = summarizeJobError(params.row);
         return (
           <Box sx={{ minWidth: 0, py: 0.5 }}>
             {renderStatusChip(params.value, params.row.attempts)}
@@ -2785,7 +2792,7 @@ export default function Jobs({ onNavigate }) {
                             ) : null}
                             {job.last_error ? (
                               <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.errorText }} noWrap>
-                                {job.last_error}
+                                {summarizeJobError(job)}
                               </Typography>
                             ) : null}
                           </Box>
@@ -2858,8 +2865,11 @@ export default function Jobs({ onNavigate }) {
                   </Box>
                 </Box>
 
-                {/* Error (if any) */}
-                {selectedJob.last_error ? (
+                {/* Error (if any) — sólo el de TEXTO LIBRE. Cuando `last_error`
+                    es un ack del agente (un job que falló manda ahí su
+                    resultado entero) se lee en «What happened» y el crudo
+                    queda plegado en Raw data. */}
+                {selectedJob.last_error && !isAckError(selectedJob) ? (
                   <>
                     <Divider sx={{ borderColor: BRAND.border }} />
                     <Box>
@@ -2894,7 +2904,7 @@ export default function Jobs({ onNavigate }) {
                     `key` por job: al cambiar de fila los plegables vuelven a
                     empezar cerrados. */}
                 <React.Fragment key={selectedJob.job_id}>
-                  {hasJobResult(selectedJob.result_json) ? (
+                  {describeJobResult(selectedJob) ? (
                     <>
                       <Divider sx={{ borderColor: BRAND.border }} />
                       <JobOutcomeSection job={selectedJob} />

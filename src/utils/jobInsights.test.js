@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { FAILED_REASON, failedRemediationBatchJob } from "../test/fixtures/failedRemediationBatch";
 import {
   deriveTriage,
+  failureCausesOf,
   groupFailingDevices,
   groupFailureCauses,
   isStuckJob,
@@ -271,5 +273,31 @@ describe("groupFailingDevices", () => {
     // d2 no está en el roster: se nombra con su id en vez de desaparecer.
     expect(out[1]).toMatchObject({ deviceId: "d2", hostname: "d2", count: 1 });
     expect(out).toHaveLength(2);
+  });
+});
+
+describe("🔴 un lote fallido se cuenta por lo que falló DENTRO (69b4aa78, 30-sep)", () => {
+  it("la causa es el `reason=` del fix fallido, no «patch_remediate_batch:done»", () => {
+    const causes = failureCausesOf(failedRemediationBatchJob());
+    expect(causes).toEqual([normalizeFailureCause(`reason=${FAILED_REASON}`)]);
+    expect(causes[0]).toMatch(/^post_state_mismatch: syscall fchmodat/);
+    expect(causes.join()).not.toMatch(/batch:done/);
+  });
+
+  it("groupFailureCauses ya no lista «patch_remediate_batch:done» como causa", () => {
+    const out = groupFailureCauses([failedRemediationBatchJob()]);
+    expect(out).toHaveLength(1);
+    expect(out[0].cause).toMatch(/^post_state_mismatch/);
+  });
+
+  it("un lote sin fixes fallidos legibles cae a la cabeza: nunca se pierde la fila", () => {
+    const job = { job_type: "patch_remediate", status: "failed", last_error: "patch_remediate_batch:done;items=roto" };
+    expect(failureCausesOf(job)).toEqual(["patch_remediate_batch:done"]);
+  });
+
+  it("un error de texto libre sigue como estaba", () => {
+    expect(failureCausesOf({ job_type: "patch_install", last_error: "PrivSvc timeout: patch.install did not answer within 5700000ms" })).toEqual([
+      "PrivSvc timeout: patch.install did not answer within Nms",
+    ]);
   });
 });

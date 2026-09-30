@@ -79,12 +79,28 @@ const yesNo = (v) => {
 const SOURCE_LABELS = { dp: "Distribution Point", origin: "Cloud (origin)", peer: "Peer" };
 const sourceLabel = (v) => SOURCE_LABELS[lower(v)] || String(v);
 
+/**
+ * `reason=` → texto. Muchas traen el detalle tras `: `
+ * (`post_state_mismatch: syscall fchmodat2 does not exist for arch b64…`): el
+ * código se traduce y el detalle se deja TAL CUAL — pasarlo por `humanize`
+ * lo ponía en minúsculas y le quitaba los guiones bajos a `fchmodat2`.
+ */
+function reasonText(value) {
+  const t = String(value ?? "").trim();
+  const sep = t.indexOf(": ");
+  const code = sep > 0 ? t.slice(0, sep) : t;
+  const detail = sep > 0 ? t.slice(sep + 2).trim() : "";
+  const label = REASON_LABELS[lower(code)] || humanize(code);
+  return detail ? `${label} — ${detail}` : label;
+}
+
 const REASON_LABELS = {
   pre_detect_matched: "The detection rule already matched before installing",
   pre_state_compliant: "The setting already had the expected value",
   pre_detect_absent: "The software was already absent before uninstalling",
   post_detect_still_present: "The software was still detected after the uninstaller ran",
   post_detect_mismatch: "The software was not detected after the installer ran",
+  post_state_mismatch: "The setting did not have the expected value after applying",
 };
 
 // ---------------------------------------------------------------------------
@@ -201,6 +217,7 @@ const VERDICTS = {
     already_compliant: () => ({ tone: "success", headline: "Already compliant — nothing was changed" }),
     dryrun_would_apply: () => ({ tone: "info", headline: "Dry run — the fix WOULD change this setting (nothing was changed)" }),
     dryrun_already_compliant: () => ({ tone: "info", headline: "Dry run — already compliant, the fix would change nothing" }),
+    failed: () => ({ tone: "error", headline: "Fix failed" }),
   },
   software_dp_prefetch: {
     success: ({ f }) =>
@@ -252,6 +269,16 @@ const VERDICTS = {
       };
     },
     no_updates: () => ({ tone: "neutral", headline: "No updates to install" }),
+    failed: ({ f }) => {
+      const failed = Number(f.get("failed") || 0);
+      const n = Number(f.get("installed") || 0);
+      return {
+        tone: "error",
+        headline:
+          (failed ? `${failed} update${failed === 1 ? "" : "s"} failed to install` : "Patch install failed") +
+          (n ? `, ${n} installed` : ""),
+      };
+    },
   },
   patch_scan: {
     // El número detrás es el id de la fila en el outbox del agente: no
@@ -335,6 +362,7 @@ const COMMON_VERDICTS = {
 
 // Etiqueta corta de cada veredicto para el resumen de un lote.
 const BATCH_LABELS = {
+  failed: "failed",
   applied: "applied",
   applied_reboot_required: "applied (reboot required)",
   already_compliant: "already compliant",
@@ -412,7 +440,7 @@ const VALUE_FORMAT = {
   rebootInSec: (v) => `${v} s`,
   deploymentId: (v) => `#${v}`,
   remediationId: (v) => `#${v}`,
-  reason: (v) => REASON_LABELS[lower(v)] || humanize(v),
+  reason: reasonText,
   outcome: humanize,
 };
 
@@ -534,16 +562,23 @@ function describeMessage(message, jobType, mode = null) {
     // Se agrupa por VEREDICTO, no por frase: `applied` y
     // `applied_reboot_required` empiezan igual y recortando la frase salían
     // como dos grupos «fix applied» indistinguibles.
+    //
+    // ⚠️ Los grupos van del PEOR tono al mejor: en un lote de 25 con un fallo
+    // (69b4aa78, 30-sep), «21 applied, 3 already compliant, 1 failed» enterraba
+    // al final lo único que había que mirar.
     const counts = new Map();
     for (const it of out.items) {
       const label = BATCH_LABELS[lower(it.verdict)] || humanize(it.verdict).toLowerCase();
-      counts.set(label, (counts.get(label) || 0) + 1);
+      const g = counts.get(label) || { n: 0, rank: TONE_RANK[it.tone] ?? 1 };
+      g.n += 1;
+      counts.set(label, g);
     }
+    const groups = [...counts.entries()].sort((a, b) => b[1].rank - a[1].rank || b[1].n - a[1].n);
     out.known = true;
     out.tone = out.items.length ? worstTone(out.items.map((i) => i.tone)) : "neutral";
     out.headline =
       `Batch finished — ${list.length} fix${list.length === 1 ? "" : "es"}` +
-      (counts.size ? `: ${[...counts.entries()].map(([label, n]) => `${n} ${label}`).join(", ")}` : "");
+      (groups.length ? `: ${groups.map(([label, g]) => `${g.n} ${label}`).join(", ")}` : "");
     f.delete("items");
   } else {
     const rule = VERDICTS[lower(jobType)]?.[lower(verdict)] || COMMON_VERDICTS[lower(verdict)];
@@ -608,7 +643,7 @@ const OBJECT_HEADLINES = {
  * job en curso o que nunca contestó no debe pintar un bloque vacío).
  */
 export function describeJobResult(job) {
-  const out = describeResultBody(job);
+  const out = describeResultBody(job) || describeErrorAck(job);
   if (!out) return null;
   // ⚠️ El último ack NO es el final si el job acabó mal después. Pasa en
   // producción: `asp_assess` en `failed` cuyo último mensaje es
@@ -620,6 +655,51 @@ export function describeJobResult(job) {
 }
 
 const LATER_BAD = ["failed", "timeout", "cancelled", "expired"];
+
+/**
+ * ¿`last_error` es un ack del agente y no un error de texto libre?
+ *
+ * 🔴 POR QUÉ HACE FALTA (30-sep). Cuando un job FALLA, el agente no manda el
+ * resultado en `result_json`: el ack entero va a `last_error`. Un lote de 25
+ * remediaciones con UNA fallida (69b4aa78) llegaba como 23 KB de base64 en
+ * «Last Error», y «What happened» ni salía — justo en el caso en que más
+ * falta leerlo.
+ *
+ * ⚠️ La regla es ESTRICTA: la cabeza tiene que empezar por el job_type
+ * (`software_install:failed…`, `patch_remediate_batch:done…`,
+ * `patch_install failed; …`). Un error libre («PrivSvc timeout: …»,
+ * «closed_manually_…») no pasa y se sigue enseñando tal cual: leerlo con el
+ * diccionario inventaría un veredicto.
+ */
+export function isAckError(job) {
+  const text = String(job?.last_error ?? "").trim();
+  const type = lower(job?.job_type);
+  if (!text || !type) return false;
+  const head = lower(text.split(";")[0]);
+  return head === type || head.startsWith(`${type}:`) || head.startsWith(`${type} `) || head.startsWith(`${type}_batch:`);
+}
+
+function describeErrorAck(job) {
+  if (!isAckError(job)) return null;
+  const out = describeMessage(String(job.last_error).trim(), job.job_type, lower(parsePayload(job)?.mode) || null);
+  out.fromError = true;
+  return out;
+}
+
+/**
+ * Una línea para la tabla y las listas: lo que se lee del ack si lo hay, el
+ * error tal cual si no. Nunca el volcado — también va al `title` de la celda,
+ * y un tooltip de 23 KB no es un tooltip.
+ */
+export function summarizeJobError(job) {
+  const text = String(job?.last_error ?? "").trim();
+  if (!text) return "";
+  if (!isAckError(job)) return text.length > 300 ? `${text.slice(0, 300)}…` : text;
+  const d = describeErrorAck(job);
+  const failed = d.items.find((it) => it.tone === "error");
+  const reason = (failed || d).facts.find((x) => x.key === "reason")?.value;
+  return reason ? `${d.headline} · ${reason}` : d.headline;
+}
 
 function describeResultBody(job) {
   const result = normalizeResult(job?.result_json);
