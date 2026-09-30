@@ -12,7 +12,8 @@ export const EVENT_KIND_LABEL = {
   os_crash: "System crash",
   unexpected_shutdown: "Unexpected shutdown",
   // No es inestabilidad: el arranque. Sólo lo mandan los agentes que ya leen
-  // Kernel-General 12 (Windows) o la causa del apagado previo (macOS).
+  // Kernel-General 12 (Windows), la causa del apagado previo (macOS) o el
+  // arranque en curso de /proc (Linux).
   restart: "Restarted",
 };
 
