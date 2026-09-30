@@ -17,6 +17,7 @@ import SectionPaper from "../common/SectionPaper";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { httpPostJson } from "../../api/http";
+import { BRAND, TEXT } from "../../theme/brand";
 
 /**
  * Una promesa de Stripe.js POR CLAVE.
@@ -88,7 +89,23 @@ function SetupForm({ onDone, onCancel }) {
   );
 }
 
-export default function PaymentMethodCard({ publishableKey, hasPaymentMethod, onSaved }) {
+/** "Visa ···· 4242", o lo que se sepa. */
+function cardLabel(pm) {
+  if (!pm) return null;
+  const brand = pm.brand ? pm.brand.charAt(0).toUpperCase() + pm.brand.slice(1) : "Card";
+  return pm.last4 ? `${brand} ···· ${pm.last4}` : brand;
+}
+
+function cardExpiry(pm) {
+  if (!pm?.expMonth || !pm?.expYear) return null;
+  return `Expires ${String(pm.expMonth).padStart(2, "0")}/${String(pm.expYear).slice(-2)}`;
+}
+
+/**
+ * `embedded`: sin tarjeta propia, dentro del selector de plan. Ahí la tarjeta es
+ * un paso del alta, no una sección aparte.
+ */
+export default function PaymentMethodCard({ publishableKey, hasPaymentMethod, paymentMethod = null, onSaved, embedded = false }) {
   const [clientSecret, setClientSecret] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -111,55 +128,69 @@ export default function PaymentMethodCard({ publishableKey, hasPaymentMethod, on
     }
   }, []);
 
+  // Una FUNCIÓN y no un componente: un componente definido aquí dentro sería un
+  // tipo nuevo en cada render, y React remontaría el formulario de Stripe
+  // —perdiendo lo tecleado— con cualquier cambio de estado.
+  const frame = (children) =>
+    embedded ? (
+      <Box>{children}</Box>
+    ) : (
+      <SectionPaper variant="card" component="section" aria-label="Payment method">
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 0.5 }}>Payment method</Typography>
+        {children}
+      </SectionPaper>
+    );
+
   // Sin clave publicable no hay Elements que montar. Se dice en vez de
   // enseñar un botón que no puede funcionar.
   if (!publishableKey) {
-    return (
-      <SectionPaper variant="panel">
-        <Typography variant="subtitle1" gutterBottom>Payment method</Typography>
-        <Alert severity="info">
-          Card payments are not enabled on this installation.
-        </Alert>
-      </SectionPaper>
+    return frame(
+      <Typography sx={{ fontSize: TEXT.base, color: "text.secondary" }}>
+        Card payments are not enabled on this installation.
+      </Typography>
     );
   }
 
-  return (
-    <SectionPaper variant="panel">
-        <Typography variant="subtitle1" gutterBottom>Payment method</Typography>
+  const label = cardLabel(paymentMethod);
+  const expiry = cardExpiry(paymentMethod);
 
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {saved && <Alert severity="success" sx={{ mb: 2 }}>Payment method updated.</Alert>}
+  return frame(
+    <>
+      {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
+      {saved && <Alert severity="success" sx={{ mb: 1 }}>Payment method saved.</Alert>}
 
-        {!clientSecret ? (
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Typography variant="body2" color="text.secondary">
-              {hasPaymentMethod
-                ? "A card is on file for recurring charges."
-                : "No card on file yet."}
+      {!clientSecret ? (
+        <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
+              {hasPaymentMethod ? label ?? "A card is on file" : "No card on file"}
             </Typography>
-            <Button variant="outlined" onClick={open} disabled={loading}>
-              {loading ? <CircularProgress size={20} /> : hasPaymentMethod ? "Change card" : "Add card"}
-            </Button>
-          </Stack>
-        ) : (
-          <Elements
-            // La clave remonta Elements si cambia el secreto, que es lo que
-            // Stripe espera: un SetupIntent no se reutiliza.
-            key={clientSecret}
-            stripe={stripePromiseFor(publishableKey)}
-            options={{ clientSecret, appearance: { theme: "stripe" } }}
-          >
-            <SetupForm
-              onDone={() => {
-                setClientSecret(null);
-                setSaved(true);
-                onSaved?.();
-              }}
-              onCancel={() => setClientSecret(null)}
-            />
-          </Elements>
-        )}
-    </SectionPaper>
+            {hasPaymentMethod && expiry && (
+              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>{expiry}</Typography>
+            )}
+          </Box>
+          <Button variant="outlined" size="small" onClick={open} disabled={loading} sx={{ flexShrink: 0 }}>
+            {loading ? <CircularProgress size={18} /> : hasPaymentMethod ? "Update" : "Add card"}
+          </Button>
+        </Stack>
+      ) : (
+        <Elements
+          // La clave remonta Elements si cambia el secreto, que es lo que
+          // Stripe espera: un SetupIntent no se reutiliza.
+          key={clientSecret}
+          stripe={stripePromiseFor(publishableKey)}
+          options={{ clientSecret, appearance: { theme: "stripe" } }}
+        >
+          <SetupForm
+            onDone={() => {
+              setClientSecret(null);
+              setSaved(true);
+              onSaved?.();
+            }}
+            onCancel={() => setClientSecret(null)}
+          />
+        </Elements>
+      )}
+    </>
   );
 }

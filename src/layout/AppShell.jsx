@@ -36,6 +36,7 @@ const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministra
 
 import { renderPage } from "./pageRegistry";
 import LicenseBlockedScreen from "../components/Licensing/LicenseBlockedScreen";
+import { LICENSE_STATE_CHANGED_EVENT } from "../utils/licenseEvents";
 import PaymentDueBanner from "../components/Licensing/PaymentDueBanner";
 import { getLicenseState } from "../api/licensing";
 
@@ -1132,6 +1133,13 @@ export default function AppShell() {
   React.useEffect(() => {
     refreshLicenseState();
   }, [refreshLicenseState, activeTenantKey]);
+
+  // Pagar en Billing (la página que el bloqueo deja pasar) tiene que levantar el
+  // bloqueo al salir de ella, no al recargar.
+  React.useEffect(() => {
+    window.addEventListener(LICENSE_STATE_CHANGED_EVENT, refreshLicenseState);
+    return () => window.removeEventListener(LICENSE_STATE_CHANGED_EVENT, refreshLicenseState);
+  }, [refreshLicenseState]);
 
   // The four things kept reachable while blocked:
   //   1. the adjustment screen  -> LicenseBlockedScreen, rendered below

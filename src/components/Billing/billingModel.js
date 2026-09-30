@@ -100,6 +100,27 @@ export function pricesFrom(catalog, interval) {
   return out;
 }
 
+/**
+ * "2 months free" junto al selector de periodicidad — SÓLO si los precios de
+ * Stripe lo dicen, y lo dicen para todos los planes por igual. Con descuentos
+ * distintos por plan, una sola frase mentiría para alguno: entonces null.
+ */
+export function yearlySavingsLabel(catalog) {
+  const monthly = pricesFrom(catalog, "monthly");
+  const yearly = pricesFrom(catalog, "yearly");
+  const months = new Set();
+  for (const line of Object.keys(monthly)) {
+    for (const [tier, m] of Object.entries(monthly[line])) {
+      const y = yearly[line]?.[tier];
+      if (typeof y !== "number" || !(m > 0)) continue;
+      months.add(Math.round((12 * m - y) / m));
+    }
+  }
+  if (months.size !== 1) return null;
+  const [free] = months;
+  return free > 0 ? `${free} month${free === 1 ? "" : "s"} free` : null;
+}
+
 /** La divisa del catálogo, para formatear. Todos los precios comparten una. */
 export function currencyOf(catalog) {
   return catalog?.[0]?.currency ?? "usd";
@@ -311,6 +332,142 @@ export function graceCeiling(quantity) {
 }
 
 /**
+ * Una línea contratada, o null. Sin cantidad positiva NO está contratada: es
+ * `null`, no "× 0" (ver `classifyChange`, que con un 0 clasificaba un alta
+ * como bajada).
+ */
+export function asLine(tier, quantity) {
+  return tier && Number.isFinite(quantity) && quantity > 0 ? { tier, quantity } : null;
+}
+
+/**
+ * Lo que el tenant tiene CONTRATADO EN STRIPE — el "antes" de un cambio.
+ *
+ * ⚠️ UN PLAN ASIGNADO NO ES UN PLAN CONTRATADO. El alta siembra `tier` y
+ * `quantity` a todos los tenants (T109, T113: Business × 50 en prueba, sin
+ * suscripción). Tomarlo como contratado hacía que la pantalla viera "sin
+ * cambios" al preseleccionarlo y NO ofreciera ningún botón: el cliente no
+ * podía pagar el plan que tenía delante sin tocar antes una cifra.
+ */
+export function contractedSelection(sub) {
+  if (!sub?.billedByStripe) return null;
+  return {
+    interval: sub.billingInterval ?? "monthly",
+    endpoint: asLine(sub.tier, sub.quantity ?? sub.licensedQuantity),
+    mdm: asLine(sub.mdmTier, sub.mdmQuantity),
+  };
+}
+
+/**
+ * Con qué se abre el selector: lo contratado, o si no hay, el plan asignado.
+ *
+ * ⚠️ Sin cantidad NO se cae a 1: se prefiere el tope que el gate aplica y, en su
+ * defecto, la flota. Un 1 preseleccionado recortaba al confirmar cualquier otro
+ * cambio el tope del cliente a un equipo. MDM sólo con cantidad contratada: con
+ * tier y sin cantidad se colaba una licencia de móvil que nadie pidió.
+ */
+export function initialSelection(sub) {
+  const endpointTier = PACKAGE_TIERS.includes(sub?.tier) ? sub.tier : null;
+  return {
+    // Un cliente anual que entra a tocar licencias no se va a mensual solo.
+    interval: sub?.billingInterval ?? "monthly",
+    endpoint: endpointTier
+      ? { tier: endpointTier, quantity: sub.quantity ?? sub.licensedQuantity ?? sub.usage?.endpoint ?? 1 }
+      : null,
+    mdm: sub?.mdmTier && sub?.mdmQuantity > 0 ? { tier: sub.mdmTier, quantity: sub.mdmQuantity } : null,
+  };
+}
+
+/**
+ * La etiqueta de estado del plan y su tono (`success | info | warning | error |
+ * neutral`). Distingue lo que Stripe no puede distinguir: una fila `active` sin
+ * suscripción no está "al día" — nadie ha pagado nada.
+ */
+export function planStatus(sub, now = new Date()) {
+  if (!sub) return { label: "No plan", tone: "neutral" };
+  if (sub.managed) return { label: "Managed", tone: "info" };
+  if (sub.trialLapsed) return { label: "Trial ended", tone: "error" };
+  const trialAlive = Boolean(sub.trialEndsAt) && new Date(sub.trialEndsAt) > now;
+  if (!sub.billedByStripe) {
+    return trialAlive ? { label: "Trial · not billed", tone: "info" } : { label: "Not billed", tone: "neutral" };
+  }
+  switch (sub.status) {
+    case "trialing":
+      return { label: "Trial · subscribed", tone: "info" };
+    case "active":
+      return { label: "Active", tone: "success" };
+    case "past_due":
+      return { label: "Payment pending", tone: "warning" };
+    case "incomplete":
+      return { label: "Payment not completed", tone: "warning" };
+    case "unpaid":
+      return { label: "Unpaid", tone: "error" };
+    case "canceled":
+      return { label: "Canceled", tone: "error" };
+    case "incomplete_expired":
+      return { label: "Expired unpaid", tone: "error" };
+    default:
+      return { label: String(sub.status ?? "Unknown"), tone: "neutral" };
+  }
+}
+
+/** Estados de factura de Stripe en el idioma del usuario. */
+const INVOICE_STATUS = {
+  paid: { label: "Paid", tone: "success" },
+  open: { label: "Due", tone: "warning" },
+  draft: { label: "Draft", tone: "neutral" },
+  void: { label: "Voided", tone: "neutral" },
+  uncollectible: { label: "Unpaid", tone: "error" },
+};
+
+export function invoiceStatus(status) {
+  return INVOICE_STATUS[status] ?? { label: String(status ?? "—"), tone: "neutral" };
+}
+
+/** Días naturales que faltan hasta `date` (redondeando hacia arriba). */
+function daysUntil(date, now) {
+  return Math.ceil((new Date(date) - now) / 86_400_000);
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/**
+ * Cuándo se cobra un cambio, en una frase — lo que el pie del selector y el
+ * diálogo dicen junto al importe.
+ *
+ * El backend aplaza el primer cobro de una suscripción NUEVA al fin de la prueba
+ * si quedan al menos una hora (billing.service::stripeTrialEndFor). Aquí se
+ * aplica el mismo umbral para no prometer un aplazamiento que no ocurrirá.
+ */
+export const TRIAL_END_MIN_LEAD_MS = 60 * 60 * 1000;
+
+export function chargeTiming(change, sub, now = new Date()) {
+  if (change === "new") {
+    const ends = sub?.trialEndsAt ? new Date(sub.trialEndsAt) : null;
+    if (ends && ends - now >= TRIAL_END_MIN_LEAD_MS) {
+      return {
+        when: "trial_end",
+        date: ends,
+        text: `Nothing is charged today. The first charge is on ${ends.toLocaleDateString()}, when your trial ends.`,
+      };
+    }
+    return { when: "now", date: now, text: "The first period is charged now to your card on file." };
+  }
+  if (change === "upgrade") {
+    return { when: "now", date: now, text: "The difference is charged now, prorated for the rest of the cycle." };
+  }
+  if (change === "downgrade") {
+    const end = sub?.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null;
+    return {
+      when: "period_end",
+      date: end,
+      text: `Takes effect at the end of the current cycle${end ? ` (${end.toLocaleDateString()})` : ""}, with no refund.`,
+    };
+  }
+  return null;
+}
+
+/**
  * El mensaje de estado de la suscripción, o null si no hay nada que decir.
  *
  * Devuelve `severity` para que la pantalla no tenga que interpretar el estado
@@ -318,6 +475,18 @@ export function graceCeiling(quantity) {
  */
 export function statusNotice(sub, now = new Date()) {
   if (!sub) return null;
+
+  // La prueba terminó y nadie contrató: la consola está bloqueada y los plugins
+  // en el suelo. Es lo primero que hay que decir, y dónde se arregla.
+  if (sub.trialLapsed) {
+    return {
+      severity: "error",
+      message:
+        `Your trial ended${sub.trialEndsAt ? ` on ${new Date(sub.trialEndsAt).toLocaleDateString()}` : ""}. ` +
+        "The console and plugins are paused until you choose a plan — devices stay enrolled and " +
+        "keep reporting inventory.",
+    };
+  }
 
   if (sub.status === "past_due" && sub.pastDueSince) {
     const since = new Date(sub.pastDueSince);
@@ -339,12 +508,22 @@ export function statusNotice(sub, now = new Date()) {
   }
 
   if (sub.inTrial && sub.trialEndsAt) {
-    const days = Math.ceil((new Date(sub.trialEndsAt) - now) / 86_400_000);
+    const days = daysUntil(sub.trialEndsAt, now);
+    const date = new Date(sub.trialEndsAt).toLocaleDateString();
+    const lead = `You're trialing every plugin — ${plural(days, "day")} left (until ${date}).`;
+    // Tres finales distintos, y prometer el equivocado es lo que genera la
+    // reclamación: el Enterprise conserva su conjunto, quien ya contrató paga
+    // ese día, y quien no contrató pierde la consola.
+    if (sub.managed) return { severity: "info", message: `${lead} After that you keep your Enterprise plugins.` };
+    if (sub.billedByStripe) {
+      return {
+        severity: "info",
+        message: `${lead} Your ${tierLabel(sub.tier) || "plan"} subscription starts then, and that's the first charge.`,
+      };
+    }
     return {
-      severity: "info",
-      message:
-        `You're trialing every plugin. ${days} day${days === 1 ? "" : "s"} left; ` +
-        `after that you keep the ones in your ${TIER_LABELS[sub.tier] ?? ""} plan.`.trim(),
+      severity: days <= 7 ? "warning" : "info",
+      message: `${lead} Choose a plan before then: without one, the console and plugins pause when the trial ends.`,
     };
   }
 
@@ -358,6 +537,43 @@ export function statusNotice(sub, now = new Date()) {
   }
 
   return null;
+}
+
+/**
+ * El estado de un plugin del catálogo para ESTE tenant, y la frase que lo explica.
+ *
+ *   included  en el plan y concedido
+ *   trial     concedido por la prueba, fuera del plan — se pierde al terminar
+ *   paused    en el plan pero no concedido (prueba vencida sin pagar, impago)
+ *   locked    fuera del plan
+ *
+ * "Concedido" sale de `entitledPluginKeys`, que resuelve el MISMO código que
+ * gatea la API. Deducirlo del rango en la UI decía "Requires Professional" de
+ * un plugin que el cliente estaba usando en su prueba.
+ */
+export function pluginState(plugin, sub) {
+  const managed = Boolean(sub?.managed);
+  const inPlan = managed
+    ? Boolean(plugin.required) || (sub?.pluginKeys ?? []).includes(plugin.key)
+    : !plugin.tier_required || tierRank(sub?.tier) >= tierRank(plugin.tier_required);
+  const entitled = Array.isArray(sub?.entitledPluginKeys) ? sub.entitledPluginKeys.includes(plugin.key) : inPlan;
+
+  if (entitled && inPlan) return { state: "included", note: "Included in your plan" };
+  if (entitled) {
+    return {
+      state: "trial",
+      note: managed
+        ? "Included in your trial — not part of your Enterprise plan after it ends"
+        : `Included in your trial — needs ${tierLabel(plugin.tier_required)} after it ends`,
+    };
+  }
+  if (inPlan) {
+    return {
+      state: "paused",
+      note: sub?.trialLapsed ? "Paused until you choose a plan" : "Paused until the subscription is paid",
+    };
+  }
+  return { state: "locked", note: managed ? "Not in your plan" : `Requires ${tierLabel(plugin.tier_required)}` };
 }
 
 /** Estados en los que el backend deja AÑADIR un cargo (retirar se puede siempre). */
@@ -395,8 +611,11 @@ export function addonOffer(sub, addon, { pluginTier = null } = {}) {
   // sin Crypto Discovery sería pagar por algo que no se puede usar.
   const pluginMissing = addon?.plugin && Array.isArray(sub?.entitledPluginKeys) && !sub.entitledPluginKeys.includes(addon.plugin);
   let blocked = null;
-  if (pluginMissing) blocked = `Needs ${String(addon.plugin).toUpperCase()} in your plan${pluginTier ? `, from ${tierLabel(pluginTier)}` : ""}. Upgrade the plan first.`;
-  else if (!sub?.billedByStripe) blocked = "Subscribe to a plan first: the add-on is billed on the same subscription.";
+  // Sin suscripción en Stripe lo primero es contratar, falte o no el plugin:
+  // con la prueba vencida el plugin "falta" aunque el plan sea Business, y
+  // "sube de plan" mandaba a comprar lo que ya se tiene.
+  if (!sub?.billedByStripe) blocked = "Subscribe to a plan first: the add-on is billed on the same subscription.";
+  else if (pluginMissing) blocked = `Needs ${String(addon.plugin).toUpperCase()} in your plan${pluginTier ? `, from ${tierLabel(pluginTier)}` : ""}. Upgrade the plan first.`;
   else if (!sub?.hasPaymentMethod) blocked = "Save a card first.";
   else if (!ADDON_ADDABLE_STATUSES.includes(sub?.status))
     blocked = `Your subscription is ${String(sub?.status ?? "inactive").replace("_", " ")}. Fix the payment before adding to it.`;

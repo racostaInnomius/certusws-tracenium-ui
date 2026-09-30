@@ -13,38 +13,22 @@
 
 import { useState } from "react";
 import {
-  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography,
+  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Tooltip, Typography,
 } from "@mui/material";
 import { httpPostJson } from "../../api/http";
 import { BRAND, TEXT } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
+import StatusPill from "./StatusPill";
 import { addonOffer } from "./billingModel";
 import { formatMoney } from "./money";
 
 const per = (interval) => (interval === "yearly" ? "yr" : "mo");
 
-function StateChip({ state }) {
-  const label = state === "subscribed" ? "Subscribed" : state === "trial" ? "Included in your trial" : "Not subscribed";
-  const on = state === "subscribed";
-  return (
-    <Box
-      component="span"
-      sx={{
-        fontSize: TEXT.xs,
-        fontWeight: 800,
-        bgcolor: on ? BRAND.tealSoft : BRAND.surfaceMuted,
-        color: on ? BRAND.tealText : "text.secondary",
-        border: `1px solid ${on ? `${BRAND.teal}55` : BRAND.border}`,
-        borderRadius: 999,
-        px: 1,
-        py: 0.1,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </Box>
-  );
-}
+const STATE_LOOK = {
+  subscribed: { label: "Subscribed", tone: "success" },
+  trial: { label: "In your trial", tone: "info" },
+  available: { label: "Not subscribed", tone: "neutral" },
+};
 
 export default function AddonOffers({ sub, addons, pluginCatalog = [], onChanged }) {
   const [confirm, setConfirm] = useState(null); // { addon, offer }
@@ -74,63 +58,64 @@ export default function AddonOffers({ sub, addons, pluginCatalog = [], onChanged
 
   return (
     <>
-      {addons.map((addon) => {
-        const offer = addonOffer(sub, addon, {
-          pluginTier: pluginCatalog.find((p) => p.key === addon.plugin)?.tier_required ?? null,
-        });
-        const price = offer.price
-          ? `${formatMoney(offer.price.unitAmount, offer.price.currency)}/${per(offer.interval)}`
-          : null;
-        return (
-          <SectionPaper key={addon.key} variant="panel">
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ sm: "flex-start" }}>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="overline" color="text.secondary">
-                  Add-on
-                </Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                  <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>{addon.title}</Typography>
-                  <StateChip state={offer.state} />
-                  {price && (
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {price}
-                    </Typography>
-                  )}
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 760 }}>
-                  {addon.description}
-                </Typography>
+      <SectionPaper variant="card" component="section" aria-label="Add-ons">
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 0.5 }}>Add-ons</Typography>
+        <Stack spacing={1.25}>
+          {addons.map((addon) => {
+            const offer = addonOffer(sub, addon, {
+              pluginTier: pluginCatalog.find((p) => p.key === addon.plugin)?.tier_required ?? null,
+            });
+            const price = offer.price
+              ? `${formatMoney(offer.price.unitAmount, offer.price.currency)}/${per(offer.interval)}`
+              : null;
+            const look = STATE_LOOK[offer.state];
+            return (
+              <Box key={addon.key}>
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ minWidth: 0 }}>
+                    <Tooltip arrow title={addon.description ?? ""}>
+                      <Typography tabIndex={0} sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark, cursor: "help" }}>
+                        {addon.title}
+                      </Typography>
+                    </Tooltip>
+                    <StatusPill tone={look.tone}>{look.label}</StatusPill>
+                  </Stack>
+                  <Button
+                    size="small"
+                    variant={offer.action === "add" ? "outlined" : "text"}
+                    color={offer.action === "add" ? "primary" : "inherit"}
+                    disabled={Boolean(offer.blocked) || busy}
+                    onClick={() => setConfirm({ addon, offer })}
+                    aria-label={`${offer.action === "add" ? "Add" : "Remove"} ${addon.title}`}
+                    sx={{ flexShrink: 0 }}
+                  >
+                    {offer.action === "add" ? "Add" : "Remove"}
+                  </Button>
+                </Stack>
+                {price && <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>{price}</Typography>}
                 {offer.state === "trial" && sub.trialEndsAt && (
-                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
                     Your trial includes it until {new Date(sub.trialEndsAt).toLocaleDateString()}. Without subscribing, those
                     sources stop refreshing then — what they brought is kept.
                   </Typography>
                 )}
+                {/* El motivo junto al botón deshabilitado, no un botón mudo. */}
                 {offer.blocked && (
-                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
-                    {offer.blocked}
-                  </Typography>
+                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>{offer.blocked}</Typography>
                 )}
               </Box>
-              <Button
-                variant={offer.action === "add" ? "contained" : "outlined"}
-                color={offer.action === "add" ? "primary" : "inherit"}
-                disabled={Boolean(offer.blocked) || busy}
-                onClick={() => setConfirm({ addon, offer })}
-                sx={{ flexShrink: 0 }}
-              >
-                {offer.action === "add" ? "Add to subscription" : `Remove ${addon.title}`}
-              </Button>
-            </Stack>
-          </SectionPaper>
-        );
-      })}
+            );
+          })}
+        </Stack>
+        {/* El error va en la tarjeta del botón que lo provocó, no arriba de la
+            página donde no se ve. */}
+        {error && (
+          <Alert severity="error" onClose={() => setError(null)} sx={{ mt: 1.25 }}>
+            {error}
+          </Alert>
+        )}
+      </SectionPaper>
 
-      {error && (
-        <Alert severity="error" onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
 
       <Dialog open={Boolean(confirm)} onClose={busy ? undefined : () => setConfirm(null)} maxWidth="sm" fullWidth>
         {confirm && (

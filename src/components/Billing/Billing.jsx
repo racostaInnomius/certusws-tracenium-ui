@@ -9,228 +9,202 @@
 // de PCI acotado sin renunciar a que la pantalla sea nuestra.
 //
 // ⚠️ Esta página tiene que seguir siendo alcanzable con la suscripción
-// suspendida: es el único sitio donde se corrige la tarjeta. No se le añade
-// ningún gate de entitlement.
+// suspendida o la prueba vencida: es el único sitio donde se paga. No se le
+// añade ningún gate de entitlement.
 //
-// ⚠️ LA TARJETA VA PRIMERO, Y NO ES UNA PREFERENCIA DE MAQUETACIÓN.
+// LA PÁGINA MIRA, Y SÓLO COMPRA CUANDO SE LE PIDE
+// ----------------------------------------------------------------------------
+// La versión anterior tenía el selector de planes siempre abierto: tres
+// tarjetas de endpoints, una a todo el ancho para MDM y un panel para la
+// periodicidad, debajo del resumen, aunque quien ya paga viene a mirar. Ahora
+// arriba va el plan (PlanOverview) y, sólo al pulsar "Change plan" / "Choose a
+// plan", el selector (PlanChangePanel). Tarjeta, complementos y facturas van
+// en la página, compactos, sin pestañas.
 //
-// La versión anterior dejaba elegir plan sin método de pago. Stripe creaba
-// entonces la suscripción en estado `incomplete`... y una suscripción
-// `incomplete` NO SE PUEDE MODIFICAR: el cliente quedaba con un ladrillo del
-// que no salía ni pagando ni cambiando de plan. El backend ahora lo rechaza, y
-// esta pantalla lo refleja poniendo la tarjeta como paso 1 en vez de dejar
-// pulsar un botón que va a fallar.
+// ⚠️ LA TARJETA SIGUE YENDO ANTES QUE EL ALTA. Sin método de pago Stripe crea
+// la suscripción `incomplete`, y una `incomplete` no se puede modificar. El
+// selector pide la tarjeta dentro de su propio flujo.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Alert, AlertTitle, Box, Button, CircularProgress, Stack, Tab, Table, TableBody,
-  TableCell, TableHead, TableRow, Tabs, ToggleButton, ToggleButtonGroup, Typography,
-} from "@mui/material";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, AlertTitle, Box, Button, CircularProgress, Typography } from "@mui/material";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import { httpGetJson, httpPostJson } from "../../api/http";
-import { BRAND } from "../../theme/brand";
 import PageHeader from "../common/PageHeader";
-import SectionPaper from "../common/SectionPaper";
 import PaymentMethodCard from "./PaymentMethodCard";
-import SubscriptionSummary from "./SubscriptionSummary";
-import PlanPicker from "./PlanPicker";
+import PlanOverview from "./PlanOverview";
+import PlanChangePanel from "./PlanChangePanel";
 import ConfirmChangeDialog from "./ConfirmChangeDialog";
 import AddonOffers from "./AddonOffers";
+import InvoiceList from "./InvoiceList";
 import { usePluginCatalog } from "../../hooks/usePluginCatalog";
+import { notifyLicenseStateChanged } from "../../utils/licenseEvents";
 import {
-  LINES, INTERVALS, INTERVAL_LABELS,
+  LINES,
   pricesFrom, currencyOf, estimateTotal, classifyChange, statusNotice,
-  addonsTotal, withAddons,
+  addonsTotal, withAddons, contractedSelection, initialSelection,
 } from "./billingModel";
-
-import { formatMoney } from "./money";
-
-const money = (cents, currency = "usd") => formatMoney(cents, currency);
 
 export default function Billing() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [configured, setConfigured] = useState(true);
   const [missingConfig, setMissingConfig] = useState([]);
   const [publishableKey, setPublishableKey] = useState(null);
   const [sub, setSub] = useState(null);
   const [invoices, setInvoices] = useState([]);
-  // Los precios vienen de Stripe. La UI los llevaba escritos a mano, y con
-  // mensual y anual —el anual lleva descuento— eso garantizaba cifras falsas.
+  const [invoicesFailed, setInvoicesFailed] = useState(false);
+  // Los precios vienen de Stripe: con mensual y anual —el anual lleva
+  // descuento— llevarlos escritos a mano garantizaba cifras falsas.
   const [catalog, setCatalog] = useState([]);
-  // Plugin catalog (label/title/description/tier_required) — the retired
-  // Plugin Control page's data source, now feeding SubscriptionSummary's
-  // "what's included" section and PlanPicker's per-tier detail. Named
-  // distinctly from `catalog` above (Stripe's PRICE catalog) — same word,
-  // two different backends.
+  const [catalogFailed, setCatalogFailed] = useState(false);
+  // El catálogo de PLUGINS (label/title/tier_required) — otro backend que el de
+  // precios de arriba, aunque se llamen igual.
   const { catalog: pluginCatalog, refetch: refetchPluginCatalog } = usePluginCatalog();
-  // ADR-0026 — complementos que se pueden contratar aquí (sólo los que tienen
-  // precio en Stripe; el backend no manda los demás).
+  // ADR-0026 — complementos contratables aquí (sólo los que tienen precio).
   const [addonCatalog, setAddonCatalog] = useState([]);
 
-  const [tab, setTab] = useState(0);
+  const [changing, setChanging] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [changeError, setChangeError] = useState(null);
   const [saved, setSaved] = useState(null);
 
   // La periodicidad va DENTRO de la selección: es de la suscripción entera
   // —Stripe no admite mezclar mensual y anual entre items— y valorar los dos
   // lados de un cambio con la misma tabla escondería el paso a anual.
   const [selection, setSelection] = useState({ interval: "monthly", endpoint: null, mdm: null });
+  const changingRef = useRef(false);
+  changingRef.current = changing;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  /**
+   * ⚠️ UNA RECARGA NO DESMONTA LA PÁGINA.
+   *
+   * Recargar ponía el spinner a pantalla completa: al guardar la tarjeta se
+   * desmontaba todo, se perdía el aviso de "tarjeta guardada" y la selección
+   * volvía a lo contratado — el plan que el usuario estaba eligiendo, borrado
+   * justo en el paso que le faltaba para confirmarlo. Sólo la PRIMERA carga
+   * enseña el spinner, y la selección sólo se reinicia fuera del selector.
+   */
+  const load = useCallback(async ({ initial = false } = {}) => {
+    if (initial) setLoading(true);
+    setLoadError(null);
     try {
       const data = await httpGetJson("/api/v1/billing/summary");
       setConfigured(Boolean(data?.configured));
       setMissingConfig(data?.missingConfig ?? []);
-      // La clave publicable la sirve el backend: la SPA se construye una sola
-      // vez para todos los entornos, así que no puede llevarla horneada.
+      // La clave publicable la sirve el backend: la SPA es la misma para todos
+      // los entornos, así que no puede llevarla horneada.
       setPublishableKey(data?.publishableKey ?? null);
       setSub(data?.subscription ?? null);
-
-      const s = data?.subscription;
-      if (s) {
-        setSelection({
-          // Sin preseleccionar lo contratado, un cliente anual entra, ve
-          // "mensual" marcado y al tocar sus licencias se lo lleva a mensual
-          // sin haberlo pedido — y eso refactura.
-          interval: s.billingInterval ?? "monthly",
-          // ⚠️ Sin cantidad NO se cae a 1. Con `quantity` vacía —el caso de
-          // los tenants heredados— ese 1 no era un valor por defecto inocente:
-          // quedaba preseleccionado, y confirmar cualquier otro cambio habría
-          // recortado el tope del cliente a un equipo. Se prefiere el tope que
-          // el gate aplica de verdad, y en su defecto la flota que ya existe.
-          endpoint: s.tier
-            ? { tier: s.tier, quantity: s.quantity ?? s.licensedQuantity ?? s.usage?.endpoint ?? 1 }
-            : null,
-          // ⚠️ MDM sólo se preselecciona si hay CANTIDAD contratada. Con tier
-          // pero sin cantidad —lo que el grandfathering dejó en todos los
-          // tenants— se preseleccionaba 1, y quien entraba a tocar otra cosa
-          // se llevaba una licencia de móvil que no había pedido.
-          mdm: s.mdmTier && s.mdmQuantity > 0
-            ? { tier: s.mdmTier, quantity: s.mdmQuantity }
-            : null,
-        });
-      }
+      if (data?.subscription && !changingRef.current) setSelection(initialSelection(data.subscription));
 
       // Catálogo y facturas fallan por separado y ninguno tumba la pantalla: se
-      // entra a Billing justo cuando algo va mal, y es el único sitio donde se
-      // corrige la tarjeta.
+      // entra a Billing justo cuando algo va mal. Pero un fallo se DICE: antes
+      // un catálogo caído se leía como "no hay precios en Stripe" y unas
+      // facturas caídas como "aún no hay facturas".
       try {
         const c = await httpGetJson("/api/v1/billing/catalog");
         setCatalog(c?.prices ?? []);
         setAddonCatalog(c?.addons ?? []);
+        setCatalogFailed(false);
       } catch {
-        setCatalog([]);
-        setAddonCatalog([]);
+        setCatalogFailed(true);
       }
       try {
         const inv = await httpGetJson("/api/v1/billing/invoices");
         setInvoices(inv?.invoices ?? []);
+        setInvoicesFailed(false);
       } catch {
-        setInvoices([]);
+        setInvoicesFailed(true);
       }
     } catch (err) {
-      setError(err?.message ?? "Could not load billing information.");
+      setLoadError(err?.message ?? "Could not load billing information.");
     } finally {
-      setLoading(false);
+      if (initial) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load({ initial: true });
+  }, [load]);
 
   const notice = useMemo(() => statusNotice(sub), [sub]);
 
-  // ⚠️ UNA LÍNEA SIN CANTIDAD NO ESTÁ CONTRATADA — es `null`, no "× 0".
-  //
-  // Representarla como `{tier, quantity: 0}` rompía dos cosas a la vez:
-  //
-  //   * el diálogo decía "Professional × 0 → Professional × 1", que no es lo
-  //     que ocurre; lo que ocurre es que se contrata una línea que no existía;
-  //   * y peor, `estimateTotal` no sabe poner precio a una cantidad 0, así que
-  //     devolvía null para TODO el estado actual. Sin coste anterior no hay
-  //     comparación posible, y añadir una licencia se clasificaba como BAJADA:
-  //     el diálogo ofrecía "Programar cambio" y avisaba de una reducción, para
-  //     un alta que Stripe iba a cobrar.
-  const asLine = (tier, quantity) =>
-    tier && Number.isFinite(quantity) && quantity > 0 ? { tier, quantity } : null;
-
-  const current = useMemo(
-    () =>
-      sub
-        ? {
-            interval: sub.billingInterval ?? "monthly",
-            endpoint: asLine(sub.tier, sub.quantity ?? sub.licensedQuantity),
-            mdm: asLine(sub.mdmTier, sub.mdmQuantity),
-          }
-        : null,
-    [sub]
-  );
-
-  const change = useMemo(
-    () => classifyChange(catalog, current, selection),
-    [catalog, current, selection]
-  );
-  const prices = useMemo(
-    () => pricesFrom(catalog, selection.interval),
-    [catalog, selection.interval]
-  );
+  // Lo contratado EN STRIPE, o null. Un plan asignado por el alta no es un
+  // plan contratado (ver contractedSelection).
+  const current = useMemo(() => contractedSelection(sub), [sub]);
+  const change = useMemo(() => classifyChange(catalog, current, selection), [catalog, current, selection]);
+  const prices = useMemo(() => pricesFrom(catalog, selection.interval), [catalog, selection.interval]);
   const currency = currencyOf(catalog);
-  // ADR-0026 — los complementos contratados van en el total: el «próximo cargo»
-  // sin ellos es una cifra que la factura no va a confirmar. Cada lado con su
-  // periodicidad, porque cambiarla también cambia el precio del complemento.
+
+  // ADR-0026 — los complementos contratados van en el total: sin ellos el
+  // «próximo cargo» es una cifra que la factura no confirma.
   const contractedAddons = sub?.addons ?? [];
-  const beforeTotal = withAddons(
-    estimateTotal(catalog, current),
-    addonsTotal(addonCatalog, contractedAddons, current?.interval ?? "monthly")
-  );
+  const beforeTotal = current
+    ? withAddons(estimateTotal(catalog, current), addonsTotal(addonCatalog, contractedAddons, current.interval))
+    : null;
   const afterTotal = withAddons(
     estimateTotal(catalog, selection),
     addonsTotal(addonCatalog, contractedAddons, selection.interval)
   );
 
   const hasCard = Boolean(sub?.hasPaymentMethod);
-  const setLine = (line, patch) => setSelection((s) => ({ ...s, [line]: patch }));
+  const managed = Boolean(sub?.managed);
+  const openChange = () => {
+    setSaved(null);
+    setChangeError(null);
+    setSelection(initialSelection(sub));
+    setChanging(true);
+  };
+  const closeChange = () => {
+    setChanging(false);
+    setChangeError(null);
+    setSelection(initialSelection(sub));
+  };
 
   const submit = async () => {
     setSaving(true);
-    setError(null);
-    setSaved(null);
+    setChangeError(null);
     try {
       // Se manda sólo lo contratado: una línea ausente del cuerpo significa
       // darla de baja, y el backend lo traduce en quitar su item.
-      const body = {
-        isUpgrade: change === "upgrade" || change === "new",
-        interval: selection.interval,
-      };
+      const body = { isUpgrade: change === "upgrade" || change === "new", interval: selection.interval };
       for (const line of LINES) if (selection[line]) body[line] = selection[line];
 
       const r = await httpPostJson("/api/v1/billing/subscription", body);
-      setSaved(r);
       setConfirming(false);
+      setChanging(false);
+      setSaved({ kind: change === "new" ? "subscribed" : "changed", status: r?.status ?? null });
       await load();
+      // La consola bloqueada por prueba vencida se levanta al contratar.
+      notifyLicenseStateChanged();
     } catch (err) {
+      // El error va DENTRO del selector, junto al botón que lo provocó. Arriba
+      // de la página no lo veía nadie: el usuario está abajo, confirmando.
       setConfirming(false);
-      setError(err?.message ?? "Could not update the subscription.");
+      setChangeError(err?.message ?? "Could not update the subscription.");
     } finally {
       setSaving(false);
     }
   };
 
+  const onCardSaved = async () => {
+    await load();
+    notifyLicenseStateChanged();
+  };
+
   if (loading) {
-    return <Box sx={{ p: 4, display: "flex", justifyContent: "center" }}><CircularProgress /></Box>;
+    return (
+      <Box sx={{ p: 4, display: "flex", justifyContent: "center" }}>
+        <CircularProgress aria-label="Loading billing" />
+      </Box>
+    );
   }
 
   if (!configured) {
     // Distinto de "no has contratado": esta instalación no tiene la facturación
-    // conectada.
-    //
-    // ⚠️ Aquí ponía "contacta con tu proveedor de servicio". A esta página sólo
-    // llega el OWNER, que en un despliegue propio ES el proveedor: era mandarlo
-    // a hablar consigo mismo, sin decirle qué falta. Ahora se nombra la
-    // variable ausente — nombres, nunca valores.
+    // conectada. A esta página sólo llega el OWNER, que en un despliegue propio
+    // ES el proveedor: se nombra la variable ausente — nombres, nunca valores.
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <PageHeader title="Billing" icon={<CreditCardOutlinedIcon />} />
@@ -239,8 +213,7 @@ export default function Billing() {
           {missingConfig.length > 0 ? (
             <>
               <Typography variant="body2" sx={{ mb: 1 }}>
-                These environment variables are missing on the server handling{" "}
-                <code>/api/v1/billing</code>:
+                These environment variables are missing on the server handling <code>/api/v1/billing</code>:
               </Typography>
               <Box component="ul" sx={{ pl: 2.5, my: 0.5 }}>
                 {missingConfig.map((k) => (
@@ -249,232 +222,156 @@ export default function Billing() {
                   </li>
                 ))}
               </Box>
-              {/* El paso que se olvida: ponerlas no basta si el proceso no se
-                  reinicia — y entonces la pantalla sigue diciendo lo mismo y
+              {/* El paso que se olvida: sin reiniciar, la pantalla sigue igual y
                   parece que el cambio no sirvió. */}
               <Typography variant="body2" sx={{ mt: 1 }}>
                 Add them and restart the process: values are read at startup.
               </Typography>
             </>
           ) : (
-            <Typography variant="body2">
-              Contact your service provider to subscribe or change plan.
-            </Typography>
+            <Typography variant="body2">Contact your service provider to subscribe or change plan.</Typography>
           )}
         </Alert>
       </Box>
     );
   }
 
+  const isNew = !current;
+  const planAction = managed ? null : changing ? null : (
+    <Button variant={isNew ? "contained" : "outlined"} onClick={openChange} disabled={catalogFailed}>
+      {isNew ? "Choose a plan" : "Change plan"}
+    </Button>
+  );
+
   return (
     // El resto de páginas no ponen padding propio ni ancho máximo: el AppShell
-    // ya es el marco. Billing lo hacía y salía desalineada de todo lo demás.
+    // ya es el marco. Separación ÚNICA por `gap`: los `mb` sobre él duplicaban
+    // el hueco entre avisos.
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <PageHeader
         title="Billing"
-        subtitle="Subscribed plan, licenses and payment method."
+        subtitle="Your plan, payment method and invoices."
         icon={<CreditCardOutlinedIcon />}
       />
 
-      {notice && <Alert severity={notice.severity} sx={{ mb: 2 }}>{notice.message}</Alert>}
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {notice && <Alert severity={notice.severity}>{notice.message}</Alert>}
+      {loadError && (
+        <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => load()}>Retry</Button>}>
+          {loadError}
+        </Alert>
+      )}
+      {catalogFailed && !managed && (
+        <Alert severity="warning" action={<Button color="inherit" size="small" onClick={() => load()}>Retry</Button>}>
+          Couldn't load prices from Stripe right now, so plans can't be changed. Your subscription is not affected.
+        </Alert>
+      )}
       {saved && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSaved(null)}>
+        <Alert severity="success" onClose={() => setSaved(null)}>
           {saved.addon
             ? `${saved.addon} ${saved.action === "add" ? "added to" : "removed from"} your subscription.`
+            : saved.kind === "subscribed"
+            ? saved.status === "trialing"
+              ? "You're subscribed. Nothing is charged until your trial ends."
+              : "You're subscribed."
             : "Subscription updated."}
         </Alert>
       )}
 
-      <SubscriptionSummary
+      <PlanOverview
         sub={sub}
         estimate={beforeTotal}
         currency={currency}
+        pluginCatalog={pluginCatalog}
         addonTitles={contractedAddons.map((k) => addonCatalog.find((a) => a.key === k)?.title ?? k)}
+        action={planAction}
       />
 
       {/* ENTERPRISE: plan gestionado por Tracenium, fuera de Stripe. Se enseña
-          lo contratado y nada más — ni tarjeta, ni periodicidad, ni planes que
-          elegir. El servidor rechaza igualmente contratar (409 MANAGED_PLAN):
-          esto no es la barrera, es no ofrecer un botón que falla. */}
-      {sub?.managed ? (
+          lo contratado y nada más. El servidor rechaza igualmente contratar
+          (409 MANAGED_PLAN): esto no es la barrera, es no ofrecer un botón que
+          falla. */}
+      {managed ? (
         <Alert severity="info">
           <AlertTitle>Managed by Tracenium</AlertTitle>
           Your plan, plugins and licenses are set by Tracenium. Contact your account manager to change them.
         </Alert>
       ) : (
         <>
-          <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
-            <Tab label="Plan" />
-            <Tab label={`Invoices${invoices.length ? ` (${invoices.length})` : ""}`} />
-          </Tabs>
+          {changing && (
+            <PlanChangePanel
+              sub={sub}
+              catalog={catalog}
+              prices={prices}
+              currency={currency}
+              pluginCatalog={pluginCatalog}
+              selection={selection}
+              onSelectionChange={setSelection}
+              current={current}
+              change={change}
+              beforeTotal={beforeTotal}
+              afterTotal={afterTotal}
+              hasCard={hasCard}
+              publishableKey={publishableKey}
+              onCardSaved={onCardSaved}
+              error={changeError}
+              onCancel={closeChange}
+              onReview={() => setConfirming(true)}
+            />
+          )}
 
-          {tab === 0 ? (
-            <>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: addonCatalog.length ? "repeat(2, minmax(0, 1fr))" : "1fr" },
+              gap: 2,
+              alignItems: "start",
+            }}
+          >
+            {/* Dentro del selector ya se pide la tarjeta cuando falta: dos
+                formularios de tarjeta a la vez serían dos SetupIntents. */}
+            {!(changing && !hasCard) && (
               <PaymentMethodCard
                 publishableKey={publishableKey}
                 hasPaymentMethod={hasCard}
-                onSaved={load}
+                paymentMethod={sub?.paymentMethod ?? null}
+                onSaved={onCardSaved}
               />
+            )}
+            {/* ADR-0026 — complemento de la misma suscripción. */}
+            <AddonOffers
+              sub={sub}
+              addons={addonCatalog}
+              pluginCatalog={pluginCatalog}
+              onChanged={async (addon, action) => {
+                setSaved({ addon: addon.title, action });
+                await load();
+                // El derecho lo leen otras pantallas desde un catálogo cacheado
+                // 5 min: sin esto, CDP seguiría enseñando los conectores
+                // congelados un rato después de haber pagado.
+                try {
+                  await refetchPluginCatalog();
+                } catch {
+                  // el hook vuelve a intentarlo solo al quedar obsoleto
+                }
+              }}
+            />
+          </Box>
 
-              {/* El motivo va donde está el obstáculo. Deshabilitar el botón sin
-                  decir por qué convierte un paso que falta en un fallo aparente. */}
-              {!hasCard && (
-                <Alert severity="info" sx={{ mb: 2.5 }}>
-                  Save a card before subscribing. Without a payment method the
-                  subscription never activates.
-                </Alert>
-              )}
+          <InvoiceList invoices={invoices} failed={invoicesFailed} onRetry={() => load()} />
 
-              <SectionPaper variant="panel">
-                <Typography variant="overline" color="text.secondary">
-                  Billing period
-                </Typography>
-                {/* Una sola para toda la suscripción: Stripe rechaza mezclar
-                    mensual y anual entre los items de una misma. */}
-                <Box sx={{ mt: 0.5 }}>
-                  <ToggleButtonGroup
-                    exclusive size="small" value={selection.interval}
-                    onChange={(_e, v) => v && setSelection((s) => ({ ...s, interval: v }))}
-                  >
-                    {INTERVALS.map((i) => (
-                      <ToggleButton key={i} value={i} sx={{ px: 2.5 }}>
-                        {INTERVAL_LABELS[i]}
-                      </ToggleButton>
-                    ))}
-                  </ToggleButtonGroup>
-                </Box>
-              </SectionPaper>
-
-              {LINES.map((line) => (
-                <PlanPicker
-                  key={line}
-                  line={line}
-                  prices={prices}
-                  currency={currency}
-                  interval={selection.interval}
-                  selection={selection[line]}
-                  used={sub?.usage?.[line] ?? null}
-                  onChange={(patch) => setLine(line, patch)}
-                  catalog={pluginCatalog}
-                />
-              ))}
-
-              {/* ADR-0026 — va DESPUÉS de los planes: es un complemento de la
-                  misma suscripción, y sin plan no hay dónde cobrarlo. */}
-              <AddonOffers
-                sub={sub}
-                addons={addonCatalog}
-                pluginCatalog={pluginCatalog}
-                onChanged={async (addon, action) => {
-                  setSaved({ addon: addon.title, action });
-                  await load();
-                  // El derecho lo leen otras pantallas desde un catálogo que se
-                  // cachea 5 min: sin esto, CDP seguiría enseñando los conectores
-                  // congelados un rato después de haber pagado.
-                  // (El POST ya vació la caché de GETs; esto repuebla la del hook.)
-                  try {
-                    await refetchPluginCatalog();
-                  } catch {
-                    // el hook vuelve a intentarlo solo al quedar obsoleto
-                  }
-                }}
-              />
-
-              {/* ⚠️ ESTO ERA UNA BARRA `position: sticky` Y SE QUITÓ.
-                  Flotaba sobre el contenido y tapaba justo las tarjetas de plan que
-                  el usuario estaba comparando — el elemento que resume la decisión
-                  escondía la decisión. Ninguna otra página de la consola flota nada
-                  sobre su contenido.
-
-                  Como bloque al final del formulario cumple lo mismo: sólo aparece
-                  cuando hay algo que confirmar, así que sigue distinguiendo "no he
-                  tocado nada" de "tengo un cambio pendiente". */}
-              {change !== "none" && (
-                <SectionPaper
-                  variant="panel"
-                  sx={{ borderColor: BRAND.teal, bgcolor: BRAND.tealSoft ?? "#f2f8f8" }}
-                >
-                  <Stack
-                    direction={{ xs: "column", sm: "row" }}
-                    justifyContent="space-between"
-                    alignItems={{ sm: "center" }}
-                    spacing={1.5}
-                  >
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {afterTotal !== null
-                          ? `${money(afterTotal, currency)}/${selection.interval === "yearly" ? "yr" : "mo"}`
-                          : "Incomplete selection"}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {change === "downgrade"
-                          ? "applies at the end of the cycle"
-                          : "charged on confirm"}
-                      </Typography>
-                    </Box>
-                    <Button
-                      variant="contained"
-                      disabled={!hasCard || afterTotal === null}
-                      onClick={() => setConfirming(true)}
-                    >
-                      Review change
-                    </Button>
-                  </Stack>
-                </SectionPaper>
-              )}
-
-              <ConfirmChangeDialog
-                open={confirming}
-                busy={saving}
-                onClose={() => setConfirming(false)}
-                onConfirm={submit}
-                current={current}
-                next={selection}
-                change={change}
-                beforeTotal={beforeTotal}
-                afterTotal={afterTotal}
-                currency={currency}
-              />
-            </>
-          ) : (
-            <SectionPaper variant="panel">
-              {invoices.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No invoices yet.
-                </Typography>
-              ) : (
-                <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Number</TableCell>
-                          <TableCell>Date</TableCell>
-                          <TableCell>Status</TableCell>
-                          <TableCell align="right">Amount</TableCell>
-                          <TableCell />
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {invoices.map((i) => (
-                          <TableRow key={i.id}>
-                            <TableCell>{i.number ?? i.id}</TableCell>
-                            <TableCell>{new Date(i.created).toLocaleDateString()}</TableCell>
-                            <TableCell>{i.status}</TableCell>
-                            <TableCell align="right">{money(i.amountDue, i.currency)}</TableCell>
-                            <TableCell align="right">
-                              {i.pdfUrl && (
-                                <Button size="small" href={i.pdfUrl} target="_blank" rel="noopener">
-                                  PDF
-                                </Button>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                </Table>
-              )}
-            </SectionPaper>
-          )}
+          <ConfirmChangeDialog
+            open={confirming}
+            busy={saving}
+            onClose={() => setConfirming(false)}
+            onConfirm={submit}
+            current={current}
+            next={selection}
+            change={change}
+            beforeTotal={beforeTotal}
+            afterTotal={afterTotal}
+            currency={currency}
+            sub={sub}
+          />
         </>
       )}
     </Box>

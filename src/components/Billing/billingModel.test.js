@@ -14,6 +14,13 @@ import {
   classifyChange,
   graceCeiling,
   statusNotice,
+  contractedSelection,
+  initialSelection,
+  planStatus,
+  chargeTiming,
+  pluginState,
+  yearlySavingsLabel,
+  invoiceStatus,
 } from "./billingModel";
 
 /**
@@ -288,20 +295,44 @@ describe("avisos de estado", () => {
     expect(n.message).toContain("suspended");
   });
 
-  it("durante el trial dice a qué plan se caerá", () => {
-    // El trial abre todo; el usuario tiene que saber qué conserva al vencer, o
-    // el apagado le parecerá una avería.
-    const n = statusNotice(
-      {
-        status: "trialing",
-        inTrial: true,
-        tier: "starter",
-        trialEndsAt: new Date(NOW.getTime() + 10 * DAY).toISOString(),
-      },
-      NOW
-    );
-    expect(n.severity).toBe("info");
-    expect(n.message).toContain("Starter");
+  describe("durante la prueba dice QUÉ pasa al terminar — son tres finales distintos", () => {
+    const trial = { status: "active", inTrial: true, trialEndsAt: new Date(NOW.getTime() + 10 * DAY).toISOString() };
+
+    it("contratado en Stripe: ese día empieza a cobrarse", () => {
+      const n = statusNotice({ ...trial, tier: "starter", billedByStripe: true }, NOW);
+      expect(n.severity).toBe("info");
+      expect(n.message).toContain("Starter");
+      expect(n.message).toContain("first charge");
+    });
+
+    it("⭐ sin Stripe: no promete conservar el plan — avisa de que la consola se pausa", () => {
+      // Decía "after that you keep the ones in your Business plan" a T109/T113,
+      // que no pagan nada: al vencer se bloquean.
+      const n = statusNotice({ ...trial, tier: "business", billedByStripe: false }, NOW);
+      expect(n.message).not.toMatch(/keep/);
+      expect(n.message).toMatch(/Choose a plan before then/);
+      expect(n.message).toMatch(/pause/);
+    });
+
+    it("sin Stripe y a una semana o menos: pasa a aviso", () => {
+      const n = statusNotice(
+        { ...trial, tier: "business", trialEndsAt: new Date(NOW.getTime() + 6 * DAY).toISOString() },
+        NOW
+      );
+      expect(n.severity).toBe("warning");
+    });
+
+    it("Enterprise conserva su conjunto", () => {
+      const n = statusNotice({ ...trial, tier: "enterprise", managed: true }, NOW);
+      expect(n.message).toContain("Enterprise plugins");
+    });
+  });
+
+  it("⭐ prueba vencida sin pagar: error, y dice qué sigue funcionando", () => {
+    const n = statusNotice({ status: "active", tier: "business", trialLapsed: true, trialEndsAt: NOW.toISOString() }, NOW);
+    expect(n.severity).toBe("error");
+    expect(n.message).toMatch(/paused until you choose a plan/);
+    expect(n.message).toMatch(/keep reporting inventory/);
   });
 
   it("una suscripción al día no genera ruido", () => {
@@ -369,5 +400,133 @@ describe("addonsTotal (ADR-0026)", () => {
     expect(withAddons(600000, null)).toBeNull();
     expect(withAddons(null, 0)).toBeNull();
     expect(withAddons(600000, 2500000)).toBe(3100000);
+  });
+});
+
+describe("contratado frente a asignado", () => {
+  const assigned = { tier: "business", quantity: 50, status: "active", billedByStripe: false, usage: { endpoint: 3 } };
+
+  it("⭐ un plan asignado por el alta NO es un plan contratado", () => {
+    // Si lo fuera, preseleccionarlo daría "sin cambios" y no habría botón para
+    // pagarlo (T109, T113).
+    expect(contractedSelection(assigned)).toBeNull();
+    expect(classifyChange([], contractedSelection(assigned), initialSelection(assigned))).toBe("new");
+  });
+
+  it("con Stripe, lo contratado es el 'antes'", () => {
+    expect(contractedSelection({ ...assigned, billedByStripe: true, billingInterval: "yearly" })).toEqual({
+      interval: "yearly",
+      endpoint: { tier: "business", quantity: 50 },
+      mdm: null,
+    });
+  });
+
+  it("el selector abre con el plan asignado, pero nunca con Enterprise (no se vende)", () => {
+    expect(initialSelection(assigned).endpoint).toEqual({ tier: "business", quantity: 50 });
+    expect(initialSelection({ ...assigned, tier: "enterprise" }).endpoint).toBeNull();
+  });
+});
+
+describe("planStatus: 'active' en Stripe no es 'active' sin Stripe", () => {
+  it.each([
+    [{ status: "active", billedByStripe: true }, "Active", "success"],
+    [{ status: "trialing", billedByStripe: true }, "Trial · subscribed", "info"],
+    [{ status: "active", billedByStripe: false, trialEndsAt: new Date(NOW.getTime() + DAY).toISOString() }, "Trial · not billed", "info"],
+    [{ status: "active", billedByStripe: false, trialLapsed: true }, "Trial ended", "error"],
+    [{ status: "active", billedByStripe: false }, "Not billed", "neutral"],
+    [{ status: "active", managed: true }, "Managed", "info"],
+    [{ status: "past_due", billedByStripe: true }, "Payment pending", "warning"],
+  ])("%j → %s", (sub, label, tone) => {
+    expect(planStatus(sub, NOW)).toEqual({ label, tone });
+  });
+});
+
+describe("chargeTiming", () => {
+  it("⭐ un alta con la prueba viva no cobra hoy: cobra al terminarla", () => {
+    const t = chargeTiming("new", { trialEndsAt: new Date(NOW.getTime() + 20 * DAY).toISOString() }, NOW);
+    expect(t.when).toBe("trial_end");
+    expect(t.text).toMatch(/Nothing is charged today/);
+  });
+
+  it("a menos de una hora del fin (umbral del backend) se cobra ya", () => {
+    const t = chargeTiming("new", { trialEndsAt: new Date(NOW.getTime() + 30 * 60_000).toISOString() }, NOW);
+    expect(t.when).toBe("now");
+  });
+
+  it("un alta sin prueba cobra el periodo, no 'la diferencia'", () => {
+    const t = chargeTiming("new", {}, NOW);
+    expect(t.text).not.toMatch(/difference/);
+    expect(t.text).toMatch(/first period is charged now/);
+  });
+
+  it("⭐ una bajada no promete retener datos", () => {
+    expect(chargeTiming("downgrade", {}, NOW).text).not.toMatch(/90 days|kept/);
+  });
+});
+
+describe("pluginState", () => {
+  const SCP = { key: "scp", label: "SCP", title: "Security Compliance", tier_required: "professional" };
+  const AMP = { key: "amp", label: "AMP", title: "Asset Management", tier_required: "starter", required: true };
+
+  it("en el plan y concedido: incluido", () => {
+    expect(pluginState(SCP, { tier: "professional", entitledPluginKeys: ["amp", "scp"] }).state).toBe("included");
+  });
+
+  it("⭐ concedido por la prueba fuera del plan: 'trial', no candado", () => {
+    const s = pluginState(SCP, { tier: "starter", entitledPluginKeys: ["amp", "scp"] });
+    expect(s.state).toBe("trial");
+    expect(s.note).toMatch(/needs Professional after it ends/);
+  });
+
+  it("⭐ en el plan pero no concedido (prueba vencida): en pausa", () => {
+    const s = pluginState(SCP, { tier: "business", trialLapsed: true, entitledPluginKeys: ["amp"] });
+    expect(s).toEqual({ state: "paused", note: "Paused until you choose a plan" });
+  });
+
+  it("fuera del plan: qué plan lo trae; en Enterprise, sin tier que prometer", () => {
+    expect(pluginState(SCP, { tier: "starter", entitledPluginKeys: ["amp"] }).note).toBe("Requires Professional");
+    expect(pluginState(SCP, { tier: "enterprise", managed: true, pluginKeys: [], entitledPluginKeys: ["amp"] }).note).toBe("Not in your plan");
+    expect(pluginState(AMP, { tier: "enterprise", managed: true, pluginKeys: [], entitledPluginKeys: ["amp"] }).state).toBe("included");
+  });
+});
+
+describe("yearlySavingsLabel", () => {
+  const row = (tier, interval, unitAmount) => ({ line: "endpoint", tier, interval, unitAmount, currency: "usd" });
+
+  it("el anual a 10× el mensual son 2 meses gratis", () => {
+    expect(yearlySavingsLabel([row("starter", "monthly", 200), row("starter", "yearly", 2000)])).toBe("2 months free");
+  });
+
+  it("con descuentos distintos por plan no dice nada: una frase mentiría para alguno", () => {
+    expect(
+      yearlySavingsLabel([
+        row("starter", "monthly", 200), row("starter", "yearly", 2000),
+        row("business", "monthly", 1000), row("business", "yearly", 11000),
+      ])
+    ).toBeNull();
+  });
+
+  it("sin descuento no dice nada", () => {
+    expect(yearlySavingsLabel([row("starter", "monthly", 200), row("starter", "yearly", 2400)])).toBeNull();
+  });
+});
+
+describe("invoiceStatus", () => {
+  it("traduce el vocabulario de Stripe", () => {
+    expect(invoiceStatus("open")).toEqual({ label: "Due", tone: "warning" });
+    expect(invoiceStatus("uncollectible").label).toBe("Unpaid");
+    expect(invoiceStatus("weird").label).toBe("weird");
+  });
+});
+
+describe("addonOffer con la prueba vencida", () => {
+  it("⭐ pide contratar, no 'subir de plan' a quien ya es Business", () => {
+    const COV = { key: "cdp_coverage", plugin: "cdp", prices: [{ interval: "monthly", unitAmount: 250000, currency: "usd" }] };
+    const o = addonOffer(
+      { tier: "business", billedByStripe: false, trialLapsed: true, entitledPluginKeys: ["amp"], status: "active" },
+      COV,
+      { pluginTier: "business" }
+    );
+    expect(o.blocked).toMatch(/Subscribe to a plan first/);
   });
 });

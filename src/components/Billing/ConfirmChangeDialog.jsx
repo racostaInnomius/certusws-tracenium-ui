@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { BRAND, ICON } from "../../theme/brand";
-import { LINES, LINE_LABELS, TIER_LABELS, INTERVAL_LABELS } from "./billingModel";
+import { LINES, LINE_LABELS, TIER_LABELS, INTERVAL_LABELS, chargeTiming } from "./billingModel";
 
 import { formatMoney } from "./money";
 
@@ -27,9 +27,10 @@ const describe = (sel) =>
 
 export default function ConfirmChangeDialog({
   open, onClose, onConfirm, busy,
-  current, next, change, beforeTotal, afterTotal, currency,
+  current, next, change, beforeTotal, afterTotal, currency, sub = null,
 }) {
   const perPeriod = next?.interval === "yearly" ? "/yr" : "/mo";
+  const timing = chargeTiming(change, sub);
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
@@ -52,12 +53,12 @@ export default function ConfirmChangeDialog({
                 <Typography variant="body2" sx={{ minWidth: 110, fontWeight: 700 }}>
                   {LINE_LABELS[line]}
                 </Typography>
-                <Typography variant="body2" color={same ? "text.secondary" : "text.disabled"}>
+                <Typography variant="body2" color="text.secondary">
                   {describe(a)}
                 </Typography>
                 {!same && (
                   <>
-                    <ArrowForwardIcon sx={{ fontSize: ICON.md, color: "text.disabled" }} />
+                    <ArrowForwardIcon aria-label="to" sx={{ fontSize: ICON.md, color: "text.secondary" }} />
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>
                       {describe(b)}
                     </Typography>
@@ -72,10 +73,10 @@ export default function ConfirmChangeDialog({
               <Typography variant="body2" sx={{ minWidth: 110, fontWeight: 700 }}>
                 Billing
               </Typography>
-              <Typography variant="body2" color="text.disabled">
+              <Typography variant="body2" color="text.secondary">
                 {INTERVAL_LABELS[current.interval]}
               </Typography>
-              <ArrowForwardIcon sx={{ fontSize: ICON.md, color: "text.disabled" }} />
+              <ArrowForwardIcon aria-label="to" sx={{ fontSize: ICON.md, color: "text.secondary" }} />
               <Typography variant="body2" sx={{ fontWeight: 700 }}>
                 {INTERVAL_LABELS[next.interval]}
               </Typography>
@@ -88,10 +89,10 @@ export default function ConfirmChangeDialog({
         <Stack direction="row" alignItems="baseline" spacing={1.5} sx={{ mb: 2 }}>
           {beforeTotal !== null && beforeTotal !== undefined && (
             <>
-              <Typography variant="body1" color="text.disabled" sx={{ textDecoration: "line-through" }}>
+              <Typography variant="body1" color="text.secondary" sx={{ textDecoration: "line-through" }}>
                 {money(beforeTotal, currency)}
               </Typography>
-              <ArrowForwardIcon sx={{ fontSize: ICON.md, color: "text.disabled" }} />
+              <ArrowForwardIcon aria-label="to" sx={{ fontSize: ICON.md, color: "text.secondary" }} />
             </>
           )}
           <Typography variant="h5" sx={{ fontWeight: 800, color: BRAND.dark }}>
@@ -105,16 +106,11 @@ export default function ConfirmChangeDialog({
         {/* Subir y bajar se cobran distinto, y decirlo AQUÍ —no encima del
             botón de la página— es la diferencia entre un cambio informado y
             una reclamación. */}
-        {(change === "upgrade" || change === "new") && (
-          <Alert severity="info">
-            The difference is charged now, prorated for the rest of the cycle.
-          </Alert>
-        )}
-        {change === "downgrade" && (
-          <Alert severity="warning">
-            The reduction takes effect at the end of the current cycle, with no
-            refund. Data from plugins you drop is kept for 90 days.
-          </Alert>
+        {/* Cuándo se cobra, dicho AQUÍ y no encima del botón de la página. Un alta
+            no se cobra "la diferencia prorrateada": es el periodo entero — o
+            nada hasta que acabe la prueba, que es cuando el backend lo cobra. */}
+        {timing && (
+          <Alert severity={change === "downgrade" ? "warning" : "info"}>{timing.text}</Alert>
         )}
 
         <Box sx={{ mt: 1.5 }}>
@@ -129,7 +125,13 @@ export default function ConfirmChangeDialog({
           Cancel
         </Button>
         <Button onClick={onConfirm} disabled={busy} variant="contained">
-          {busy ? "Processing…" : change === "downgrade" ? "Schedule change" : "Confirm and pay"}
+          {busy
+            ? "Processing…"
+            : change === "downgrade"
+            ? "Schedule change"
+            : timing?.when === "trial_end"
+            ? "Subscribe"
+            : "Confirm and pay"}
         </Button>
       </DialogActions>
     </Dialog>
