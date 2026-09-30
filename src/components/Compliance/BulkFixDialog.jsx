@@ -36,6 +36,7 @@ import RescanComplianceButton from "./RescanComplianceButton";
 import {
   PREREQUISITE_MISSING,
   describePrerequisiteOffer,
+  prerequisiteNotice,
   prerequisiteOfferLabel,
   prerequisiteOffers,
 } from "../patch-management/prerequisiteOffer";
@@ -311,6 +312,11 @@ export default function BulkFixDialog({
               {offer.checkIds.map((c) => (
                 <Typography key={c} sx={{ fontSize: TEXT.sm }}>· {titleOf.get(c) || c}</Typography>
               ))}
+              {prerequisiteNotice(offer.prerequisite) ? (
+                <Typography data-testid={`bulk-fix-prerequisite-notice-${offer.prerequisite.key}`} sx={{ fontSize: TEXT.sm, fontWeight: 600, mt: 0.75 }}>
+                  {prerequisiteNotice(offer.prerequisite)}
+                </Typography>
+              ) : null}
             </Alert>
           ))}
 

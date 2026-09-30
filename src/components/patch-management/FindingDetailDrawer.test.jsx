@@ -274,4 +274,25 @@ describe("requisito que se puede instalar — «¿instalo auditd y sigo?»", () 
     await waitFor(() => expect(notify).toHaveBeenCalledWith("warning", expect.stringMatching(/1 device was left out: auditd is not installed/)));
     expect(remediate.mock.calls[0][0]).not.toHaveProperty("installPrerequisites");
   });
+
+  it("libpam-pwquality: el aviso dice por qué y qué cambia en PAM antes de «Install … and apply»", async () => {
+    const PWQ = { key: "libpam-pwquality", checkId: "linux.pkg.libpampwquality_6795b3", title: "libpam-pwquality is installed", consequence: "the password-quality settings would have no file to go in (/etc/security/pwquality.conf comes with it)", notice: "Installing libpam-pwquality turns password-quality checks on in PAM: from then on every new password must meet the policy, including one a user is made to choose at login because theirs expired. Open sessions and ordinary logins are not affected.", deviceIds: ["d1"] };
+    const e = Object.assign(new Error("409"), { status: 409, body: { error: "PATCH_REMEDIATION_PREREQUISITE_MISSING", prerequisite: PWQ, message: "libpam-pwquality…" } });
+    remediate.mockRejectedValueOnce(e);
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /^Apply on 2/ }));
+    const offer = await screen.findByTestId("prerequisite-offer");
+    expect(offer).toHaveTextContent(/libpam-pwquality is not installed on this device, so this fix would do nothing: without it the password-quality settings/);
+    expect(screen.getByTestId("prerequisite-notice")).toHaveTextContent(/every new password must meet the policy/);
+    expect(screen.getByRole("button", { name: "Install libpam-pwquality and apply on 1" })).toBeInTheDocument();
+  });
+
+  it("auditd (y un backend que no manda `consequence`): sin aviso de PAM", async () => {
+    const e = Object.assign(new Error("409"), { status: 409, body: { error: "PATCH_REMEDIATION_PREREQUISITE_MISSING", prerequisite: PREREQ, message: "auditd…" } });
+    remediate.mockRejectedValueOnce(e);
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /^Apply on 2/ }));
+    expect(await screen.findByTestId("prerequisite-offer")).toHaveTextContent(/without it audit rules would not be loaded/);
+    expect(screen.queryByTestId("prerequisite-notice")).toBeNull();
+  });
 });

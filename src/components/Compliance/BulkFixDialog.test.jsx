@@ -239,4 +239,27 @@ describe("requisito que se puede instalar — «¿instalo auditd y sigo?»", () 
     rerender(<BulkFixDialog open findings={FINDINGS} deviceId="dev-1" hostname="WS-ALPHA" canManage={false} onClose={vi.fn()} onChanged={vi.fn()} notify={vi.fn()} />);
     expect(screen.queryByRole("button", { name: /Install auditd/ })).toBeNull();
   });
+
+  // 29-sep (jobs 846f7486 / ff4baf3e): los ajustes de pwquality no tienen fichero
+  // sin libpam-pwquality, y su instalación activa pam_pwquality: el aviso lo dice
+  // ANTES del botón.
+  it("libpam-pwquality: su propio aviso, con su motivo y el efecto en PAM, separado del de auditd", async () => {
+    const PWQ = { key: "libpam-pwquality", checkId: "linux.pkg.libpampwquality_6795b3", title: "libpam-pwquality is installed", consequence: "the password-quality settings would have no file to go in (/etc/security/pwquality.conf comes with it)", notice: "Installing libpam-pwquality turns password-quality checks on in PAM: from then on every new password must meet the policy, including one a user is made to choose at login because theirs expired. Open sessions and ordinary logins are not affected.", deviceIds: ["dev-1"] };
+    remediateBatch.mockResolvedValueOnce({
+      items: [],
+      skipped: [
+        { checkId: "a", error: "PATCH_REMEDIATION_PREREQUISITE_MISSING", message: "…", prerequisite: PREREQ },
+        { checkId: "b", error: "PATCH_REMEDIATION_PREREQUISITE_MISSING", message: "…", prerequisite: PWQ },
+      ],
+    });
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /^Apply 2/ }));
+    const offer = await screen.findByTestId("bulk-fix-prerequisite-libpam-pwquality");
+    expect(offer).toHaveTextContent(/libpam-pwquality is not installed on WS-ALPHA, so 1 fix was held back: without it the password-quality settings would have no file to go in/);
+    expect(screen.getByTestId("bulk-fix-prerequisite-notice-libpam-pwquality")).toHaveTextContent(/turns password-quality checks on in PAM/);
+    // El de auditd sigue con su motivo y sin aviso de PAM.
+    expect(screen.getByTestId("bulk-fix-prerequisite-auditd")).toHaveTextContent(/without it audit rules would not be loaded/);
+    expect(screen.queryByTestId("bulk-fix-prerequisite-notice-auditd")).toBeNull();
+    expect(screen.getByRole("button", { name: "Install libpam-pwquality and apply 1" })).toBeInTheDocument();
+  });
 });

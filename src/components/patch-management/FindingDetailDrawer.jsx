@@ -54,7 +54,7 @@ import {
   cancelRemediation,
   listRemediations,
 } from "../../api/patchManagement";
-import { PREREQUISITE_MISSING } from "./prerequisiteOffer";
+import { PREREQUISITE_MISSING, describeSingleFixPrerequisite, prerequisiteNotice } from "./prerequisiteOffer";
 import { formatRelativeTime } from "../Compliance/PatchLevel";
 import { listFrom } from "../../api/shape";
 import { devicesToApplyAfterDryRun, dryRunFinished, dryRunLeftOut } from "./dryRunGate";
@@ -779,7 +779,12 @@ export default function FindingDetailDrawer({
                       </Button>
                     }
                   >
-                    {`${pre.key} is not installed on ${n === 1 ? "this device" : `these ${n} devices`}, so this fix would do nothing. Tracenium can install it first (${pre.title}) and then apply the fix, in the same job.`}
+                    {describeSingleFixPrerequisite(pre)}
+                    {prerequisiteNotice(pre) ? (
+                      <Box component="span" data-testid="prerequisite-notice" sx={{ display: "block", fontWeight: 600, mt: 0.75 }}>
+                        {prerequisiteNotice(pre)}
+                      </Box>
+                    ) : null}
                   </Alert>
                 );
               })() : null}
