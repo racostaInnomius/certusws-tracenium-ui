@@ -96,3 +96,52 @@ export function evidenceRows(ev, status) {
   return null;
 }
 
+
+// ── «No aplica» porque el check es de otra versión del SO ──────────────
+//
+// El backend (evaluator.ts → otherOsVersionResult, commit 261493a0) marca
+// not_applicable un check escrito para otra versión del SO cuando el equipo
+// tiene su propio benchmark: ~7.900 hallazgos en prod al desplegarlo. Trae
+// `reason: "benchmark_for_other_os_version"` —un código— más los campos para
+// explicarlo. Pintar el código tal cual dejaba al operador con
+// «benchmark_for_other_os_version» en cursiva en cada uno de ellos.
+
+const OS_NAMES = { macos: "macOS", ubuntu: "Ubuntu", windows: "Windows" };
+
+/**
+ * Id de framework → nombre corto con versión:
+ * `cis_ubuntu_24_v2.0.0` → «CIS Ubuntu 24.04», `cis_windows_server_2022_v5.1.0`
+ * → «CIS Windows Server 2022», `stig_macos_14` → «STIG macOS 14». Lo que no
+ * encaja se devuelve tal cual: un id es feo, pero no miente.
+ */
+export function benchmarkLabel(id) {
+  const raw = String(id ?? "");
+  const m = raw.match(/^(cis|stig)_(macos|ubuntu|windows)_((?:server_)?\d+)(?:_v[\d.]+)?$/i);
+  if (!m) return raw;
+  const [, pub, os, ver] = m;
+  const server = /^server_/i.test(ver);
+  const num = ver.replace(/^server_/i, "");
+  const version = os.toLowerCase() === "ubuntu" ? `${num}.04` : num;
+  return `${pub.toUpperCase()} ${OS_NAMES[os.toLowerCase()]}${server ? " Server" : ""} ${version}`;
+}
+
+/**
+ * El texto de un «no evaluado / no aplica». Para el de otra versión del SO se
+ * arma con los campos estructurados; si no vienen, `detail` (la frase del
+ * backend); y si tampoco, `reason` como siempre.
+ */
+export function notApplicableText(ev) {
+  if (!ev || typeof ev !== "object") return "";
+  if (ev.reason === "benchmark_for_other_os_version") {
+    const written = Array.isArray(ev.checkBenchmarks) ? ev.checkBenchmarks.map(benchmarkLabel).filter(Boolean) : [];
+    const own = ev.ownBenchmark ? benchmarkLabel(ev.ownBenchmark) : "";
+    if (written.length && own) {
+      return ev.ownIsFallback
+        ? `Not applicable: written for ${written.join(", ")}. This device is measured by ${own}, the newest benchmark published for its OS (there is none yet for its version).`
+        : `Not applicable: written for ${written.join(", ")}. This device is measured by its own benchmark, ${own}.`;
+    }
+    if (typeof ev.detail === "string" && ev.detail.trim()) return ev.detail;
+    return "Not applicable: this check was written for another version of the operating system.";
+  }
+  return typeof ev.reason === "string" ? ev.reason : "";
+}

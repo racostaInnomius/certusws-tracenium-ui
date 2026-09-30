@@ -10,6 +10,8 @@
 //   { composite: "all_of" | "any_of", sub_evidence: [ { status, evidence } |
 //     { status: "not_applicable", reason } ] }           composites
 //   { reason }                                           not assessed
+//   { reason: "benchmark_for_other_os_version", checkBenchmarks,
+//     ownBenchmark, ownIsFallback?, detail }             check de otra versión del SO
 //   "free text"                                          legacy string
 //
 // Why now: the Windows hardening checks (TLS, ciphers, SMBv1) became
@@ -23,7 +25,7 @@
 import * as React from "react";
 import { Box, Typography, Tooltip } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
-import { evidenceRows } from "./evidenceRows";
+import { evidenceRows, notApplicableText } from "./evidenceRows";
 
 const STATUS_STYLE = {
   pass: { color: BRAND.tealText, label: "✓" },
@@ -69,7 +71,7 @@ export default function EvidenceView({ evidence, status }) {
   if (typeof evidence === "object" && !Array.isArray(evidence) && typeof evidence.reason === "string" && !evidence.path && !evidence.paths && !evidence.sub_evidence) {
     return (
       <Typography variant="body2" sx={{ mt: 0.5, color: BRAND.gray, fontStyle: "italic" }} data-testid="evidence-reason">
-        {evidence.reason}
+        {notApplicableText(evidence)}
       </Typography>
     );
   }
