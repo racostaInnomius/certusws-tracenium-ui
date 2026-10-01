@@ -231,6 +231,20 @@ export function Sparkline({ points = [], bands = DEFAULT_BANDS }) {
 // section already wore; the sections that ignored the filters until 29-sep
 // (category, trend, time to remediate) now honor them, and have to say so —
 // "Fleet pass rate" over one asset group would be a false statement.
+// Lo que ya está en la política macOS de la organización. Ocupa el sitio de
+// «Add to macOS policy» mientras los Macs no confirman el perfil: el hallazgo
+// sigue abierto hasta su próxima conexión (~4 h sin push) y su siguiente
+// escaneo, y volver a ofrecer «Add» parecía que el clic no había hecho nada.
+export const IN_MAC_POLICY_HINT =
+  "Already in the organization's macOS policy. Macs enrolled in Tracenium MDM install the profile on their next check-in (about every 4 hours), and the finding closes when their next scan confirms it. Other Macs need the profile installed.";
+export function InMacPolicyChip({ title = IN_MAC_POLICY_HINT }) {
+  return (
+    <Tooltip title={title} arrow describeChild>
+      <Chip size="small" variant="outlined" label="In the macOS policy" sx={{ fontWeight: 700 }} />
+    </Tooltip>
+  );
+}
+
 export function ScopeChip({ groupLabel, frameworkLabel }) {
   const parts = [frameworkLabel, groupLabel].filter(Boolean);
   if (!parts.length) return null;

@@ -233,6 +233,15 @@ describe("⭐ sólo lo impone un perfil (macOS, 1-oct)", () => {
     expect(screen.queryByRole("button", { name: /Fix…/ })).toBeNull();
   });
 
+  it("⭐ ya en la política macOS: la acción lo dice en vez de ofrecer «Add» otra vez", async () => {
+    getRemediationHub.mockResolvedValue(hub([profileAction]));
+    render(
+      <RemediationHubPanel canManage onAddToMacPolicy={vi.fn()} macPolicyKeys={new Set(["macos.privacy.allowPersonalizedAds"])} />
+    );
+    expect(await screen.findByText("In the macOS policy")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add to macOS policy" })).toBeNull();
+  });
+
   it("sin Device Management el botón está, apagado y explicado", async () => {
     getRemediationHub.mockResolvedValue(hub([profileAction]));
     render(<RemediationHubPanel canManage />);

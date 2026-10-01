@@ -35,6 +35,8 @@ import SectionPaper from "../common/SectionPaper";
 import { BRAND, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getTopFailingChecks } from "../../api/compliance";
+import { InMacPolicyChip } from "./complianceChips";
+import { intentsInPolicy } from "./macPolicyKeys";
 
 const HOW_MANY = 5;
 
@@ -62,6 +64,9 @@ export default function WhatToFixFirst({
   // macOS, sólo lo impone un perfil: añadir sus ajustes a la política macOS
   // (Device Management, 1-oct). null = sin permiso.
   onAddToMacPolicy = null,
+  // Claves ya guardadas en la política macOS (macPolicyKeys): esa fila dice
+  // «In the macOS policy» en vez de ofrecer «Add» otra vez.
+  macPolicyKeys = null,
   framework,
   frameworkLabel,
   assetGroupId,
@@ -204,7 +209,9 @@ export default function WhatToFixFirst({
                   </Box>
                 </Typography>
 
-                {!row.agentRemediable && row.profileIntents?.length && onAddToMacPolicy ? (
+                {!row.agentRemediable && intentsInPolicy(row.profileIntents, macPolicyKeys) ? (
+                  <InMacPolicyChip />
+                ) : !row.agentRemediable && row.profileIntents?.length && onAddToMacPolicy ? (
                   <Tooltip
                     describeChild
                     title="macOS only enforces this through a configuration profile. Adds it to the organization's macOS policy: Macs enrolled in Tracenium MDM get it on their next check-in."

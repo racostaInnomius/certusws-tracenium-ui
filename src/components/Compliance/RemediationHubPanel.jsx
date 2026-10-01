@@ -32,6 +32,8 @@ import { BRAND, TEXT } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
 import { getRemediationHub } from "../../api/compliance";
 import FindingDetailDrawer from "../patch-management/FindingDetailDrawer";
+import { InMacPolicyChip } from "./complianceChips";
+import { intentsInPolicy } from "./macPolicyKeys";
 
 const SEVERITY_COLOR = {
   critical: "error",
@@ -87,7 +89,9 @@ export function criticalDevicesLabel(action) {
   return `${n} critical`;
 }
 
-export default function RemediationHubPanel({ reloadKey, onToast, canManage = false, onAddToMacPolicy = null }) {
+// `macPolicyKeys` — lo ya guardado en la política macOS: esa acción dice
+// «In the macOS policy» en vez de ofrecer «Add» otra vez.
+export default function RemediationHubPanel({ reloadKey, onToast, canManage = false, onAddToMacPolicy = null, macPolicyKeys = null }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
@@ -264,7 +268,9 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    {a.applyBlockedReason === "profile_only" && a.profileIntents?.length ? (
+                    {a.applyBlockedReason === "profile_only" && intentsInPolicy(a.profileIntents, macPolicyKeys) ? (
+                      <InMacPolicyChip />
+                    ) : a.applyBlockedReason === "profile_only" && a.profileIntents?.length ? (
                       <Tooltip title={onAddToMacPolicy ? "" : "Adding to the macOS policy needs Device Management access."}>
                         <span>
                           <Button

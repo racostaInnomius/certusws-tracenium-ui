@@ -1327,6 +1327,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             onToast={showToast}
             canManage={canManage}
             onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
+            macPolicyKeys={macPolicyKeySet}
           />
         </Stack>
       ) : null}
@@ -1638,6 +1639,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           }}
           onRemediate={canRemediate ? handleRemediateCheck : null}
           onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
+          macPolicyKeys={macPolicyKeySet}
         />
         <MttrCard reloadKey={refreshToken} assetGroupId={assetGroupId} framework={selectedFramework} scopeLabels={scopeLabels} />
       </Box>

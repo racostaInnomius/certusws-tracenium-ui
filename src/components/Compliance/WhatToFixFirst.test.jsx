@@ -119,6 +119,23 @@ describe("WhatToFixFirst — sólo lo impone un perfil (macOS, 1-oct)", () => {
     expect(screen.queryByRole("button", { name: /Show me how/ })).toBeNull();
   });
 
+  it("⭐ ya en la política macOS: dice «In the macOS policy», no vuelve a ofrecer «Add»", async () => {
+    getTopFailingChecks.mockResolvedValue(rows);
+    const onAddToMacPolicy = vi.fn();
+    render(
+      <WhatToFixFirst onAddToMacPolicy={onAddToMacPolicy} macPolicyKeys={new Set(["macos.passwordPolicy.minLength"])} />
+    );
+    expect(await screen.findByText("In the macOS policy")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add to macOS policy" })).toBeNull();
+  });
+
+  it("sólo una parte en la política: «Add» sigue (añade lo que falta)", async () => {
+    const two = [...intents, { key: "macos.passwordPolicy.requireAlnum", value: true }];
+    getTopFailingChecks.mockResolvedValue({ ok: true, items: [{ ...rows.items[0], profileIntents: two }] });
+    render(<WhatToFixFirst onAddToMacPolicy={vi.fn()} macPolicyKeys={new Set(["macos.passwordPolicy.minLength"])} />);
+    expect(await screen.findByRole("button", { name: "Add to macOS policy" })).toBeTruthy();
+  });
+
   it("sin Device Management, la guía de siempre", async () => {
     getTopFailingChecks.mockResolvedValue(rows);
     render(<WhatToFixFirst />);

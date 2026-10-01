@@ -35,6 +35,7 @@ import { FrameworkDetail, FrameworkSummary } from "./FrameworkMappings";
 import EvidenceView from "./EvidenceView";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import {
+  InMacPolicyChip,
   SeverityChip,
   StatusChip,
   RemediationStatusChip,
@@ -523,12 +524,7 @@ export default function FindingCard({
                 añade a la política macOS y lo entrega el perfil de la
                 organización (el mismo que entregará el MDM). */}
             {finding.status === "fail" && inMacPolicy && finding.remediationPlan?.artifact === "mobileconfig" ? (
-              <Tooltip
-                title="Already in the organization's macOS policy. Macs enrolled in Tracenium MDM install the profile on their next check-in, and this finding is marked remediated until the next scan confirms it. Other Macs need the profile installed."
-                arrow
-              >
-                <Chip size="small" variant="outlined" label="In the macOS policy" sx={{ fontWeight: 700 }} />
-              </Tooltip>
+              <InMacPolicyChip title="Already in the organization's macOS policy. Macs enrolled in Tracenium MDM install the profile on their next check-in, and this finding is marked remediated until the next scan confirms it. Other Macs need the profile installed." />
             ) : null}
             {!readOnly && onAddToPolicy && !inMacPolicy && finding.status === "fail" && finding.remediationPlan?.artifact === "mobileconfig" && finding.remediationPlan?.profileIntents?.length ? (
               <Tooltip
