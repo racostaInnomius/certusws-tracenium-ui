@@ -78,6 +78,7 @@ import CloudUploadOutlinedIcon from "@mui/icons-material/CloudUploadOutlined";
 
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
+import { createConnectionDiag } from "./connectionDiag";
 import { attachIceRestart } from "./iceRestart";
 import useSessionHeartbeat from "./useSessionHeartbeat";
 import { describeCloseReason } from "./closeReasons";
@@ -373,6 +374,12 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         const pc = new RTCPeerConnection({ iceServers });
         pcRef.current = pc;
         cleanupFns.push(() => { try { pc.close(); } catch {/**/ } });
+        // Si la sesión se rompe, el navegador cuenta qué vio: ICE, el
+        // WebSocket y la ruta (connectionDiag.js).
+        const diag = createConnectionDiag({ sessionId: session.sessionId });
+        diag.watchWs(ws);
+        diag.watchPc(pc);
+        cleanupFns.push(() => diag.dispose());
 
         // 3. Create DataChannel before offer (so it appears in the
         //    offer's SDP). The agent keys on the offer's `capability`
@@ -482,13 +489,15 @@ export default function FileBrowserPanel({ session, device, onClose }) {
           pc,
           ws,
           sessionId: session.sessionId,
-          onRestartAttempt: (_attempt) => {
+          onRestartAttempt: (attempt) => {
+            diag.note("restart", null, attempt);
             if (destroyed) return;
             setErrorMsg(""); // clear stale message during recovery
             // We don't transition out of BROWSING — the file table
             // stays usable as-is during the brief renegotiation.
           },
           onFinalFailure: () => {
+            void diag.report("connection_lost");
             if (destroyed) return;
             setErrorMsg("WebRTC connection lost — retries exhausted.");
             setState(STATE.ERROR);
@@ -498,6 +507,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
           // era justo lo que faltaba cuando MSIG-DOMAIN (T111) no conectaba
           // mientras otros servidores sí (24-sep).
           onUnestablished: () => {
+            void diag.report("ice_failed");
             if (destroyed) return;
             setErrorMsg(describeCloseReason("ice_failed").detail);
             setState(STATE.ERROR);
@@ -587,6 +597,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
           if (s === STATE.BROWSING || s === STATE.ENDED) return;
           // 1000 = normal close, 1001 = going away — both benign here.
           if (ev?.wasClean && (ev.code === 1000 || ev.code === 1001)) return;
+          void diag.report("signaling_closed");
           setErrorMsg("Signaling WebSocket closed unexpectedly.");
           setState(STATE.ERROR);
         };

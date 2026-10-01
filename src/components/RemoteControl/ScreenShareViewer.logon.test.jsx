@@ -384,3 +384,71 @@ describe("7 · el cursor del operador, sin retraso", () => {
     await waitFor(() => expect(ring()).toBeDefined());
   });
 });
+
+// ── Fotogramas perdidos: el visor PIDE uno completo ─────────────────────
+//
+// El agente ya no manda un completo cada 4 s si no hubo parciales (con la
+// pantalla quieta eran ~44 KB/s para repintar lo mismo, SNOC04 1-oct-2026).
+// A cambio, el visor tiene que darse cuenta de las pérdidas y pedirlo.
+describe("8 · fotogramas perdidos", () => {
+  const images = [];
+  class CountingImage {
+    constructor() { images.push(this); }
+    set src(v) { this._src = v; }
+    get src() { return this._src; }
+  }
+  beforeEach(() => {
+    images.length = 0;
+    vi.stubGlobal("Image", CountingImage);
+  });
+  const F = (seq, extra = {}) => ({ ...FRAME, seq, ...extra });
+  const keyframeAsks = (dc) => dc.ops().filter((m) => m.op === "keyframe").length;
+
+  it("⭐ un hueco en la secuencia → pide un completo", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage(F(0));
+    await dc.fireMessage(F(1));
+    expect(keyframeAsks(dc)).toBe(0);
+    await dc.fireMessage(F(3)); // se perdió el 2
+    expect(keyframeAsks(dc)).toBe(1);
+  });
+
+  it("🔴 uno viejo que llega tarde NO se pinta encima del nuevo", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage(F(0));
+    await dc.fireMessage(F(2));
+    const painted = images.length;
+    await dc.fireMessage(F(1, { full: false })); // llega después del 2
+    expect(images.length, "pintarlo dejaría píxeles viejos encima de los nuevos").toBe(painted);
+    expect(keyframeAsks(dc)).toBeGreaterThan(0);
+  });
+
+  it("uno troceado que queda incompleto → pide un completo", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage(F(0));
+    await dc.fireMessage({ op: "frameStart", seq: 1, width: 1024, height: 768, chunks: 3, full: false });
+    await dc.fireMessage({ op: "frameChunk", seq: 1, idx: 0, data: "QU" });
+    await dc.fireMessage({ op: "frameDone", seq: 1 });
+    expect(keyframeAsks(dc)).toBe(1);
+  });
+
+  it("como mucho uno por segundo, aunque se pierdan varios seguidos", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage(F(0));
+    await dc.fireMessage(F(5));
+    await dc.fireMessage(F(9));
+    await dc.fireMessage(F(14));
+    expect(keyframeAsks(dc)).toBe(1);
+  });
+
+  it("seq 0 es un flujo nuevo (el agente reconstruyó la conexión), no uno viejo", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage(F(0));
+    await dc.fireMessage(F(1));
+    await dc.fireMessage(F(2));
+    const painted = images.length;
+    await dc.fireMessage(F(0));
+    expect(images.length, "se pinta: es la primera imagen del flujo nuevo").toBe(painted + 1);
+    expect(keyframeAsks(dc)).toBe(0);
+  });
+});

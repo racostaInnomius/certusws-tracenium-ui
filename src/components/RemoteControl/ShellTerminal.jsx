@@ -50,6 +50,7 @@ import "@xterm/xterm/css/xterm.css";
 
 import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
+import { createConnectionDiag } from "./connectionDiag";
 import { attachIceRestart } from "./iceRestart";
 import useSessionHeartbeat from "./useSessionHeartbeat";
 import { describeCloseReason } from "./closeReasons";
@@ -101,6 +102,8 @@ export default function ShellTerminal({ session, device, onClose }) {
   // nobody typing still needs the operator to say they are here.
   useSessionHeartbeat(wsRef);
   const pcRef = React.useRef(null);
+  // Lo que vio el navegador si la sesión se rompe (connectionDiag.js).
+  const diagRef = React.useRef(null);
   const dcRef = React.useRef(null);
   // Cleanup handle for the ICE restart listener — set inside negotiate()
   // and called from the useEffect teardown. Keeping it on a ref instead
@@ -197,6 +200,14 @@ export default function ShellTerminal({ session, device, onClose }) {
       });
       pcRef.current = pc;
 
+      // Si la sesión se rompe, el navegador cuenta qué vio: ICE, el WebSocket
+      // y la ruta (connectionDiag.js). Sólo el primer WebSocket: los que
+      // reabre reopenSignaling se anotan al cerrarse, abajo.
+      const diag = createConnectionDiag({ sessionId: session.sessionId });
+      diag.watchWs(ws);
+      diag.watchPc(pc);
+      diagRef.current = diag;
+
       // The DataChannel MUST be created BEFORE the offer so its
       // m= line ends up in the SDP.
       //
@@ -259,10 +270,12 @@ export default function ShellTerminal({ session, device, onClose }) {
         ws,
         sessionId: session.sessionId,
         onRestartAttempt: (attempt) => {
+          diag.note("restart", null, attempt);
           if (cancelled) return;
           setStatusMsg(`Reconnecting (attempt ${attempt})…`);
         },
         onFinalFailure: () => {
+          void diag.report("connection_lost");
           if (cancelled) return;
           setState(STATE.ERROR);
           setStatusMsg("WebRTC connection lost — retries exhausted.");
@@ -272,6 +285,7 @@ export default function ShellTerminal({ session, device, onClose }) {
           // era justo lo que faltaba cuando MSIG-DOMAIN (T111) no conectaba
           // mientras otros servidores sí (24-sep).
           onUnestablished: () => {
+          void diag.report("ice_failed");
           if (cancelled) return;
           setState(STATE.ERROR);
           setStatusMsg(describeCloseReason("ice_failed").detail);
@@ -516,11 +530,13 @@ export default function ShellTerminal({ session, device, onClose }) {
         // sino si la shell sigue abierta. El DataChannel es la sesión.
         const shellAlive = dcRef.current?.readyState === "open";
         if (shellAlive) {
+          diag.note("ws_reopen");
           setStatusMsg("Reconnecting to the session…");
           reopenSignaling();
           return;
         }
         if (state === STATE.RUNNING) {
+          void diag.report("signaling_closed");
           setState(STATE.ENDED);
           setStatusMsg("Signaling channel closed unexpectedly.");
         }
@@ -534,6 +550,7 @@ export default function ShellTerminal({ session, device, onClose }) {
 
     return () => {
       cancelled = true;
+      diagRef.current?.dispose();
       // Antes que nada: cortar el reintento de señalización. Un temporizador
       // que sobreviva al panel abriría un socket contra una sesión que ya
       // nadie mira.

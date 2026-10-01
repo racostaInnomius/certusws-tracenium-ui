@@ -95,6 +95,7 @@ import PanToolOutlinedIcon from "@mui/icons-material/PanToolOutlined";
 
 import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
+import { createConnectionDiag } from "./connectionDiag";
 import { attachIceRestart } from "./iceRestart";
 import useSessionHeartbeat from "./useSessionHeartbeat";
 import { describeCloseReason } from "./closeReasons";
@@ -336,6 +337,8 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   // El control automático ante la pantalla de login se aplica UNA vez por
   // sesión. Si el operador lo suelta con Esc, no se le vuelve a imponer.
   const autoControlDoneRef = React.useRef(false);
+  // Lo que vio el navegador si la sesión se rompe (connectionDiag.js).
+  const diagRef = React.useRef(null);
   // «Type text»: el campo abierto y su contenido. El contenido es casi siempre
   // una contraseña: vive sólo aquí, se vacía al mandarlo y al cerrar.
   const [typeTextOpen, setTypeTextOpen] = React.useState(false);
@@ -355,6 +358,9 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   // Shape: { seq: number, expected: number, width: number, height: number,
   //          parts: Map<idx, string> } | null
   const assemblyRef = React.useRef(null);
+  // Siguiente `seq` esperado y último keyframe pedido. Ver acceptSeq().
+  const nextSeqRef = React.useRef(null);
+  const lastKeyframeReqRef = React.useRef(0);
   // Mirror of liveSize for renderFrame, which lives in the first render's
   // closure (dc.onmessage is bound once) and would otherwise read a stale
   // value forever.
@@ -663,6 +669,15 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         pcRef.current = pc;
         cleanupFns.push(() => { try { pc.close(); } catch {/**/ } });
 
+        // ⭐ Si la sesión se rompe, el navegador cuenta qué vio: ICE, el
+        // WebSocket y la ruta. Ver connectionDiag.js — SNOC04, 1-oct-2026, se
+        // cayó a los 6 min y la causa nunca se supo porque nadie la anotó.
+        const diag = createConnectionDiag({ sessionId: session.sessionId });
+        diag.watchWs(ws);
+        diag.watchPc(pc);
+        diagRef.current = diag;
+        cleanupFns.push(() => diag.dispose());
+
         // 3. Create DataChannel before the offer.
         //    ordered: false, maxRetransmits: 0 = unreliable delivery —
         //    a dropped frame is preferable to buffering / head-of-line
@@ -731,11 +746,13 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           pc,
           ws,
           sessionId: session.sessionId,
-          onRestartAttempt: (_attempt) => {
+          onRestartAttempt: (attempt) => {
+            diag.note("restart", null, attempt);
             if (destroyed) return;
             setErrorMsg("");
           },
           onFinalFailure: () => {
+            void diag.report("connection_lost");
             if (destroyed) return;
             setErrorMsg("WebRTC connection lost — retries exhausted.");
             setState(STATE.ERROR);
@@ -745,6 +762,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           // era justo lo que faltaba cuando MSIG-DOMAIN (T111) no conectaba
           // mientras otros servidores sí (24-sep).
           onUnestablished: () => {
+            void diag.report("ice_failed");
             if (destroyed) return;
             setErrorMsg(describeCloseReason("ice_failed").detail);
             setState(STATE.ERROR);
@@ -823,6 +841,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           // datos antes de cerrar— NO se pisa. El genérico solo vale cuando
           // nadie explicó nada.
           if (errorMsgRef.current) return;
+          void diag.report("signaling_closed");
           setErrorMsg("Signaling WebSocket closed unexpectedly.");
           setState(STATE.ERROR);
         };
@@ -915,6 +934,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     // captured by dc.onmessage on the first render and never refreshed.
     setWarning((w) => (w ? "" : w));
     setHasFrame(true);
+    diagRef.current?.frame();
 
     // Recover from a terminal capture error without making the operator
     // reconnect. The agent keeps retrying on a slow cadence after reporting
@@ -989,6 +1009,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
       // M3.S3 — cursorX/Y travel on the frame so the overlay stays in
       // sync with the underlying pixels.
       case "frame": {
+        if (!acceptSeq(msg.seq)) break;
         renderFrame(msg.data, {
           screenW: msg.width,
           screenH: msg.height,
@@ -1011,6 +1032,9 @@ export default function ScreenShareViewer({ session, device, onClose }) {
       // payload data. Updating cursor here keeps the overlay alive
       // even when the next frame's pixels are still in flight.
       case "frameStart": {
+        // Una reconstrucción a medias = un fotograma perdido.
+        if (assemblyRef.current) requestKeyframe();
+        if (!acceptSeq(msg.seq)) { assemblyRef.current = null; break; }
         assemblyRef.current = {
           seq:      Number(msg.seq),
           expected: Number(msg.chunks),
@@ -1060,6 +1084,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         const asm = assemblyRef.current;
         if (asm && asm.seq === Number(msg.seq) && asm.parts.size < asm.expected) {
           assemblyRef.current = null; // drop incomplete frame
+          requestKeyframe();
         }
         break;
       }
@@ -1122,6 +1147,46 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────
+
+  /**
+   * ¿Se pinta este fotograma? Y de paso, ¿se perdió alguno?
+   *
+   * El canal es deliberadamente no fiable (ordered:false, maxRetransmits:0):
+   * un parcial perdido deja un rectángulo mal. Antes la única reparación era
+   * el completo que el agente mandaba cada 4 s pase lo que pase — con la
+   * pantalla quieta, ~44 KB/s para repintar lo mismo (SNOC04, 1-oct-2026).
+   * Ahora el agente sólo lo manda si hubo parciales, y el visor PIDE uno en
+   * cuanto ve un hueco en la secuencia, un fotograma viejo que llega tarde o
+   * uno incompleto.
+   *
+   * `seq` 0 es un flujo nuevo (primera imagen, o el agente reconstruyó la
+   * conexión): se acepta y se reinicia la cuenta.
+   */
+  function acceptSeq(rawSeq) {
+    const s = Number(rawSeq);
+    if (!Number.isFinite(s)) return true; // agente sin `seq`: como siempre
+    const expected = nextSeqRef.current;
+    if (s === 0 || expected === null) {
+      nextSeqRef.current = s + 1;
+      return true;
+    }
+    if (s < expected) {
+      // Llegó tarde: pintarlo encima de uno más nuevo dejaría píxeles viejos.
+      requestKeyframe();
+      return false;
+    }
+    if (s > expected) requestKeyframe(); // se perdió alguno por el camino
+    nextSeqRef.current = s + 1;
+    return true;
+  }
+
+  /** Pide un fotograma completo. Como mucho uno por segundo. */
+  function requestKeyframe() {
+    const now = Date.now();
+    if (now - lastKeyframeReqRef.current < 1000) return;
+    lastKeyframeReqRef.current = now;
+    dcSend({ op: "keyframe" });
+  }
 
   function dcSend(obj) {
     const dc = dcRef.current;
