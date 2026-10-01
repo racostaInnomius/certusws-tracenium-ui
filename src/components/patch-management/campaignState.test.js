@@ -126,6 +126,24 @@ describe("lastPatchJobCell", () => {
     ...over,
   });
 
+  it("⭐ job fallido y lo pedido puesto por otra vía (JPR-MacBookPro, 1-oct): «Installed» con la fecha del escaneo, no «Failed · Sep 28»", () => {
+    const c = lastPatchJobCell({
+      state: "installed",
+      patch: patch({
+        status: "failed",
+        startedAt: "2026-09-29T00:41:25Z",
+        finishedAt: "2026-09-29T01:41:45Z",
+        installedCount: 0,
+        verifiedAt: "2026-10-01T03:17:00Z",
+        jobEndedAs: "failed",
+      }),
+    });
+    expect(c.tone).toBe("positive");
+    expect(c.label).toMatch(/^Installed · (Sep 30|Oct 1)$/);
+    expect(c.title).toMatch(/job of Sep (28|29) failed, but the scan of (Sep 30|Oct 1) lists nothing pending: it was installed another way/);
+    expect(c.label).not.toMatch(/Failed/);
+  });
+
   it("⭐ sin job de Tracenium es un guion con el porqué, no «Never patched»", () => {
     const c = lastPatchJobCell({ state: "never_ran", patch: null });
     expect(c).toMatchObject({ label: "—", empty: true });

@@ -107,6 +107,20 @@ export function lastPatchJobCell(campaign) {
   switch (state) {
     case "installed":
     case "patched": {
+      // ⭐ 1-oct: el job falló (o caducó, o se canceló) y lo pedido acabó puesto
+      // por otra vía — el MDM, el usuario, otra herramienta. La fecha que importa
+      // es la del escaneo que lo vio, no la del job.
+      if (p.jobEndedAs) {
+        const seen = shortDate(p.verifiedAt);
+        const ended = { failed: "failed", timed_out: "timed out", cancelled: "was cancelled" }[p.jobEndedAs] || "did not finish";
+        return {
+          label: seen ? `Installed · ${seen}` : "Installed",
+          tone: "positive",
+          title:
+            `Tracenium's job${when ? ` of ${when}` : ""} ${ended}, but the scan${seen ? ` of ${seen}` : ""} lists nothing pending: ` +
+            "it was installed another way (MDM, the user or another tool)",
+        };
+      }
       const others = Number(p.othersPending) || 0;
       return {
         label: others > 0 ? `Installed · ${others} other${others === 1 ? "" : "s"} pending` : dated("Installed"),

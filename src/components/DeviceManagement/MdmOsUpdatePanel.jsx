@@ -130,6 +130,8 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
 
   const device = view?.device;
   const scheduled = view?.scheduled;
+  // La orden ya se cumplió: el equipo informa esa versión (backend: scheduled.status).
+  const done = scheduled?.status === "installed";
   const state = osUpdateInstallState(device?.installState);
   const pending = device?.pendingVersion?.["os-version"];
   const failure = describeOsUpdateFailure(device?.failureReason);
@@ -155,7 +157,15 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
         <Typography variant="body2" sx={{ color: BRAND.alert.errorText, fontWeight: 600 }}>{failure}</Typography>
       ) : null}
 
-      {scheduled ? (
+      {done ? (
+        <Typography variant="body2" sx={{ color: BRAND.dark }}>
+          <strong>{scheduled.targetOSVersion}</strong>
+          {scheduled.targetBuildVersion ? ` (${scheduled.targetBuildVersion})` : ""} is installed — the forced update
+          {" "}is done{device?.reportedAt ? `; the device reported it ${formatRelative(device.reportedAt)}` : ""}.
+        </Typography>
+      ) : null}
+
+      {scheduled && !done ? (
         <Box sx={{ display: "grid", gap: 1 }}>
           <Typography variant="body2" sx={{ color: BRAND.dark }}>
             <strong>{scheduled.targetOSVersion}</strong>
@@ -175,7 +185,7 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
       {canConfigure ? (
         <Box component="form" noValidate onSubmit={(e) => { e.preventDefault(); schedule(); }} sx={{ display: "grid", gap: 1.25 }}>
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            {scheduled ? "Schedule a different update:" : "Force an update. The device downloads it, reminds the user and, if it's still not installed at that time, installs it and restarts. On Apple silicon it needs no password."}
+            {scheduled && !done ? "Schedule a different update:" : "Force an update. The device downloads it, reminds the user and, if it's still not installed at that time, installs it and restarts. On Apple silicon it needs no password."}
           </Typography>
           {manual ? null : (
             <TextField select size="small" label="Update" value={choice} disabled={busy}

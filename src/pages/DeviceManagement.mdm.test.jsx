@@ -383,6 +383,18 @@ describe("MDM / MAM — forzar una actualización del sistema (DDM)", () => {
     expect(within(panel).queryByText("{}")).toBeNull();
   });
 
+  it("⭐ cumplida: el Mac ya informa esa versión → «is installed», sin «Cancel update» ni «different update»", async () => {
+    state.osUpdate.scheduled = {
+      targetOSVersion: "27.0.1", targetBuildVersion: "26A434", targetLocalDateTime: "2026-09-30T21:00:00", status: "installed",
+    };
+    state.osUpdate.device = { ...state.osUpdate.device, osVersion: "27.0.1", buildVersion: "26A434", installState: "none" };
+    const panel = await openMac();
+    expect(await within(panel).findByText(/is installed — the forced update is done/)).toBeTruthy();
+    expect(within(panel).queryByRole("button", { name: "Cancel update" })).toBeNull();
+    expect(within(panel).queryByText(/is forced by/)).toBeNull();
+    expect(within(panel).queryByText("Schedule a different update:")).toBeNull();
+  });
+
   it("❗ el cajón no dice que no se le pueden mandar comandos: llegan en su conexión automática", async () => {
     mount("&mdmTab=devices");
     await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
