@@ -27,6 +27,18 @@ export function StatusChip({ status, sx = null }) {
   );
 }
 
+/**
+ * La rejilla de los datos de un cajón: 2 columnas, 3 cuando hay sitio, con
+ * aire entre filas (1-oct: a 380 px y con 1.5 de separación se veía encimado).
+ */
+export function FieldGrid({ children }) {
+  return (
+    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", lg: "repeat(3, minmax(0, 1fr))" }, columnGap: 3, rowGap: 2 }}>
+      {children}
+    </Box>
+  );
+}
+
 /** Etiqueta / valor en columna, para cajones y bandas de estado. */
 export function Field({ label, children, mono = false }) {
   return (

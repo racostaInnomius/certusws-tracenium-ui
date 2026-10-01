@@ -43,7 +43,7 @@ import {
   mdmPlatform,
   ownershipLabel,
 } from "./mdmModel";
-import { Field, StatusChip } from "./mdmAtoms";
+import { Field, FieldGrid, StatusChip } from "./mdmAtoms";
 import MdmOsUpdatePanel from "./MdmOsUpdatePanel";
 import MdmOrgProfilePanel from "./MdmOrgProfilePanel";
 import MdmDeclarativePanel from "./MdmDeclarativePanel";
@@ -203,7 +203,8 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, 
         anchor="right"
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
-        PaperProps={{ sx: { width: { xs: "100%", sm: 380 }, p: 2 } }}
+        // Como los demás cajones de detalle: a 380 px se veía encimado (1-oct).
+        PaperProps={{ sx: { width: { xs: "100%", sm: 600, lg: 720 }, maxWidth: "100%", p: { xs: 2, sm: 3 } } }}
       >
         {selected ? (
           <DeviceDetail
@@ -259,7 +260,7 @@ function DeviceDetail({ row, commandsReason, commandsDeliverable, onClose, onNav
 
       {row.channel === "mdm" ? (
         <>
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
+          <FieldGrid>
             <Field label="Serial number" mono>{d.serialNumber || "—"}</Field>
             <Field label="Model" mono>{d.productName || d.model || "—"}</Field>
             <Field label="Operating system">
@@ -276,7 +277,7 @@ function DeviceDetail({ row, commandsReason, commandsDeliverable, onClose, onNav
                 {d.bootstrapTokenEscrowedAt ? `Escrowed ${formatDate(d.bootstrapTokenEscrowedAt)}` : "Not escrowed"}
               </Field>
             ) : null}
-          </Box>
+          </FieldGrid>
           <Field label="UDID" mono>{d.udid}</Field>
           <Divider sx={{ borderColor: BRAND.border }} />
           <Box>
@@ -306,10 +307,10 @@ function DeviceDetail({ row, commandsReason, commandsDeliverable, onClose, onNav
         </>
       ) : (
         <>
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
+          <FieldGrid>
             <Field label="Platform"><PlatformChip platform={d.platform} /></Field>
             <Field label="Last check-in">{formatRelative(d.lastSeenAt)}</Field>
-          </Box>
+          </FieldGrid>
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
             App actions — lock the app, selective wipe, send a message — are on the device in Asset
             Management.

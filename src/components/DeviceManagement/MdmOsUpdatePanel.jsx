@@ -31,7 +31,7 @@ import {
   manualVersionNote,
   osUpdateInstallState,
 } from "./mdmModel";
-import { Field, StatusChip } from "./mdmAtoms";
+import { Field, FieldGrid, StatusChip } from "./mdmAtoms";
 
 const buttonSx = { textTransform: "none", fontWeight: 800, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } };
 
@@ -149,13 +149,13 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
       </Typography>
       {loadError ? <Alert severity="error" sx={{ borderRadius: 2 }}>{loadError}</Alert> : null}
 
-      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
+      <FieldGrid>
         <Field label="Reported by the device">
           <StatusChip status={state} />
         </Field>
         {pending ? <Field label="Pending">{pending}</Field> : null}
         {device?.reportedAt ? <Field label="Last report">{formatRelative(device.reportedAt)}</Field> : null}
-      </Box>
+      </FieldGrid>
       {failure ? (
         <Typography variant="body2" sx={{ color: BRAND.alert.errorText, fontWeight: 600 }}>{failure}</Typography>
       ) : null}

@@ -13,7 +13,7 @@ import { BRAND } from "../../theme/brand";
 import { formatRelative } from "../../utils/format";
 import { getMdmDeclarative } from "../../api/mdm";
 import { describeDdmInventory, describeDeclaration, visibleDeclarations } from "./mdmModel";
-import { Field, StatusChip } from "./mdmAtoms";
+import { Field, FieldGrid, StatusChip } from "./mdmAtoms";
 
 export default function MdmDeclarativePanel({ udid }) {
   const [view, setView] = React.useState(undefined);
@@ -56,7 +56,7 @@ export default function MdmDeclarativePanel({ udid }) {
       </Typography>
 
       {inv ? (
-        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
+        <FieldGrid>
           {inv.model ? <Field label="Model name">{inv.model}</Field> : null}
           {inv.os ? <Field label="macOS">{inv.os}</Field> : null}
           {inv.fileVault ? (
@@ -81,7 +81,7 @@ export default function MdmDeclarativePanel({ udid }) {
               {inv.certificates.map((c) => `${c.subject}${c.identity ? " · identity" : ""}`).join(", ")}
             </Field>
           ) : null}
-        </Box>
+        </FieldGrid>
       ) : null}
 
       {decls.length ? (
