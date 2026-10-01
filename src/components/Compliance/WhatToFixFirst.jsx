@@ -59,6 +59,9 @@ export default function WhatToFixFirst({
   reloadKey,
   onOpenCheck,
   onRemediate,
+  // macOS, sólo lo impone un perfil: añadir sus ajustes a la política macOS
+  // (Device Management, 1-oct). null = sin permiso.
+  onAddToMacPolicy = null,
   framework,
   frameworkLabel,
   assetGroupId,
@@ -201,7 +204,30 @@ export default function WhatToFixFirst({
                   </Box>
                 </Typography>
 
-                {row.agentRemediable && onRemediate ? (
+                {!row.agentRemediable && row.profileIntents?.length && onAddToMacPolicy ? (
+                  <Tooltip
+                    describeChild
+                    title="macOS only enforces this through a configuration profile. Adds it to the organization's macOS policy: Macs enrolled in Tracenium MDM get it on their next check-in."
+                    arrow
+                  >
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={busy}
+                      onClick={async () => {
+                        setPending(row.checkId);
+                        try {
+                          await onAddToMacPolicy(row.profileIntents);
+                        } finally {
+                          setPending(null);
+                        }
+                      }}
+                      sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                    >
+                      Add to macOS policy
+                    </Button>
+                  </Tooltip>
+                ) : row.agentRemediable && onRemediate ? (
                   <Button
                     size="small"
                     variant="contained"

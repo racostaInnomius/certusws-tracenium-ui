@@ -320,6 +320,22 @@ describe("FindingCard (Sprint 4 — one-click fix)", () => {
     expect(onAddToPolicy).toHaveBeenCalledWith(expect.objectContaining({ remediationPlan: plan }));
   });
 
+  it("⭐ ya en la política macOS (1-oct): dice «In the macOS policy» y no vuelve a ofrecer «Add»", () => {
+    const plan = { auto: false, handlerId: null, guard: "x", artifact: "mobileconfig", profileIntents: [{ key: "macos.sharing.allowAirDrop", value: false }] };
+    renderWith({ status: "fail", agentRemediable: false, remediationPlan: plan }, { onRemediate: vi.fn(), onAddToPolicy: vi.fn(), inMacPolicy: true });
+    expect(screen.getByText("In the macOS policy")).toBeInTheDocument();
+    expect(screen.queryByText("Add to macOS policy")).toBeNull();
+  });
+
+  it("sin artefacto (registro del firewall en macOS): la ayuda es el motivo, no «Export the fix»", async () => {
+    const guard = "on current macOS only a configuration profile's firewall payload sets this";
+    renderWith({ status: "fail", agentRemediable: false, remediationPlan: { auto: false, handlerId: null, guard, artifact: null } }, { onRemediate: vi.fn(), onExportFix: vi.fn() });
+    const chip = screen.getByText(`Not automated: ${guard}`);
+    fireEvent.mouseOver(chip);
+    expect(await screen.findByText(/There is no fix Tracenium can apply or export here: on current macOS/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Export \./)).toBeNull();
+  });
+
   it("sin permiso de Device Management: el chip, pero no el botón", () => {
     const plan = { auto: false, handlerId: null, guard: "x", artifact: "mobileconfig", profileIntents: [{ key: "macos.sharing.allowAirDrop", value: false }] };
     renderWith({ status: "fail", agentRemediable: false, remediationPlan: plan }, { onRemediate: vi.fn(), onExportFix: vi.fn() });

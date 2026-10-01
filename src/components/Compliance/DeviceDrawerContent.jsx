@@ -55,6 +55,7 @@ import FrameworkControlsPanel from "./FrameworkControlsPanel";
 import BulkFindingToolbar from "./BulkFindingToolbar";
 import BulkFixDialog from "./BulkFixDialog";
 import { bulkFixPlan } from "./bulkFixPlan";
+import { intentsInPolicy } from "./macPolicyKeys";
 import { useFindingLifecycle } from "./useFindingLifecycle";
 import { useBulkSelection } from "./useBulkSelection";
 import { PatchLevelSection } from "./PatchLevel";
@@ -108,6 +109,9 @@ export default function DeviceDrawerContent({
   // organización y descargar su perfil (Device Management). null = sin permiso.
   onAddToMacPolicy = null,
   onDownloadMacProfile = null,
+  // Claves de la política macOS ya guardadas (macPolicyKeys): un hallazgo cuyo
+  // arreglo ya está ahí no vuelve a ofrecer «Add» (1-oct). null = sin saberlo.
+  macPolicyKeys = null,
   // El fix como fichero (.reg/.inf/.cmd/.sh). ⚠️ La página lo pasaba desde
   // el 08-sep y la ficha no lo recogía: los botones de exportar de la
   // tarjeta nunca llegaban a verse fuera de sus tests.
@@ -750,6 +754,7 @@ export default function DeviceDrawerContent({
                         onAddToPolicy={
                           onAddToMacPolicy ? (finding) => onAddToMacPolicy(finding?.remediationPlan?.profileIntents ?? []) : null
                         }
+                        inMacPolicy={intentsInPolicy(f.remediationPlan?.profileIntents, macPolicyKeys)}
                       />
                     ))}
                   </Stack>

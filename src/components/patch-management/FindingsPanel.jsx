@@ -202,6 +202,22 @@ export default function FindingsPanel({
               }}
             />
           </Tooltip>
+        ) : p.row.profileIntents?.length ? (
+          // macOS, sólo lo impone un perfil (1-oct): no es «manual», va a la
+          // política macOS y los Macs del MDM de Tracenium lo reciben solos.
+          <Tooltip title="macOS only enforces this through a configuration profile. Add it to the organization's macOS policy from Security Compliance: Macs enrolled in Tracenium MDM get it on their next check-in; other Macs need the profile installed.">
+            <Chip
+              size="small"
+              label="profile"
+              sx={{
+                height: 20,
+                fontSize: TEXT.xs,
+                fontWeight: 700,
+                bgcolor: BRAND.alert.infoSoft,
+                color: BRAND.alert.infoText,
+              }}
+            />
+          </Tooltip>
         ) : (
           <Tooltip title="No auto-fix handler yet — see remediation steps in the drawer for manual procedure">
             <Chip

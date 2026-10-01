@@ -102,6 +102,8 @@ export default function FindingCard({
   // macOS: añade las intenciones del plan a la política macOS de la
   // organización (Device Management). null = quien mira no puede editarla.
   onAddToPolicy = null,
+  // El arreglo ya está en la política macOS (macPolicyKeys): no se ofrece otra vez.
+  inMacPolicy = false,
   partOfDomain = null,
   canExplain = false
 }) {
@@ -491,7 +493,16 @@ export default function FindingCard({
                 />
               </Tooltip>
             ) : finding.status === "fail" && !finding.agentRemediable && finding.remediationPlan?.guard ? (
-              <Tooltip title="This value is not written by the agent on its own: the change can lock people out or break authentication. Export the fix and apply it deliberately." arrow>
+              <Tooltip
+                // Sin artefacto no hay nada que exportar (el registro del
+                // firewall, 1-oct): la ayuda es el motivo entero, no «Export».
+                title={
+                  finding.remediationPlan.artifact
+                    ? "This value is not written by the agent on its own: the change can lock people out or break authentication. Export the fix and apply it deliberately."
+                    : `There is no fix Tracenium can apply or export here: ${finding.remediationPlan.guard}.`
+                }
+                arrow
+              >
                 <Chip
                   size="small"
                   label={`Not automated: ${finding.remediationPlan.guard}`}
@@ -511,9 +522,17 @@ export default function FindingCard({
             {/* macOS: lo que sólo cumple un perfil no se exporta suelto — se
                 añade a la política macOS y lo entrega el perfil de la
                 organización (el mismo que entregará el MDM). */}
-            {!readOnly && onAddToPolicy && finding.status === "fail" && finding.remediationPlan?.artifact === "mobileconfig" && finding.remediationPlan?.profileIntents?.length ? (
+            {finding.status === "fail" && inMacPolicy && finding.remediationPlan?.artifact === "mobileconfig" ? (
               <Tooltip
-                title="Adds this setting to the organization's macOS policy (Device Management). Macs get it with the organization's configuration profile — installed by hand or from your MDM."
+                title="Already in the organization's macOS policy. Macs enrolled in Tracenium MDM install the profile on their next check-in, and this finding is marked remediated until the next scan confirms it. Other Macs need the profile installed."
+                arrow
+              >
+                <Chip size="small" variant="outlined" label="In the macOS policy" sx={{ fontWeight: 700 }} />
+              </Tooltip>
+            ) : null}
+            {!readOnly && onAddToPolicy && !inMacPolicy && finding.status === "fail" && finding.remediationPlan?.artifact === "mobileconfig" && finding.remediationPlan?.profileIntents?.length ? (
+              <Tooltip
+                title="Adds this setting to the organization's macOS policy (Device Management). Macs enrolled in Tracenium MDM get it on their next check-in; other Macs need the organization's profile installed."
                 arrow
               >
                 <Button

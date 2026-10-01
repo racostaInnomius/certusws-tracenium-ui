@@ -102,3 +102,27 @@ describe("WhatToFixFirst", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("boom");
   });
 });
+
+describe("WhatToFixFirst — sólo lo impone un perfil (macOS, 1-oct)", () => {
+  const intents = [{ key: "macos.passwordPolicy.minLength", value: 15 }];
+  const rows = {
+    ok: true,
+    items: [{ checkId: "macos.password_policy.min_length", title: "Minimum password length below 14", category: "identity_policy", severity: "high", deviceCount: 9, agentRemediable: false, profileIntents: intents }],
+  };
+
+  it("⭐ ofrece añadirlo a la política macOS, no «Show me how»", async () => {
+    getTopFailingChecks.mockResolvedValue(rows);
+    const onAddToMacPolicy = vi.fn().mockResolvedValue({ added: intents });
+    render(<WhatToFixFirst onAddToMacPolicy={onAddToMacPolicy} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add to macOS policy" }));
+    await waitFor(() => expect(onAddToMacPolicy).toHaveBeenCalledWith(intents));
+    expect(screen.queryByRole("button", { name: /Show me how/ })).toBeNull();
+  });
+
+  it("sin Device Management, la guía de siempre", async () => {
+    getTopFailingChecks.mockResolvedValue(rows);
+    render(<WhatToFixFirst />);
+    expect(await screen.findByRole("button", { name: /Show me how/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add to macOS policy" })).toBeNull();
+  });
+});

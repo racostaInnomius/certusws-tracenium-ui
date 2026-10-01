@@ -105,6 +105,7 @@ import SectionPaper from "../components/common/SectionPaper";
 import PageTabs from "../components/common/PageTabs";
 import ExceptionRequestsPanel from "../components/Compliance/ExceptionRequestsPanel";
 import RemediationHubPanel from "../components/Compliance/RemediationHubPanel";
+import { macPolicyKeys } from "../components/Compliance/macPolicyKeys";
 import SlaPanel from "../components/Compliance/SlaPanel";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
@@ -771,6 +772,26 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // fichero que entregará el MDM. Editar esa política es Device Management,
   // así que sin esa capacidad no hay botón (el chip lo explica).
   const canManageMdm = isActiveMember && Boolean(myPermissions?.has("device_management"));
+  // Lo que ya está en la política macOS: la tarjeta no vuelve a ofrecer «Add»
+  // mientras el Mac no confirma el perfil (1-oct). Sin el permiso no se lee.
+  const [macPolicyKeySet, setMacPolicyKeySet] = React.useState(null);
+  React.useEffect(() => {
+    if (!canManageMdm || !tenantId) {
+      setMacPolicyKeySet(null);
+      return undefined;
+    }
+    let cancelled = false;
+    getTenantPolicy(tenantId)
+      .then((res) => {
+        if (!cancelled) setMacPolicyKeySet(macPolicyKeys(extractPolicyEnvelope(res).raw?.macos));
+      })
+      .catch(() => {
+        if (!cancelled) setMacPolicyKeySet(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageMdm, tenantId]);
   const handleDownloadMacProfile = React.useCallback(async () => {
     if (!tenantId) return;
     try {
@@ -791,6 +812,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
       if (!tenantId || !Array.isArray(intents) || intents.length === 0) return null;
       try {
         const res = await addMdmIntents(tenantId, "macos", intents);
+        setMacPolicyKeySet((prev) => new Set([...(prev ?? []), ...intents.map((i) => i.key)]));
         const n = res?.added?.length ?? 0;
         showToast({
           severity: "success",
@@ -1615,6 +1637,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             setTab("catalog");
           }}
           onRemediate={canRemediate ? handleRemediateCheck : null}
+          onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
         />
         <MttrCard reloadKey={refreshToken} assetGroupId={assetGroupId} framework={selectedFramework} scopeLabels={scopeLabels} />
       </Box>
@@ -2283,6 +2306,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           onExportFix={canRemediate ? handleExportFix : null}
           onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
           onDownloadMacProfile={canManageMdm ? handleDownloadMacProfile : null}
+          macPolicyKeys={macPolicyKeySet}
           // Deshacer un fix: los mismos gates que aplicarlo.
           canRevert={canRemediate}
           // «Rescan now» crea un job: la capacidad `jobs`, como en Jobs.
