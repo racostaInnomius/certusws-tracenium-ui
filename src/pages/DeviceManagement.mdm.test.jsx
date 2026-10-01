@@ -79,6 +79,8 @@ beforeEach(() => {
     },
     osPuts: [],
     osDeletes: 0,
+    orgProfile: { delivery: null },
+    orgResends: 0,
   };
   downloads.length = 0;
 });
@@ -111,6 +113,12 @@ function mount(search = "") {
     }),
     http.get(/\/api\/v1\/mdm\/push-certificate$/, () => HttpResponse.json(state.setup)),
     http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/os-update$/, () => HttpResponse.json(state.osUpdate)),
+    http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/organization-profile$/, () => HttpResponse.json(state.orgProfile)),
+    http.post(/\/api\/v1\/mdm\/devices\/[^/]+\/organization-profile\/resend$/, () => {
+      state.orgResends += 1;
+      state.orgProfile = { delivery: null };
+      return HttpResponse.json({ resent: true });
+    }),
     http.put(/\/api\/v1\/mdm\/devices\/[^/]+\/os-update$/, async ({ request }) => {
       const body = await request.json();
       state.osPuts.push({ path: new URL(request.url).pathname, body });
@@ -505,3 +513,37 @@ describe("MDM / MAM — forzar una actualización del sistema (DDM)", () => {
     expect(within(panel).queryByRole("button", { name: "Schedule update" })).toBeNull();
   });
 });
+
+describe("MDM / MAM — el perfil de la organización en el Mac (1-oct)", () => {
+  async function openMac() {
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    return screen.findByLabelText("Organization profile");
+  }
+
+  it("⭐ el cajón dice que el Mac lo tiene instalado, con cuántos ajustes", async () => {
+    state.orgProfile = { delivery: { requestType: "InstallProfile", status: "installed", settingsCount: 6, enqueuedAt: new Date().toISOString(), completedAt: new Date().toISOString() } };
+    const panel = await openMac();
+    expect(await within(panel).findByText("Installed")).toBeTruthy();
+    expect(within(panel).getByText(/^6 settings, installed/)).toBeTruthy();
+  });
+
+  it("«Resend» lo vuelve a mandar (ADMIN/OWNER)", async () => {
+    const user = userEvent.setup();
+    state.orgProfile = { delivery: { requestType: "InstallProfile", status: "error", settingsCount: 6, errorChain: [{ LocalizedDescription: "Profile installation failed." }] } };
+    const panel = await openMac();
+    expect(await within(panel).findByText(/rejected the profile: Profile installation failed/)).toBeTruthy();
+    await user.click(within(panel).getByRole("button", { name: "Resend" }));
+    await waitFor(() => expect(state.orgResends).toBe(1));
+    expect(await within(panel).findByText("Not sent yet")).toBeTruthy();
+  });
+
+  it("sin ADMIN/OWNER se ve el estado, sin «Resend»", async () => {
+    capabilities = { role: "Mobile Operator", permissions: ["device_management", "enrollment"] };
+    state.orgProfile = { delivery: { requestType: "InstallProfile", status: "pending", settingsCount: 6, enqueuedAt: new Date().toISOString() } };
+    const panel = await openMac();
+    expect(await within(panel).findByText("Waiting for the Mac")).toBeTruthy();
+    expect(within(panel).queryByRole("button", { name: "Resend" })).toBeNull();
+  });
+});
+

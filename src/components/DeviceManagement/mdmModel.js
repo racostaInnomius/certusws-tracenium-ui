@@ -291,3 +291,59 @@ export function manualVersionNote(detected, { chosen = false, when = null } = {}
   }
   return "Couldn't read this Mac's scan. Copy the version from Software Update on the Mac.";
 }
+
+// ── Perfil de la organización en un Mac (1-oct) ─────────────────────────────
+
+/**
+ * Lo que dice el cajón del perfil de la organización: `{chip, text, error}`.
+ * `relative` formatea fechas («2 h ago»); se pasa para poder probarlo sin reloj.
+ */
+export function describeProfileDelivery(delivery, relative = (d) => String(d)) {
+  if (!delivery) {
+    return {
+      chip: { label: "Not sent yet", tone: "muted" },
+      text: "Sent on the Mac's next check-in once the organization's macOS policy has settings.",
+      error: false,
+    };
+  }
+  const n = Number(delivery.settingsCount) || 0;
+  const settings = `${n} setting${n === 1 ? "" : "s"}`;
+  const removing = delivery.requestType === "RemoveProfile";
+  switch (delivery.status) {
+    case "pending":
+      return {
+        chip: { label: "Waiting for the Mac", tone: "info" },
+        text: removing
+          ? `Removal queued ${relative(delivery.enqueuedAt)}: the policy has no settings left. The Mac removes the profile on its next check-in.`
+          : `Queued ${relative(delivery.enqueuedAt)} with ${settings}. The Mac installs it on its next check-in, without asking the user.`,
+        error: false,
+      };
+    case "installed":
+      return {
+        chip: { label: "Installed", tone: "positive" },
+        text: `${settings}, installed ${relative(delivery.completedAt)}. If the Mac runs the Tracenium agent, its compliance is re-checked right after.`,
+        error: false,
+      };
+    case "removed":
+      return {
+        chip: { label: "Removed", tone: "muted" },
+        text: `Removed ${relative(delivery.completedAt)}: the organization's macOS policy has no settings.`,
+        error: false,
+      };
+    case "error": {
+      const chain = Array.isArray(delivery.errorChain) ? delivery.errorChain : [];
+      const why = chain
+        .map((e) => e?.USEnglishDescription || e?.LocalizedDescription)
+        .find(Boolean)
+        ?.trim()
+        .replace(/\.$/, "");
+      return {
+        chip: { label: "Rejected by the Mac", tone: "critical" },
+        text: `The Mac rejected the profile${why ? `: ${why}` : ""}. It isn't retried on its own — change the policy or resend it.`,
+        error: true,
+      };
+    }
+    default:
+      return { chip: { label: "Unknown", tone: "muted" }, text: "", error: false };
+  }
+}

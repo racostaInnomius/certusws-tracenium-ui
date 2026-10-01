@@ -67,3 +67,18 @@ export function scheduleMdmOsUpdate(udid, body) {
 export function cancelMdmOsUpdate(udid) {
   return httpDeleteJson(osUpdatePath(udid));
 }
+
+// ── Perfil de la organización en un Mac (1-oct) ─────────────────────────────
+// Los Macs del MDM de Tracenium lo reciben solos en cada conexión. «Resend»
+// (ADMIN/OWNER) olvida lo entregado: la próxima conexión lo vuelve a encolar.
+
+const orgProfilePath = (udid) => `/api/v1/mdm/devices/${encodeURIComponent(udid)}/organization-profile`;
+
+/** → { delivery: { requestType, settingsCount, status, errorChain, enqueuedAt, completedAt } | null } */
+export function getMdmOrganizationProfile(udid, { fresh = false } = {}) {
+  return httpGetJson(orgProfilePath(udid), opts(fresh));
+}
+
+export function resendMdmOrganizationProfile(udid) {
+  return httpPostJson(`${orgProfilePath(udid)}/resend`, {});
+}

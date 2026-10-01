@@ -580,9 +580,13 @@ export default function DeviceManagement({ onNavigate }) {
           <Typography variant="body2" sx={{ color: "text.secondary", mb: 1.5 }}>
             Operating-system settings for enrolled Macs, iPhones and iPads, per platform — macOS and
             iOS settings aren&apos;t equivalent.{" "}
-            {mdm.status?.commands?.deliverable
-              ? "Delivered to enrolled devices as configuration profiles."
-              : "Saved. Sending them to devices as configuration profiles isn't available yet."}
+            {/* 1-oct: los Macs del MDM de Tracenium reciben el perfil de la
+                organización en cada conexión (profile-delivery.service);
+                iPhone y iPad todavía no. `deliverable` es sólo el push. */}
+            {`macOS settings reach Macs enrolled in Tracenium MDM as a configuration profile on their next check-in${
+              mdm.status?.commands?.deliverable ? "" : " (about every 4 hours)"
+            }.`}{" "}
+            iPhone and iPad settings are saved, not sent to devices yet.
           </Typography>
 
           <Tabs
@@ -646,17 +650,17 @@ export default function DeviceManagement({ onNavigate }) {
                         : `Save ${platform === "macos" ? "macOS" : "iPhone & iPad"} settings`}
                     </Button>
                     {/* El perfil de la organización sale de la política GUARDADA:
-                        es el mismo fichero que entregará el MDM (ADR-0002).
-                        Hasta entonces se instala a mano o por el MDM del
-                        cliente. Identificador fijo: uno nuevo reemplaza al
-                        anterior. */}
+                        el mismo que el MDM de Tracenium entrega a sus Macs
+                        (ADR-0002). La descarga es para los Macs SIN nuestro
+                        MDM: a mano o por el MDM del cliente. Identificador
+                        fijo: uno nuevo reemplaza al anterior. */}
                     {platform === "macos" ? (
                       <Tooltip
                         arrow
                         title={
                           isDirty
                             ? "Save the policy first: the profile is built from the saved macOS policy."
-                            : "Download the organization's configuration profile with the settings above. Upload it to your MDM, or open it on the Mac and approve it in System Settings › Privacy & Security › Profiles. A newer version replaces the old one."
+                            : "Macs enrolled in Tracenium MDM get this profile on their own. For other Macs, download it and upload it to your MDM, or open it on the Mac and approve it in System Settings › Privacy & Security › Profiles. A newer version replaces the old one."
                         }
                       >
                         <span>

@@ -16,6 +16,7 @@ import {
   requestBlocker,
   STALE_AFTER_MS,
   describeOsUpdateFailure,
+  describeProfileDelivery,
   detectedOsUpdates,
   detectedUpdateLabel,
   manualVersionNote,
@@ -201,3 +202,26 @@ describe("describeOsUpdateFailure", () => {
     expect(describeOsUpdateFailure({ count: 3, reason: null })).toBe("The update failed 3 times.");
   });
 });
+
+describe("describeProfileDelivery", () => {
+  const rel = (d) => `@${d}`;
+  it("sin entrega: «Not sent yet», sin inventar estado", () => {
+    expect(describeProfileDelivery(null, rel).chip.label).toBe("Not sent yet");
+  });
+  it("⭐ en cola, instalado, quitado: cada uno dice lo que pasa y cuándo", () => {
+    expect(describeProfileDelivery({ requestType: "InstallProfile", status: "pending", settingsCount: 6, enqueuedAt: "t0" }, rel))
+      .toMatchObject({ chip: { label: "Waiting for the Mac" }, text: expect.stringMatching(/Queued @t0 with 6 settings.*without asking the user/) });
+    expect(describeProfileDelivery({ requestType: "InstallProfile", status: "installed", settingsCount: 1, completedAt: "t1" }, rel).text)
+      .toMatch(/^1 setting, installed @t1/);
+    expect(describeProfileDelivery({ requestType: "RemoveProfile", status: "removed", completedAt: "t2" }, rel).chip.label).toBe("Removed");
+  });
+  it("❗ un rechazo dice el motivo de Apple y que no se reintenta solo", () => {
+    const d = describeProfileDelivery({
+      requestType: "InstallProfile", status: "error",
+      errorChain: [{ ErrorCode: 4001, LocalizedDescription: "Profile installation failed.", USEnglishDescription: "The profile is invalid." }],
+    }, rel);
+    expect(d).toMatchObject({ error: true, chip: { label: "Rejected by the Mac", tone: "critical" } });
+    expect(d.text).toMatch(/The profile is invalid\. It isn't retried on its own/);
+  });
+});
+
