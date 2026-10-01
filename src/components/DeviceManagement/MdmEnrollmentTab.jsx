@@ -36,6 +36,8 @@ import {
   ToggleButtonGroup,
   Tooltip,
   Typography,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
 import LinkOffOutlinedIcon from "@mui/icons-material/LinkOffOutlined";
@@ -68,9 +70,12 @@ const CAPABILITIES = [
 
 const BUTTON_SX = { textTransform: "none", fontWeight: 800, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } };
 
-export default function MdmEnrollmentTab({ mdm, canEnroll, onChanged, notify, onNavigate }) {
+export default function MdmEnrollmentTab({ mdm, canEnroll, canCreateAnyDevice = false, onChanged, notify, onNavigate }) {
   const confirm = useConfirm();
   const [serial, setSerial] = React.useState("");
+  // «Cualquier equipo, un solo uso» (App Review, 1-oct): sin número de serie;
+  // el primer equipo que se enrola queda atado al enlace. Sólo ADMIN/OWNER.
+  const [anyDevice, setAnyDevice] = React.useState(false);
   const [mode, setMode] = React.useState("corporate");
   const [expiresInHours, setExpiresInHours] = React.useState(24);
   const [displayName, setDisplayName] = React.useState("");
@@ -97,17 +102,18 @@ export default function MdmEnrollmentTab({ mdm, canEnroll, onChanged, notify, on
   const submit = async (event) => {
     event.preventDefault();
     setTouched(true);
-    if (!serialValid || disabled) return;
+    if ((!anyDevice && !serialValid) || disabled) return;
     try {
       setCreating(true);
       const res = await createMdmEnrollment({
-        clientIdentifier: serialTrim,
+        ...(anyDevice ? { anyDevice: true } : { clientIdentifier: serialTrim }),
         mode,
         expiresInHours,
         ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
       });
       setCreated(res);
       setSerial("");
+      setAnyDevice(false);
       setDisplayName("");
       setTouched(false);
       notify("Enrollment link created", "success");
@@ -181,17 +187,34 @@ export default function MdmEnrollmentTab({ mdm, canEnroll, onChanged, notify, on
                 </Typography>
               </Box>
 
+              {canCreateAnyDevice ? (
+                <Box>
+                  <FormControlLabel
+                    control={
+                      <Switch checked={anyDevice} onChange={(e) => setAnyDevice(e.target.checked)} disabled={disabled} />
+                    }
+                    label={<Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.dark }}>Any device, one use</Typography>}
+                  />
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                    For a device whose serial number you don&apos;t know, such as App Review. The first device that
+                    enrolls with the link is bound to it; no other device can use it afterwards.
+                  </Typography>
+                </Box>
+              ) : null}
+
               <TextField
                 label="Serial number"
                 size="small"
-                value={serial}
+                value={anyDevice ? "" : serial}
                 onChange={(e) => setSerial(e.target.value)}
                 onBlur={() => setTouched(true)}
-                required
-                disabled={disabled}
-                error={touched && !serialValid}
+                required={!anyDevice}
+                disabled={disabled || anyDevice}
+                error={!anyDevice && touched && !serialValid}
                 helperText={
-                  touched && !serialValid
+                  anyDevice
+                    ? "Not needed: the link binds to the first device that uses it."
+                    : touched && !serialValid
                     ? "Letters, digits, dots, dashes and underscores only."
                     : "Mac: Apple menu › About This Mac. iPhone or iPad: Settings › General › About."
                 }
@@ -312,7 +335,7 @@ function CreatedLink({ created, onCopy }) {
   return (
     <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, borderColor: BRAND.teal }}>
       <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
-        Link for {created.clientIdentifier}
+        {created.anyDevice ? "Link for any device (one use)" : `Link for ${created.clientIdentifier}`}
       </Typography>
       <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
         Open it on that device — Safari on iPhone or iPad, any browser on a Mac. The user reads what
@@ -378,7 +401,9 @@ function EnrollmentLinks({ enrollments, onCopy, onRevoke, canEnroll }) {
                 return (
                   <TableRow key={e.token}>
                     <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.dark }}>{e.clientIdentifier}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.dark }}>
+                        {e.anyDevice ? (e.boundTo?.serial ? `Any device · ${e.boundTo.serial}` : "Any device, one use") : e.clientIdentifier}
+                      </Typography>
                       {e.displayName ? (
                         <Typography variant="caption" sx={{ color: "text.secondary" }}>{e.displayName}</Typography>
                       ) : null}

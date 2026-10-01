@@ -495,6 +495,7 @@ export default function DeviceManagement({ onNavigate }) {
         <MdmEnrollmentTab
           mdm={mdm}
           canEnroll={canEnroll}
+          canCreateAnyDevice={canConfigurePush}
           onChanged={reloadMdm}
           notify={(message, severity) => showSnack(message, severity)}
           onNavigate={onNavigate}

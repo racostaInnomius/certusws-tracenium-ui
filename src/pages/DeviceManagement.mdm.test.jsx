@@ -204,6 +204,34 @@ describe("MDM / MAM — Bootstrap token", () => {
 });
 
 describe("MDM / MAM — Enrollment", () => {
+  it("⭐ «Any device, one use» (ADMIN): el alta va sin número de serie", async () => {
+    const user = userEvent.setup();
+    mount("&mdmTab=enrollment");
+    await serialField();
+    await user.click(screen.getByLabelText(/any device, one use/i));
+    expect(screen.getByLabelText(/serial number/i)).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /create enrollment link/i }));
+    await waitFor(() => expect(state.posts).toHaveLength(1));
+    expect(state.posts[0]).toMatchObject({ anyDevice: true });
+    expect(state.posts[0].clientIdentifier).toBeUndefined();
+  });
+
+  it("la lista dice a qué equipo quedó atado un enlace «Any device»", async () => {
+    state.enrollments = [{
+      ...state.enrollments[0], token: "tok-any", clientIdentifier: "any-xyz", anyDevice: true,
+      boundTo: { serial: "DMPXYZ123", udid: "00008112-IPAD", at: new Date().toISOString() },
+    }];
+    mount("&mdmTab=enrollment");
+    expect(await screen.findByText("Any device · DMPXYZ123")).toBeTruthy();
+  });
+
+  it("❗ sin ADMIN/OWNER no se ofrece «Any device»", async () => {
+    capabilities = { role: "Mobile Operator", permissions: ["device_management", "enrollment"] };
+    mount("&mdmTab=enrollment");
+    await serialField();
+    expect(screen.queryByLabelText(/any device, one use/i)).toBeNull();
+  });
+
   it("❗ el alta manda serie, propiedad y caducidad — y enseña el enlace", async () => {
     const user = userEvent.setup();
     mount("&mdmTab=enrollment");
