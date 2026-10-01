@@ -96,8 +96,10 @@ async function serialField() {
   return field;
 }
 
-function mount(search = "") {
+/** `extra`: handlers que van delante del comodín de `/api/` del final. */
+function mount(search = "", extra = []) {
   server.use(
+    ...extra,
     http.get(/\/api\/v1\/mdm\/status$/, () => { state.mdmCalls += 1; return HttpResponse.json(state.status); }),
     http.get(/\/api\/v1\/mdm\/devices$/, () => { state.mdmCalls += 1; return HttpResponse.json({ devices: state.devices }); }),
     http.get(/\/api\/v1\/mdm\/enrollments/, () => { state.mdmCalls += 1; return HttpResponse.json({ enrollments: state.enrollments }); }),
@@ -183,6 +185,55 @@ describe("MDM / MAM — Devices", () => {
     const detail = await screen.findByLabelText("Device detail");
     expect(within(detail).getByText(MAC.udid)).toBeTruthy();
     expect(within(detail).getByText(/27\.0 \(26A428\)/)).toBeTruthy();
+  });
+});
+
+// 1-oct-2026: el primer iPhone del app en T1 sincronizaba bien y el Overview
+// decía «App (MAM) devices 0». La página cuenta los clientes del app con la
+// `platform` de `/orchestrator/known-devices`, y el servidor la devolvía en
+// null para los móviles. Estas filas son las que devuelve ahora.
+const IPHONE_APP = {
+  deviceId: "24b02f7d-3815-410a-807d-ae941447b0b7",
+  hostname: "iPhone",
+  connected: false,
+  enrollmentStatus: "active",
+  agentVersion: "1.0.0",
+  platform: "ios",
+  arch: null,
+  // Lo apunta el plano de dispositivo; antes era null para siempre.
+  lastSeenAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+};
+const WINDOWS_PC = {
+  deviceId: "pc-1",
+  hostname: "TNS-PC-01",
+  connected: true,
+  enrollmentStatus: "active",
+  platform: "windows",
+  lastSeenAt: new Date().toISOString(),
+};
+const knownDevices = (items) =>
+  http.get(/\/api\/v1\/orchestrator\/known-devices/, () =>
+    HttpResponse.json({ ok: true, items, total: items.length, page: 1, pageSize: 100 })
+  );
+
+describe("MDM / MAM — clientes del app (known-devices)", () => {
+  it("⭐ el iPhone del app cuenta en «App (MAM) devices»; un PC no, ni una fila sin plataforma", async () => {
+    // La fila sin plataforma es la forma de la respuesta de antes del arreglo:
+    // la página cuenta por `platform` y nada más. Si la contara, saldría 2.
+    const sinPlataforma = { ...IPHONE_APP, deviceId: "otro-movil", hostname: "Otro", platform: null };
+    mount("", [knownDevices([IPHONE_APP, WINDOWS_PC, sinPlataforma])]);
+    // El título y la cifra son hermanos dentro de la tarjeta.
+    const card = (await screen.findByText("App (MAM) devices")).parentElement;
+    await waitFor(() => expect(within(card).getByText("1")).toBeTruthy());
+  });
+
+  it("en Devices sale con su canal y su último contacto, no «—»", async () => {
+    mount("&mdmTab=devices", [knownDevices([IPHONE_APP, WINDOWS_PC])]);
+    const row = (await screen.findByText("iPhone")).closest("tr");
+    expect(within(row).getByText("App (MAM)")).toBeTruthy();
+    expect(within(row).getByText("Reporting")).toBeTruthy();
+    expect(within(row).getByText("5m ago")).toBeTruthy();
+    expect(screen.queryByText("TNS-PC-01")).toBeNull();
   });
 });
 
