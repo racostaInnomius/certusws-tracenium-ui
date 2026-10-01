@@ -158,14 +158,18 @@ const LOCAL_KEY = "__local__";
  * Impresoras por servidor; las no compartidas en una rebanada propia para que
  * sumen el total. Se cuentan IMPRESORAS (deduplicadas), no colas: la dona dice
  * lo mismo que la cifra grande.
+ *
+ * ⚠️ Aparatos, no filas: un pool es UNA fila con `deviceCount: 2`. Contando
+ * filas, T111 enseñaba «69» en el centro y las rebanadas sumaban 68 (30-sep).
  */
 export function serverSlices(fleet, max = 5) {
   const printers = Array.isArray(fleet?.printers) ? fleet.printers : [];
   const byServer = new Map();
   let local = 0;
   for (const p of printers) {
-    if (p.kind === "shared_queue" && p.server) byServer.set(p.server, (byServer.get(p.server) ?? 0) + 1);
-    else local += 1;
+    const n = Math.max(1, Number(p.deviceCount) || 1);
+    if (p.kind === "shared_queue" && p.server) byServer.set(p.server, (byServer.get(p.server) ?? 0) + n);
+    else local += n;
   }
   const servers = [...byServer.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const top = servers.slice(0, max);

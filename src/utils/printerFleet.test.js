@@ -141,6 +141,17 @@ describe("slices", () => {
     ]);
   });
 
+  it("⭐ T111 30-sep: un pool vale sus aparatos — las rebanadas suman la cifra grande", () => {
+    const printers = [
+      { key: "pool", kind: "shared_queue", server: "msig-wsus", deviceCount: 2 },
+      { key: "w", kind: "shared_queue", server: "msig-wsus", deviceCount: 1 },
+      { key: "l", kind: "local", server: null },
+    ];
+    const slices = serverSlices({ printers });
+    expect(slices.map((s) => [s.label, s.value])).toEqual([["msig-wsus", 3], ["Not shared", 1]]);
+    expect(slices.reduce((n, s) => n + s.value, 0)).toBe(4);
+  });
+
   it("lo que no cuenta, con su motivo", () => {
     expect(notCountedTotal(T111.summary)).toBe(130);
     expect(notCountedParts(T111.summary)).toEqual(["96 virtual", "28 auto-discovered (WSD)", "6 Remote Desktop"]);
