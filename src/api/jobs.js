@@ -98,9 +98,11 @@ export async function cancelJob(jobId) {
   return httpPostJson(`${BASE}/jobs/${encodeURIComponent(jobId)}/cancel`, {});
 }
 
-export async function listTenantJobs(tenantId, params = {}) {
+/** `options` llega a `httpGetJson` (p. ej. `{ cache: false }` para un sondeo). */
+export async function listTenantJobs(tenantId, params = {}, options = {}) {
   return httpGetJson(
-    `${BASE}/tenants/${encodeURIComponent(tenantId)}/jobs${buildQuery(params)}`
+    `${BASE}/tenants/${encodeURIComponent(tenantId)}/jobs${buildQuery(params)}`,
+    options
   );
 }
 

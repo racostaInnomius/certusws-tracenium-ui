@@ -42,6 +42,7 @@ import { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
 
 import { BRAND, ICON, NEUTRAL, TEXT } from "../theme/brand";
 import { getTenantById } from "../api/tenants";
+import { useRunningJobs } from "../hooks/useRunningJobs";
 
 export const SIDEBAR_WIDTH = 210;
 
@@ -359,6 +360,94 @@ function TenantWorkspaceBadge({ tenantName, tenantId, userEmail }) {
   );
 }
 
+/** «2 jobs running» o «20+ jobs running». */
+function runningLabel({ jobs, truncated }) {
+  const n = jobs.length;
+  return `${truncated ? `${n}+` : n} job${n === 1 && !truncated ? "" : "s"} running`;
+}
+
+/**
+ * El tooltip del aviso: cuántos y de qué tipo, para saber si es lo que uno
+ * lanzó o algo del sistema. Agrupado por tipo — con hasta 20 filas, una línea
+ * por job no cabría.
+ */
+function runningSummary(activity) {
+  const byType = new Map();
+  for (const job of activity.jobs) {
+    const type = String(job?.job_type || "job");
+    byType.set(type, (byType.get(type) || 0) + 1);
+  }
+  const lines = [...byType.entries()].sort((a, b) => b[1] - a[1]);
+  return (
+    <Box sx={{ py: 0.25 }}>
+      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700 }}>
+        {runningLabel(activity)} on agents
+      </Typography>
+      {lines.map(([type, count]) => (
+        <Typography key={type} sx={{ fontSize: TEXT.xs }}>
+          {type}
+          {count > 1 ? ` · ${count}` : ""}
+        </Typography>
+      ))}
+      <Typography sx={{ fontSize: TEXT.xs, mt: 0.5, opacity: 0.8 }}>
+        Open Jobs to follow their status and results.
+      </Typography>
+    </Box>
+  );
+}
+
+/**
+ * El punto que late junto a «Jobs» mientras un agente ejecuta algo, con el
+ * número al lado.
+ *
+ * ⚠️ El número no depende de la animación: con `prefers-reduced-motion` el
+ * punto se queda quieto y el aviso sigue ahí.
+ */
+function RunningActivity({ activity }) {
+  const { jobs, truncated } = activity;
+  return (
+    <Box
+      component="span"
+      role="status"
+      aria-label={runningLabel(activity)}
+      sx={{ ml: 0.5, display: "inline-flex", alignItems: "center", gap: 0.5, flexShrink: 0 }}
+    >
+      <Box
+        component="span"
+        sx={{
+          position: "relative",
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          bgcolor: BRAND.cyan,
+          "&::after": {
+            content: '""',
+            position: "absolute",
+            inset: 0,
+            borderRadius: "50%",
+            bgcolor: BRAND.cyan,
+            animation: "sidebarJobsPulse 1.6s ease-out infinite",
+          },
+          "@keyframes sidebarJobsPulse": {
+            from: { transform: "scale(1)", opacity: 0.7 },
+            to: { transform: "scale(2.6)", opacity: 0 },
+          },
+          "@media (prefers-reduced-motion: reduce)": {
+            "&::after": { animation: "none", opacity: 0 },
+          },
+        }}
+      />
+      <Typography
+        component="span"
+        aria-hidden
+        sx={{ fontSize: TEXT.xs, fontWeight: 800, color: BRAND.cyan, lineHeight: 1 }}
+      >
+        {truncated ? `${jobs.length}+` : jobs.length}
+      </Typography>
+    </Box>
+  );
+}
+
 function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, tenantId, userEmail }) {
   return (
     <Box
@@ -464,7 +553,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
           }
 
           const isSelected = selected === it.key;
-          return (
+          const button = (
             <ListItemButton
               key={it.key}
               selected={isSelected}
@@ -559,7 +648,15 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
                   }}
                 />
               )}
+              {it.activity ? <RunningActivity activity={it.activity} /> : null}
             </ListItemButton>
+          );
+          return it.activity ? (
+            <Tooltip key={it.key} title={runningSummary(it.activity)} placement="right" arrow>
+              {button}
+            </Tooltip>
+          ) : (
+            button
           );
         })}
       </List>
@@ -617,7 +714,7 @@ export default function Sidebar({
   // set), the workspace badge must reflect THAT client — not the token's
   // home tenant. The Sidebar only renders inside the client shell, so when
   // activeTenant is set it is the tenant being viewed.
-  const { activeTenant } = useMsp();
+  const { activeTenant, loading: mspLoading } = useMsp();
 
   const authTenantId = React.useMemo(() => getTenantIdFromAuth(auth), [auth]);
   const authTenantName = React.useMemo(() => getTenantNameFromAuth(auth), [auth]);
@@ -662,6 +759,11 @@ export default function Sidebar({
   const tenantDisplayName =
     (activeTenant?.name ?? "") || authTenantName || resolvedTenantName || "";
   const effectiveTenantId = activeTenant?.id ?? authTenantId;
+
+  // Lo que un agente está ejecutando ahora, para el aviso de Jobs. Espera a
+  // que el portfolio resuelva: antes, el tenant aún puede no ser el bueno
+  // (mismo motivo que el sondeo de la campana en Topbar).
+  const runningJobs = useRunningJobs(effectiveTenantId, { enabled: !mspLoading });
 
   const tenantMemberRole = getTenantMemberRoleFromAuth(auth);
   const tenantMemberIsActive = getTenantMemberIsActiveFromAuth(auth);
@@ -739,7 +841,15 @@ export default function Sidebar({
     // isPrivileged (OWNER/ADMIN only), which also hid it from any custom
     // role granted "jobs" since isPrivileged only recognizes the 2
     // built-ins.
-    { label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> },
+    //
+    // `activity`: mientras un agente ejecuta algo, la entrada late — es el
+    // sitio al que mirar si se cerró el tracker de la página que lo lanzó.
+    {
+      label: "Jobs",
+      key: "jobs",
+      icon: <AssignmentOutlinedIcon />,
+      activity: runningJobs.jobs.length ? runningJobs : null,
+    },
     // ADR-0008 F1a — always visible for any active member; the catalog
     // itself is gated server-side per report type (GET /reports/types),
     // not by hiding this entry.
