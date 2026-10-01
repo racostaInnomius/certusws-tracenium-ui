@@ -1515,16 +1515,24 @@ export default function ScreenShareViewer({ session, device, onClose }) {
                 maxHeight: "100%",
                 width: "auto",
                 height: "auto",
-                // M3.S4 — hide local cursor while controlling so only
-                // the remote cursor overlay is visible to the operator.
-                cursor: controlEnabled ? "none" : "default"
+                // ⭐ Mientras se controla, el cursor es el PROPIO del operador:
+                // se mueve al instante. Antes se ocultaba y sólo se veía el aro
+                // remoto, cuya posición viaja dentro de los fotogramas — medido
+                // en TNS-OPER-SNOC04 (1-oct-2026): ~290 ms hasta que empezaba a
+                // moverse más 80 ms de transición CSS, con RTT de 51 ms. Escribir
+                // no lo delataba; mover el ratón, sí. Es lo que hace cualquier
+                // escritorio remoto: el cursor en local, la imagen cuando llegue.
+                cursor: "default"
               }}
             />
 
             {/* M3.S3 — Cursor overlay. Positioned in % so it tracks the
                 canvas size at any zoom level. Pointer-events:none so it
                 never intercepts clicks (input forwarding is M3.S4). */}
-            {cursorPos && liveSize && (
+            {/* El aro remoto sólo cuando NO se controla: es lo único que dice
+                dónde está el cursor de quien está al otro lado. Controlando,
+                llegaría ~370 ms tarde y se vería persiguiendo al cursor local. */}
+            {cursorPos && liveSize && !controlEnabled && (
               <Box
                 sx={{
                   position: "absolute",

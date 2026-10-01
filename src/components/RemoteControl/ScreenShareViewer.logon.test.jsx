@@ -326,3 +326,61 @@ describe("6 · Type text: la contraseña como caracteres", () => {
     expect(await screen.findByRole("button", { name: /Type text/i })).toBeDisabled();
   });
 });
+
+// ── El cursor, en local mientras se controla ─────────────────────────────
+//
+// Medido en TNS-OPER-SNOC04 (1-oct-2026) en una sesión real, con RTT de 51 ms:
+// el aro del cursor remoto tardaba ~290 ms en empezar a moverse y 80 ms más de
+// transición CSS. Su posición viaja dentro de los fotogramas. El cursor local
+// estaba oculto, así que lo único que veía el operador iba ~370 ms tarde.
+describe("7 · el cursor del operador, sin retraso", () => {
+  // ⚠️ El aro sólo se pinta cuando se conoce el tamaño de la imagen, y eso se
+  // fija en `img.onload`, que jsdom no dispara nunca. Sin este doble, «no hay
+  // aro» pasaría con o sin el arreglo — la primera versión de esta prueba lo
+  // hacía. Mismo patrón que ScreenShareViewer.blit.test.jsx.
+  const images = [];
+  class FakeImage {
+    constructor() { this.width = 0; this.height = 0; images.push(this); }
+    set src(v) { this._src = v; }
+    get src() { return this._src; }
+  }
+  async function decodeLast() {
+    const img = images[images.length - 1];
+    img.width = 1024;
+    img.height = 768;
+    await act(async () => { img.onload?.(); });
+  }
+  beforeEach(() => {
+    images.length = 0;
+    vi.stubGlobal("Image", FakeImage);
+  });
+
+  function ring() {
+    // El aro: redondo, con transición en left/top.
+    return [...document.querySelectorAll("div")].find((d) => {
+      const cs = getComputedStyle(d);
+      return cs.borderRadius === "50%" && cs.transition.includes("left");
+    });
+  }
+
+  it("⭐ controlando, el canvas enseña el cursor del sistema y NO el aro remoto", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage(LOGON_INFO); // sin nadie dentro → control automático
+    await dc.fireMessage({ ...FRAME, cursorX: 100, cursorY: 100 });
+    await decodeLast();
+    await screen.findByRole("button", { name: /Controlling/i });
+
+    const canvas = document.querySelector("canvas");
+    expect(getComputedStyle(canvas).cursor, "con `none` sólo quedaba el aro, que va ~370 ms tarde")
+      .toBe("default");
+    expect(ring(), "el aro llegaría tarde y se vería persiguiendo al cursor local").toBeUndefined();
+  });
+
+  it("mirando sin controlar, el aro SÍ está: es el cursor del otro lado", async () => {
+    const { dc } = await connect();
+    await dc.fireMessage({ ...LOGON_INFO, noUserSignedIn: false });
+    await dc.fireMessage({ ...FRAME, cursorX: 100, cursorY: 100 });
+    await decodeLast();
+    await waitFor(() => expect(ring()).toBeDefined());
+  });
+});
