@@ -240,6 +240,9 @@ describe("⭐ sólo lo impone un perfil (macOS, 1-oct)", () => {
     );
     expect(await screen.findByText("In the macOS policy")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add to macOS policy" })).toBeNull();
+    // La frase de la fila tampoco vuelve a pedir «add it».
+    expect(screen.getByText(/^In the organization's macOS policy\. Macs enrolled/)).toBeInTheDocument();
+    expect(screen.queryByText(/add it to the organization's macOS policy/)).toBeNull();
   });
 
   it("sin Device Management el botón está, apagado y explicado", async () => {

@@ -71,6 +71,9 @@ export function blockedReasonText(reason, guard = null) {
   return null;
 }
 
+export const IN_MAC_POLICY_ROW_TEXT =
+  "In the organization's macOS policy. Macs enrolled in Tracenium MDM install the profile on their next check-in (about every 4 hours); the devices drop off this row as their next scan confirms it. Other Macs need the profile installed.";
+
 /** «12 equipos» o «≥ 12 equipos» cuando el conteo exacto no se pudo resolver. */
 export function devicesLabel(action) {
   const n = action.devices ?? 0;
@@ -208,7 +211,12 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
               </TableRow>
             ) : null}
             {actions.map((a) => {
-              const blocked = blockedReasonText(a.applyBlockedReason, a.guard);
+              const inMacPolicy =
+                a.applyBlockedReason === "profile_only" && intentsInPolicy(a.profileIntents, macPolicyKeys);
+              // Ya en la política: la frase de debajo no vuelve a decir «add it».
+              const blocked = inMacPolicy
+                ? IN_MAC_POLICY_ROW_TEXT
+                : blockedReasonText(a.applyBlockedReason, a.guard);
               return (
                 <TableRow key={a.key} hover>
                   <TableCell sx={{ maxWidth: 380 }}>
@@ -268,7 +276,7 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    {a.applyBlockedReason === "profile_only" && intentsInPolicy(a.profileIntents, macPolicyKeys) ? (
+                    {inMacPolicy ? (
                       <InMacPolicyChip />
                     ) : a.applyBlockedReason === "profile_only" && a.profileIntents?.length ? (
                       <Tooltip title={onAddToMacPolicy ? "" : "Adding to the macOS policy needs Device Management access."}>
