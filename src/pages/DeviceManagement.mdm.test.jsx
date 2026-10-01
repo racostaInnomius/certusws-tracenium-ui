@@ -376,6 +376,13 @@ describe("MDM / MAM — forzar una actualización del sistema (DDM)", () => {
     return day;
   }
 
+  it("❗ «sin fallos» del Mac ({}) no sale como «{}» en rojo (30-sep, JPR-MacBookPro en prepared)", async () => {
+    state.osUpdate.device = { ...state.osUpdate.device, installState: "prepared", failureReason: {} };
+    const panel = await openMac();
+    expect(await within(panel).findByText("Ready to install")).toBeTruthy();
+    expect(within(panel).queryByText("{}")).toBeNull();
+  });
+
   it("❗ el cajón no dice que no se le pueden mandar comandos: llegan en su conexión automática", async () => {
     mount("&mdmTab=devices");
     await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));

@@ -23,6 +23,7 @@ import { formatRelative } from "../../utils/format";
 import { cancelMdmOsUpdate, getMdmOsUpdate, scheduleMdmOsUpdate } from "../../api/mdm";
 import {
   buildOsUpdateRequest,
+  describeOsUpdateFailure,
   detectedOsUpdates,
   detectedUpdateKey,
   detectedUpdateLabel,
@@ -131,6 +132,7 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
   const scheduled = view?.scheduled;
   const state = osUpdateInstallState(device?.installState);
   const pending = device?.pendingVersion?.["os-version"];
+  const failure = describeOsUpdateFailure(device?.failureReason);
   const scannedWhen = detected?.scannedAt ? formatRelative(detected.scannedAt) : null;
   const manualNote = manual ? manualVersionNote(detected, { chosen: updates.length > 0, when: scannedWhen }) : null;
 
@@ -149,10 +151,8 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
         {pending ? <Field label="Pending">{pending}</Field> : null}
         {device?.reportedAt ? <Field label="Last report">{formatRelative(device.reportedAt)}</Field> : null}
       </Box>
-      {device?.failureReason ? (
-        <Typography variant="body2" sx={{ color: BRAND.alert.errorText, fontWeight: 600 }}>
-          {typeof device.failureReason === "object" ? JSON.stringify(device.failureReason) : String(device.failureReason)}
-        </Typography>
+      {failure ? (
+        <Typography variant="body2" sx={{ color: BRAND.alert.errorText, fontWeight: 600 }}>{failure}</Typography>
       ) : null}
 
       {scheduled ? (

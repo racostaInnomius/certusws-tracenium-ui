@@ -15,6 +15,7 @@ import {
   pushCertificateStatus,
   requestBlocker,
   STALE_AFTER_MS,
+  describeOsUpdateFailure,
   detectedOsUpdates,
   detectedUpdateLabel,
   manualVersionNote,
@@ -185,5 +186,18 @@ describe("versión del escaneo del agente", () => {
     expect(manualVersionNote({ status: "linked", updates: [] }, { when: "2 hours ago" })).toMatch(/last scan of this Mac \(2 hours ago\) found no macOS update/);
     expect(manualVersionNote({ status: "no_agent" })).toMatch(/no tracenium agent reports this mac's serial number/i);
     expect(manualVersionNote({ status: "unavailable" })).toMatch(/couldn't read this mac's scan/i);
+  });
+});
+
+describe("describeOsUpdateFailure", () => {
+  it("❗ «sin fallos» ({} o count 0) no se pinta", () => {
+    expect(describeOsUpdateFailure({})).toBeNull();
+    expect(describeOsUpdateFailure({ count: 0 })).toBeNull();
+    expect(describeOsUpdateFailure(null)).toBeNull();
+  });
+
+  it("un fallo de verdad se lee como frase, no como JSON", () => {
+    expect(describeOsUpdateFailure({ count: 1, reason: "Not enough free space" })).toBe("The update failed: Not enough free space");
+    expect(describeOsUpdateFailure({ count: 3, reason: null })).toBe("The update failed 3 times.");
   });
 });

@@ -192,6 +192,20 @@ const INSTALL_STATES = {
   failed: { label: "Failed", tone: "critical" },
 };
 
+/**
+ * El fallo que informa el equipo, en una frase, o null si no hay. Sin fallos
+ * Apple manda `{}` o `{count: 0}` —el panel lo pintaba como «{}» en rojo
+ * (30-sep)—; el backend ya lo normaliza, esto cubre uno anterior.
+ */
+export function describeOsUpdateFailure(failure) {
+  if (!failure || typeof failure !== "object") return null;
+  const count = Number(failure.count) > 0 ? Math.trunc(Number(failure.count)) : 0;
+  const reason = typeof failure.reason === "string" && failure.reason.trim() ? failure.reason.trim() : null;
+  if (!count && !reason) return null;
+  const times = count > 1 ? ` ${count} times` : "";
+  return `The update failed${times}${reason ? `: ${reason}` : "."}`;
+}
+
 /** Lo que dice el propio equipo (softwareupdate.install-state). */
 export function osUpdateInstallState(state) {
   return INSTALL_STATES[state] ?? { label: "No report yet", tone: "muted" };
