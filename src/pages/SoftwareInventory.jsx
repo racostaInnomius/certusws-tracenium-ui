@@ -42,6 +42,8 @@ import {
 import SoftwareInsightCards from "../components/inventory/SoftwareInsightCards";
 import BehindNewestCard from "../components/inventory/BehindNewestCard";
 import { updateSearchParams } from "../utils/browserState";
+import { invalidateApiCachePrefix } from "../api/http";
+import { useDebounced } from "../components/Compliance/usePagedList";
 import { listFrom } from "../api/shape";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
@@ -384,6 +386,19 @@ export default function SoftwareInventory({
 
   const [hostSearch, setHostSearch] = React.useState("");
   const [hostAppsSearch, setHostAppsSearch] = React.useState("");
+  // ⚠️ Una petición por tecla, sin descartar las viejas: con respuestas
+  // desordenadas quedaban filas de un término anterior (1-oct). Se espera a que
+  // se deje de escribir, y sólo se pinta la última petición de cada tabla.
+  const searchQuery = useDebounced(search.trim());
+  const hostSearchQuery = useDebounced(hostSearch.trim());
+  const hostAppsSearchQuery = useDebounced(hostAppsSearch.trim());
+  const requestIds = React.useRef({ detail: 0, hosts: 0, hostApps: 0 });
+  const nextRequest = (k) => ++requestIds.current[k];
+  const isLatest = (k, id) => requestIds.current[k] === id;
+  // Orden EN EL SERVIDOR de las dos tablas de apps: paginan allí, y ordenar en
+  // el navegador sólo reordenaba las filas de la página visible.
+  const [detailSortModel, setDetailSortModel] = React.useState([]);
+  const [hostAppsSortModel, setHostAppsSortModel] = React.useState([]);
 
   const [appLevelDetail, setAppLevelDetail] = React.useState(false);
   // Una fila de «Top installed apps» o «Top publishers» (o de su «View all»)
@@ -483,10 +498,14 @@ export default function SoftwareInventory({
   };
 
   const loadDetail = async () => {
+    const rid = nextRequest("detail");
+    const sort = detailSortModel[0];
     try {
       setLoadingDetail(true);
       const res = await getSoftwareInventoryDetail({
-        search: search || undefined,
+        sortBy: sort?.field || undefined,
+        sortDir: sort?.sort || undefined,
+        search: searchQuery || undefined,
         source: source || undefined,
         publisher: publisher || undefined,
         app: rankingFilter?.kind === "app" ? rankingFilter.label : undefined,
@@ -495,21 +514,27 @@ export default function SoftwareInventory({
         pageSize: paginationModel.pageSize,
       });
 
+      if (!isLatest("detail", rid)) return;
       setDetailRows(listFrom(res, { keys: ["items"], context: "softwareInventory.detail" }));
       setTotalRows(Number(res?.total || 0));
     } catch (e) {
+      if (!isLatest("detail", rid)) return;
       console.error(e);
+      // Vacía: las filas anteriores bajo un filtro nuevo dirían algo falso.
+      setDetailRows([]);
+      setTotalRows(0);
       setSnackbar({
         open: true,
         message: "Failed to load software detail",
         severity: "error",
       });
     } finally {
-      setLoadingDetail(false);
+      if (isLatest("detail", rid)) setLoadingDetail(false);
     }
   };
 
   const loadHosts = async () => {
+    const rid = nextRequest("hosts");
     try {
       setLoadingHosts(true);
 
@@ -519,51 +544,63 @@ export default function SoftwareInventory({
       };
 
       const res = await getSoftwareInventoryHosts({
-        search: hostSearch || undefined,
+        search: hostSearchQuery || undefined,
         page: hostPaginationModel.page + 1,
         pageSize: hostPaginationModel.pageSize,
         sortBy: currentSort.field,
         sortDir: currentSort.sort || "asc",
       });
 
+      if (!isLatest("hosts", rid)) return;
       setHostRows(listFrom(res, { keys: ["items"], context: "softwareInventory.hosts" }));
       setHostTotalRows(Number(res?.total || 0));
     } catch (e) {
+      if (!isLatest("hosts", rid)) return;
       console.error(e);
+      setHostRows([]);
+      setHostTotalRows(0);
       setSnackbar({
         open: true,
         message: "Failed to load software hosts",
         severity: "error",
       });
     } finally {
-      setLoadingHosts(false);
+      if (isLatest("hosts", rid)) setLoadingHosts(false);
     }
   };
 
   const loadHostApps = async () => {
     if (!selectedHost?.agentId) return;
+    const rid = nextRequest("hostApps");
+    const sort = hostAppsSortModel[0];
 
     try {
       setLoadingHostApps(true);
       const res = await getSoftwareInventoryHostApps(selectedHost.agentId, {
-        search: hostAppsSearch || undefined,
+        sortBy: sort?.field || undefined,
+        sortDir: sort?.sort || undefined,
+        search: hostAppsSearchQuery || undefined,
         source: source || undefined,
         publisher: publisher || undefined,
         page: hostAppsPaginationModel.page + 1,
         pageSize: hostAppsPaginationModel.pageSize,
       });
 
+      if (!isLatest("hostApps", rid)) return;
       setHostAppsRows(listFrom(res, { keys: ["items"], context: "softwareInventory.hostApps" }));
       setHostAppsTotalRows(Number(res?.total || 0));
     } catch (e) {
+      if (!isLatest("hostApps", rid)) return;
       console.error(e);
+      setHostAppsRows([]);
+      setHostAppsTotalRows(0);
       setSnackbar({
         open: true,
         message: "Failed to load host software detail",
         severity: "error",
       });
     } finally {
-      setLoadingHostApps(false);
+      if (isLatest("hostApps", rid)) setLoadingHostApps(false);
     }
   };
 
@@ -577,7 +614,7 @@ export default function SoftwareInventory({
   React.useEffect(() => {
     if (!appLevelDetail) return;
     loadDetail();
-  }, [appLevelDetail, search, source, publisher, rankingFilter, paginationModel.page, paginationModel.pageSize, refreshNonce]);
+  }, [appLevelDetail, searchQuery, source, publisher, rankingFilter, paginationModel.page, paginationModel.pageSize, detailSortModel, refreshNonce]);
 
   React.useEffect(() => {
     if (appLevelDetail || selectedHost) return;
@@ -585,7 +622,7 @@ export default function SoftwareInventory({
   }, [
     appLevelDetail,
     selectedHost,
-    hostSearch,
+    hostSearchQuery,
     hostPaginationModel.page,
     hostPaginationModel.pageSize,
     hostSortModel,
@@ -598,14 +635,21 @@ export default function SoftwareInventory({
   }, [
     selectedHost,
     appLevelDetail,
-    hostAppsSearch,
+    hostAppsSearchQuery,
     source,
     publisher,
     hostAppsPaginationModel.page,
     hostAppsPaginationModel.pageSize,
+    hostAppsSortModel,
+    // ⚠️ Faltaba: el Refresh de la cabecera no recargaba las apps del equipo
+    // elegido (1-oct).
+    refreshNonce,
   ]);
 
+  // ⚠️ El «Refresh» de la pestaña no refrescaba: la caché GET de /dashboard
+  // sirve 90 s, y sólo el Refresh de la cabecera la vaciaba (1-oct).
   const refreshAll = () => {
+    invalidateApiCachePrefix("/api/v1/dashboard/software-inventory");
     loadSummary();
     loadRankings();
     loadInsights();
@@ -627,7 +671,8 @@ export default function SoftwareInventory({
       flex: 0.8,
       renderCell: (params) => params.row?.hostname || " - ",
     },
-    { field: "agentId", headerName: "Agent ID", minWidth: 160, flex: 0.75 },
+    // Sin orden por id: no dice nada, y el servidor no lo ofrece.
+    { field: "agentId", headerName: "Agent ID", minWidth: 160, flex: 0.75, sortable: false },
     { field: "name", headerName: "Application", minWidth: 220, flex: 1 },
     { field: "publisher", headerName: "Publisher", minWidth: 180, flex: 0.8 },
     { field: "source", headerName: "Source", minWidth: 120, flex: 0.45 },
@@ -651,9 +696,13 @@ export default function SoftwareInventory({
     },
   ];
 
-  const hostAppColumns = appColumns.filter(
-    (column) => column.field !== "hostname" && column.field !== "agentId"
-  );
+  // Las apps de UN equipo: el servidor ordena por nombre, editor, origen y
+  // fechas (HOST_APPS_SORT_KEYS); ruta y package family no.
+  const hostAppColumns = appColumns
+    .filter((column) => column.field !== "hostname" && column.field !== "agentId")
+    .map((column) =>
+      ["installLocation", "packageFamilyName"].includes(column.field) ? { ...column, sortable: false } : column
+    );
 
   const hostColumns = [
     {
@@ -1344,6 +1393,12 @@ export default function SoftwareInventory({
               paginationMode="server"
               paginationModel={hostAppsPaginationModel}
               onPaginationModelChange={setHostAppsPaginationModel}
+              sortingMode="server"
+              sortModel={hostAppsSortModel}
+              onSortModelChange={(next) => {
+                setHostAppsSortModel(next);
+                setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
+              }}
               pageSizeOptions={[10, 25, 50]}
               rowHeight={40}
               columnHeaderHeight={44}
@@ -1365,6 +1420,12 @@ export default function SoftwareInventory({
               paginationMode="server"
               paginationModel={paginationModel}
               onPaginationModelChange={setPaginationModel}
+              sortingMode="server"
+              sortModel={detailSortModel}
+              onSortModelChange={(next) => {
+                setDetailSortModel(next);
+                setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              }}
               pageSizeOptions={[10, 25, 50]}
               rowHeight={40}
               columnHeaderHeight={44}

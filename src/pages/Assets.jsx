@@ -58,7 +58,9 @@ const TAB_KEY_BY_VALUE = { 0: "", 1: "groups", 2: "hardware", 3: "location", 4: 
 const WINDOWS_SECTION_FROM_URL = { gpos: "gpos", coverage: "coverage" };
 // Segmentos de la dona de composición que Hardware Inventory sabe filtrar.
 // También las de atención de «Needs attention»: el backend ya las filtra.
-const HW_FLEET_KEYS = new Set(["laptop", "desktop", "server", "unknown", "virtual", "disk_high", "low_memory"]);
+const HW_FLEET_KEYS = new Set([
+  "laptop", "desktop", "server", "unknown", "virtual", "disk_high", "low_memory", "os_unsupported", "os_ending",
+]);
 import PageHeader from "../components/common/PageHeader";
 import PageTabs from "../components/common/PageTabs";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
@@ -100,7 +102,10 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
   const [activeTab, setActiveTab] = React.useState(
     () => TAB_FROM_URL[getSearchParam("assetsTab", "")] ?? 0
   );
-  const [initialFleetFilter] = React.useState(() => {
+  // ⚠️ Se CONSUME: se lee del enlace una vez y se olvida en cuanto el operador
+  // se mueve. Antes quedaba para siempre y volvía a aplicarse al regresar a la
+  // pestaña — también junto a la búsqueda de una fila de «OS versions» (1-oct).
+  const [initialFleetFilter, setInitialFleetFilter] = React.useState(() => {
     const key = getSearchParam("hwFleet", "");
     return HW_FLEET_KEYS.has(key) ? key : "";
   });
@@ -125,6 +130,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
     setActiveTab(newValue);
     setPendingHardwareSearch("");
     setPendingFleetFilter("");
+    setInitialFleetFilter("");
     // La URL dice dónde ESTÁ el operador, no por dónde entró: antes se
     // borraba la clave y recargar llevaba siempre al Dashboard (prod, 24-sep).
     // El filtro del enlace (hwFleet) y la ficha abierta no se arrastran.
@@ -140,12 +146,14 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
     updateSearchParams({ device: String(agentId), assetsTab: TAB_KEY_BY_VALUE[0], hwFleet: "" });
     setPendingHardwareSearch("");
     setPendingFleetFilter("");
+    setInitialFleetFilter("");
     setActiveTab(0);
   }, []);
 
   const navigateToHardwareInventory = React.useCallback((searchTerm = "", fleetFilter = "") => {
     setPendingHardwareSearch(searchTerm);
     setPendingFleetFilter(HW_FLEET_KEYS.has(fleetFilter) ? fleetFilter : "");
+    setInitialFleetFilter("");
     setActiveTab(2); // Hardware Inventory
     updateSearchParams({ assetsTab: TAB_KEY_BY_VALUE[2], device: "" });
 

@@ -208,8 +208,14 @@ function Cerca({ site, onSave, saving, error }) {
           A {radioEnEdicionEsPequeno ? radioNum : site.radiusM} m radius is smaller than this
           site's own readings support — positions here land a median of{" "}
           {site.observedAccuracyM ?? "?"} m accuracy and up to{" "}
-          {site.observedP90DistanceM ?? "?"} m from the pin. No device would ever be confirmed
-          inside. Suggested: {sugerido} m.
+          {site.observedP90DistanceM ?? "?"} m from the pin.{" "}
+          {/* ⚠️ Lo que pasaría DEPENDE de cuánto falta. Con un radio por debajo
+              de la propia precisión, nadie queda confirmado dentro; por encima,
+              sólo se pierden las lecturas del borde. T111 (1-oct): 400 m contra
+              450 sugeridos decía «No device would ever be confirmed inside»
+              con 55 equipos dentro. */}
+          {radiusShortfall(Number(radioEnEdicionEsPequeno ? radioNum : site.radiusM), site)}{" "}
+          Suggested: {sugerido} m.
         </Typography>
       ) : null}
 
@@ -269,6 +275,20 @@ function Cerca({ site, onSave, saving, error }) {
 // ⚠️ Ya NO pinta las transiciones: viven en su propia sección del mismo tab
 // (RecentTransitions), donde caben con hostname, fecha y el rótulo correcto.
 // Aquí eran diez líneas al pie de la configuración, y el rótulo mentía.
+/**
+ * Lo que pasaría con un radio por debajo del sugerido, según CUÁNTO falta.
+ * Exportado para el test.
+ */
+export function radiusShortfall(radiusM, site) {
+  const acc = Number(site?.observedAccuracyM);
+  const p90 = Number(site?.observedP90DistanceM);
+  if (Number.isFinite(acc) && radiusM <= acc) return "No device would ever be confirmed inside.";
+  if (Number.isFinite(p90) && radiusM < p90) {
+    return "Many readings from devices that are on site land outside it — they would be counted as away.";
+  }
+  return "Devices whose readings land near the edge may be counted outside.";
+}
+
 export default function GeofencePanel({ sites, onSave, savingId, errorById = {} }) {
   const lista = Array.isArray(sites) ? sites : [];
 

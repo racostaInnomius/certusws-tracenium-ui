@@ -75,6 +75,9 @@ export function attentionRows(attention) {
       count: n(attention.osUnsupported),
       unknown: 0,
       tone: "critical",
+      // 1-oct: eran las dos únicas filas sin clic. El backend resuelve el filtro
+      // con la misma regla que las cuenta (osLifecycleFilterOf).
+      fleetFilter: "os_unsupported",
     },
     {
       key: "os_ending",
@@ -83,6 +86,7 @@ export function attentionRows(attention) {
       unknown: n(attention.osUnknown),
       unknownLabel: "OS not in the lifecycle catalog",
       tone: "caution",
+      fleetFilter: "os_ending",
     },
   ];
   return rows.map((r) => ({ ...r, percent: devices > 0 ? (r.count / devices) * 100 : 0 }));

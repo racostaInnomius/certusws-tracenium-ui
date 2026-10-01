@@ -12,7 +12,7 @@
 // cambian lo que las cifras significan. Ver utils/printerFleet.js.
 
 import * as React from "react";
-import { Alert, Box, Chip, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import Grid from "@mui/material/Grid";
 import { DataGrid } from "@mui/x-data-grid";
 
@@ -82,7 +82,7 @@ function UsersCell({ users }) {
 }
 
 export default function Printers({ refreshNonce }) {
-  const { data, loading, refetch } = useCachedFetch(
+  const { data, loading, refetch, error, temporaryError } = useCachedFetch(
     "printers-fleet:v1",
     async () => (await getPrinterFleet()) || null,
     { staleMs: 60_000, storageMaxAgeMs: 10 * 60_000, revalidateOnMount: "stale" }
@@ -95,6 +95,11 @@ export default function Printers({ refreshNonce }) {
   const summary = data?.summary;
   // Mientras carga NO se pinta 0: un cero es una afirmación.
   const cargando = loading && !summary;
+  // ⚠️ Una carga fallida NO es una flota sin impresoras: antes los KPIs decían
+  // 0 y la tabla «No printers reported» (1-oct). Sin dato, «—» y el aviso.
+  const fallo = !summary && !loading && Boolean(error || temporaryError);
+  const kpi = (v) => (cargando ? "…" : fallo ? "—" : v);
+  const vacio = fallo ? "Printers could not be loaded" : "No printers reported";
   const [filter, setFilter] = React.useState(null);
 
   const notices = React.useMemo(() => coverageNotices(data), [data]);
@@ -222,7 +227,7 @@ export default function Printers({ refreshNonce }) {
               2026-09-15: 111 colas que eran 38 impresoras. */}
           <Kpi
             label="Printers"
-            value={cargando ? "…" : summary?.physicalPrinters ?? 0}
+            value={kpi(summary?.physicalPrinters ?? 0)}
             hint={
               cargando
                 ? undefined
@@ -235,25 +240,39 @@ export default function Printers({ refreshNonce }) {
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Kpi
             label="Not counted"
-            value={cargando ? "…" : notCountedTotal(summary)}
-            hint={cargando ? undefined : notCountedParts(summary).join(" · ") || "No virtual or auto-discovered queues"}
+            value={kpi(notCountedTotal(summary))}
+            hint={cargando || fallo ? undefined : notCountedParts(summary).join(" · ") || "No virtual or auto-discovered queues"}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Kpi
             label="Devices with printers"
-            value={cargando ? "…" : summary?.devicesWithPrinters ?? 0}
+            value={kpi(summary?.devicesWithPrinters ?? 0)}
             hint={!cargando && typeof fleetDevices === "number" ? `of ${fleetDevices} in the fleet` : undefined}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Kpi label="Print servers" value={cargando ? "…" : summary?.printServers ?? 0} />
+          <Kpi label="Print servers" value={kpi(summary?.printServers ?? 0)} />
         </Grid>
       </Grid>
 
       {/* ADR-0023: la parte de AD dice de dónde y de cuándo es. */}
       {adSourceLine(data) ? (
         <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: -1, mb: 2 }}>{adSourceLine(data)}</Typography>
+      ) : null}
+
+      {fallo ? (
+        <Alert
+          severity="error"
+          sx={{ mb: 2, borderRadius: 3 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => refetch()} sx={{ textTransform: "none", fontWeight: 700 }}>
+              Retry
+            </Button>
+          }
+        >
+          The printer inventory could not be loaded. This is not a fleet without printers.
+        </Alert>
       ) : null}
 
       {notices.map((n) => (
@@ -275,7 +294,7 @@ export default function Printers({ refreshNonce }) {
               activeKey={active("server")}
               onSliceClick={toggle("server")}
               loading={cargando}
-              emptyLabel="No printers reported"
+              emptyLabel={vacio}
               sx={{ minHeight: 260 }}
             />
           </Box>
@@ -292,7 +311,7 @@ export default function Printers({ refreshNonce }) {
               activeKey={active("vendor")}
               onSliceClick={toggle("vendor")}
               loading={cargando}
-              emptyLabel="No printers reported"
+              emptyLabel={vacio}
               sx={{ minHeight: 260 }}
             />
           </Box>
@@ -309,7 +328,7 @@ export default function Printers({ refreshNonce }) {
               activeKey={active("connection")}
               onSliceClick={toggle("connection")}
               loading={cargando}
-              emptyLabel="No printers reported"
+              emptyLabel={vacio}
               sx={{ minHeight: 260 }}
             />
           </Box>
@@ -341,7 +360,7 @@ export default function Printers({ refreshNonce }) {
             disableRowSelectionOnClick
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-            localeText={{ noRowsLabel: "No printers reported" }}
+            localeText={{ noRowsLabel: vacio }}
             sx={{
               border: `1px solid ${BRAND.border}`,
               borderRadius: 2,

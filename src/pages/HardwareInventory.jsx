@@ -33,6 +33,9 @@ import {
   getHardwareInventoryDetail,
 } from "../api/inventoryDashboard";
 import { useCachedFetch } from "../hooks/useCachedFetch";
+import { useDebounced } from "../components/Compliance/usePagedList";
+import { invalidateApiCachePrefix } from "../api/http";
+import { updateSearchParams } from "../utils/browserState";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 
@@ -61,6 +64,8 @@ const FLEET_FILTER_LABELS = {
   disk_high: "Disk usage over threshold",
   disk_unknown: "Not reporting disk",
   low_memory: "Under the memory floor",
+  os_unsupported: "OS out of support",
+  os_ending: "OS support ending soon",
   // ⚠️ Los tramos de los histogramas de disco y memoria (DISK_BUCKETS y
   // MEMORY_BUCKETS en hardware-fleet.ts). Faltaban, y el chip enseñaba la
   // clave cruda: «disk_0_49 · 8», «mem_17_32 · 3» (prod, 24-sep). Un tramo
@@ -368,10 +373,23 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
   const [loadingDetail, setLoadingDetail] = React.useState(true);
 
   const [search, setSearch] = React.useState(initialSearch);
+  // ⚠️ Una petición por tecla y sin descartar las viejas: con respuestas
+  // desordenadas quedaban en la tabla filas de un término anterior (1-oct).
+  const searchQuery = useDebounced(search.trim());
+  // Orden EN EL SERVIDOR: la tabla pagina allí, y ordenar aquí sólo reordenaba
+  // las 10 filas visibles (ver HARDWARE_SORT_COLUMNS en el backend).
+  const [sortModel, setSortModel] = React.useState([]);
 
   // Filtro que aplican las tarjetas de arriba. "all" es la flota entera.
   // `initialFleetFilter` llega de un enlace (la dona del Overview).
   const [fleetFilter, setFleetFilter] = React.useState(initialFleetFilter || "all");
+  // El filtro vive en la URL (`hwFleet`): quitar el chip y recargar no lo
+  // devuelve, y compartir el enlace abre la misma vista.
+  // También al montar: entrando desde una tarjeta del Dashboard el filtro
+  // llega por prop y la URL aún no lo tiene.
+  React.useEffect(() => {
+    updateSearchParams({ hwFleet: fleetFilter && fleetFilter !== "all" ? fleetFilter : "" });
+  }, [fleetFilter]);
 
   const [paginationModel, setPaginationModel] = React.useState({
     page: 0,
@@ -401,36 +419,53 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
     severity: "success",
   });
 
+  // Sólo pinta la ÚLTIMA petición: una anterior que llegue tarde es de otra
+  // búsqueda u otro filtro.
+  const detailRequestRef = React.useRef(0);
   const loadDetail = async () => {
+    const requestId = ++detailRequestRef.current;
+    const sort = sortModel[0];
     try {
       setLoadingDetail(true);
       const res = await getHardwareInventoryDetail({
-        search: search || undefined,
+        search: searchQuery || undefined,
         fleetFilter: fleetFilter && fleetFilter !== "all" ? fleetFilter : undefined,
         manufacturer: manufacturerFilter || undefined,
         page: paginationModel.page + 1,
         pageSize: paginationModel.pageSize,
+        sortBy: sort?.field || undefined,
+        sortDir: sort?.sort || undefined,
       });
+      if (requestId !== detailRequestRef.current) return;
 
       setDetailRows(listFrom(res, { context: "hardwareDetail" }));
       setTotalRows(Number(res?.total || 0));
     } catch (e) {
+      if (requestId !== detailRequestRef.current) return;
       console.error(e);
+      // ⚠️ Se vacía: dejar las filas anteriores ponía la flota entera bajo el
+      // chip del filtro nuevo («Laptops · 53» con todo debajo).
+      setDetailRows([]);
+      setTotalRows(0);
       setSnackbar({
         open: true,
         message: "Failed to load hardware detail",
         severity: "error",
       });
     } finally {
-      setLoadingDetail(false);
+      if (requestId === detailRequestRef.current) setLoadingDetail(false);
     }
   };
 
   React.useEffect(() => {
     loadDetail();
-  }, [search, fleetFilter, manufacturerFilter, paginationModel.page, paginationModel.pageSize, refreshNonce]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, fleetFilter, manufacturerFilter, paginationModel.page, paginationModel.pageSize, sortModel, refreshNonce]);
 
+  // ⚠️ El «Refresh» de la pestaña no refrescaba: la caché GET de /dashboard
+  // sirve 90 s, y sólo el Refresh de la cabecera la vaciaba (1-oct).
   const refreshAll = () => {
+    invalidateApiCachePrefix("/api/v1/dashboard/hardware-inventory");
     reloadSummary();
     reloadRankings();
     loadDetail();
@@ -861,6 +896,12 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
             paginationMode="server"
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
+            sortingMode="server"
+            sortModel={sortModel}
+            onSortModelChange={(next) => {
+              setSortModel(next);
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+            }}
             pageSizeOptions={[10, 25, 50]}
             rowHeight={40}
             columnHeaderHeight={44}

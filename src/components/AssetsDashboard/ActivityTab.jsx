@@ -167,7 +167,19 @@ function EventRow({ event, onOpenJob }) {
  * La vista, sin fetch: recibe lo que haya y lo pinta. Separada a propósito
  * para poder probar los estados vacíos sin mocks.
  */
-export function ActivityView({ data, loading, error, onOpenJob }) {
+export function ActivityView({ data, loading, error, onOpenJob, invalidRange = false }) {
+  // ⚠️ Sin rango válido no hay nada que cargar: antes se quedaba en
+  // «Loading activity…» para siempre al borrar una fecha (1-oct). El control
+  // de fechas ya dice qué falla; aquí, que no se ha preguntado nada.
+  if (invalidRange) {
+    return (
+      <Box sx={{ minHeight: MIN_HEIGHT, py: 6, textAlign: "center" }}>
+        <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
+          Pick a valid date range to see this device&apos;s activity.
+        </Typography>
+      </Box>
+    );
+  }
   if (error) {
     return (
       <Box sx={{ minHeight: MIN_HEIGHT }}>
@@ -295,7 +307,7 @@ export default function ActivityTab({ agentId, onOpenJob }) {
         </ToggleButtonGroup>
       </Stack>
 
-      <ActivityView data={data} loading={loading} error={error} onOpenJob={onOpenJob} />
+      <ActivityView data={data} loading={loading} error={error} onOpenJob={onOpenJob} invalidRange={Boolean(agentId) && !ventana} />
     </Box>
   );
 }

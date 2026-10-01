@@ -80,8 +80,9 @@ describe("LocationExplorer", () => {
     expect(agentId).toBe("a-2");
     // ⚠️ Hasta el último milisegundo del día: usar 00:00 del siguiente
     // incluiría estancias que empezaron ya en el día siguiente.
-    expect(ventana.from).toMatch(/T00:00:00\.000Z$/);
-    expect(ventana.to).toMatch(/T23:59:59\.999Z$/);
+    // Día LOCAL del operador (los tests corren en America/Mexico_City, UTC−6).
+    expect(ventana.from).toMatch(/T06:00:00\.000Z$/);
+    expect(ventana.to).toMatch(/T05:59:59\.999Z$/);
   });
 
   it("cambiar la fecha vuelve a preguntar por el nuevo día", async () => {
@@ -91,7 +92,7 @@ describe("LocationExplorer", () => {
 
     fireEvent.change(screen.getAllByLabelText("From")[0], { target: { value: "2026-09-03" } });
     await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(2));
-    expect(getDeviceTimeline.mock.calls.at(-1)[1].from).toBe("2026-09-03T00:00:00.000Z");
+    expect(getDeviceTimeline.mock.calls.at(-1)[1].from).toBe("2026-09-03T06:00:00.000Z");
   });
 
   it("⭐ un RANGO se pregunta de una vez: del primer instante del 1 al último del 7", async () => {
@@ -105,8 +106,8 @@ describe("LocationExplorer", () => {
     await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(3));
 
     const ventana = getDeviceTimeline.mock.calls.at(-1)[1];
-    expect(ventana.from).toBe("2026-09-01T00:00:00.000Z");
-    expect(ventana.to).toBe("2026-09-07T23:59:59.999Z");
+    expect(ventana.from).toBe("2026-09-01T06:00:00.000Z");
+    expect(ventana.to).toBe("2026-09-08T05:59:59.999Z");
   });
 
   it("⚠️ un rango del revés NO se pregunta: una lista vacía se leería como 'no estuvo'", async () => {
@@ -123,8 +124,8 @@ describe("LocationExplorer", () => {
     fireEvent.change(screen.getAllByLabelText("From")[0], { target: { value: "2026-09-01" } });
     await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(2));
     expect(getDeviceTimeline.mock.calls.at(-1)[1]).toEqual({
-      from: "2026-09-01T00:00:00.000Z",
-      to: "2026-09-10T23:59:59.999Z",
+      from: "2026-09-01T06:00:00.000Z",
+      to: "2026-09-11T05:59:59.999Z",
     });
 
     // Del 1 al 25 de agosto: del revés. Ni una llamada más.

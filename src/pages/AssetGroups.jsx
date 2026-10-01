@@ -861,6 +861,11 @@ export function DispatchJobDialog({ open, group, onClose, onDispatched, notify }
 export function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, onMembersChanged, onAskGroup }) {
   const [members, setMembers] = React.useState([]);
   const [membersTotal, setMembersTotal] = React.useState(0);
+  // ⚠️ El total del GRUPO, sin búsqueda. `membersTotal` respeta la búsqueda y
+  // `memberRows` es la página: el cajón decía «25 member(s)» de un grupo de
+  // 40, y una búsqueda sin resultados desactivaba «Dispatch job» y «Ask this
+  // group» para el grupo ENTERO (1-oct). null = aún no se sabe.
+  const [groupTotal, setGroupTotal] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [addPickerOpen, setAddPickerOpen] = React.useState(false);
   const [dispatchOpen, setDispatchOpen] = React.useState(false);
@@ -889,6 +894,7 @@ export function GroupDetailDrawer({ open, group, onClose, devices, canManage, no
 
       setMembers(listFrom(res, { context: "groupMembers" }));
       setMembersTotal(Number(res?.total ?? res?.count ?? 0));
+      if (!memberSearch) setGroupTotal(Number(res?.total ?? res?.count ?? 0));
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Failed to load members");
       setMembers([]);
@@ -908,6 +914,7 @@ export function GroupDetailDrawer({ open, group, onClose, devices, canManage, no
 
     setMembers([]);
     setMembersTotal(0);
+    setGroupTotal(null);
     setAddPickerOpen(false);
     setDispatchOpen(false);
   }, [open, group, loadMembers, memberSearch]);
@@ -925,6 +932,12 @@ export function GroupDetailDrawer({ open, group, onClose, devices, canManage, no
     for (const d of devices) m.set(d.deviceId, d);
     return m;
   }, [devices]);
+
+  // Tamaño del grupo: el contado sin búsqueda, o el de la lista de grupos.
+  const groupSize = groupTotal ?? (Number.isFinite(Number(group?.memberCount)) && group?.memberCount !== null ? Number(group.memberCount) : null);
+  const SORT_LABELS = { hostname: "hostname", status: "status", addedAt: group?.kind === "dynamic" ? "evaluated date" : "date added" };
+  const currentMemberSort = memberSortModel?.[0] || { field: "hostname", sort: "asc" };
+  const sortLabel = `${SORT_LABELS[currentMemberSort.field] || currentMemberSort.field}${currentMemberSort.sort === "desc" ? " (descending)" : ""}`;
 
   const memberRows = React.useMemo(() => {
     return members.map((m) => {
@@ -1117,7 +1130,7 @@ export function GroupDetailDrawer({ open, group, onClose, devices, canManage, no
                   <KindChip kind={group.kind} />
                   <CriticalityChip value={group.criticality} />
                   <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-                    {memberRows.length} member(s)
+                    {groupSize === null ? "—" : `${groupSize} ${groupSize === 1 ? "member" : "members"}`}
                   </Typography>
                 </Stack>
               </Box>
@@ -1149,7 +1162,7 @@ export function GroupDetailDrawer({ open, group, onClose, devices, canManage, no
                 Members
               </Typography>
               <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-                {membersTotal} total · sorted by hostname
+                {memberSearch.trim() ? `${membersTotal} matching` : `${membersTotal} total`} · sorted by {sortLabel}
               </Typography>
             </Box>
             <Stack direction="row" spacing={1}>
@@ -1163,7 +1176,7 @@ export function GroupDetailDrawer({ open, group, onClose, devices, canManage, no
                   variant="contained"
                   startIcon={<RocketLaunchOutlinedIcon />}
                   onClick={() => setDispatchOpen(true)}
-                  disabled={memberRows.length === 0}
+                  disabled={groupSize === 0}
                   sx={{
                     textTransform: "none",
                     fontWeight: 700,
@@ -1171,7 +1184,7 @@ export function GroupDetailDrawer({ open, group, onClose, devices, canManage, no
                     "&:hover": { bgcolor: BRAND.tealHover },
                   }}
                   title={
-                    memberRows.length === 0
+                    groupSize === 0
                       ? "Group is empty — nothing to dispatch to"
                       : "Run a job on every member of this group"
                   }
@@ -1190,7 +1203,7 @@ export function GroupDetailDrawer({ open, group, onClose, devices, canManage, no
                     onClose?.();
                     onAskGroup(group);
                   }}
-                  disabled={memberRows.length === 0}
+                  disabled={groupSize === 0}
                   sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal }}
                   title="Ask the connected members of this group a question now (Live Query)"
                 >

@@ -28,6 +28,7 @@ vi.mock("../api/assetGroups", () => ({
 }));
 
 import { GroupDetailDrawer } from "./AssetGroups";
+import { listAssetGroupMembers } from "../api/assetGroups";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
 
 const wrap = (ui) => render(<ConfirmProvider>{ui}</ConfirmProvider>);
@@ -52,5 +53,25 @@ describe("GroupDetailDrawer — Ask this group", () => {
     wrap(<GroupDetailDrawer open group={GROUP} onClose={() => {}} devices={[]} canManage={false} notify={() => {}} onMembersChanged={() => {}} />);
     await screen.findByText(/Members/);
     expect(screen.queryByRole("button", { name: /Ask this group/ })).toBeNull();
+  });
+});
+
+// 1-oct: el cajón contaba la PÁGINA como miembros («25 member(s)» de 40), y una
+// búsqueda sin resultados desactivaba las acciones del grupo ENTERO.
+describe("⭐ GroupDetailDrawer — el tamaño es el del grupo, no el de la página ni la búsqueda", () => {
+  it("40 miembros en páginas de 25; buscar algo que no existe no apaga «Ask this group»", async () => {
+    listAssetGroupMembers.mockImplementation(async (_id, { search } = {}) =>
+      search
+        ? { items: [], total: 0 }
+        : { items: Array.from({ length: 25 }, (_, i) => ({ deviceId: `d${i}`, hostname: `PC-${i}` })), total: 40 }
+    );
+    wrap(<GroupDetailDrawer open group={{ ...GROUP, memberCount: 40 }} onClose={() => {}} devices={[]} canManage={false} notify={() => {}} onMembersChanged={() => {}} onAskGroup={() => {}} />);
+    expect(await screen.findByText("40 members")).toBeInTheDocument();
+    expect(await screen.findByText(/40 total · sorted by hostname/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByRole("textbox"), "zzz");
+    expect(await screen.findByText(/0 matching/, {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.getByText("40 members")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ask this group/ })).toBeEnabled();
   });
 });

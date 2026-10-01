@@ -104,12 +104,14 @@ describe("SiteAttendance", () => {
 });
 
 describe("dayWindow", () => {
-  it("convierte un día en la ventana completa", () => {
+  it("⭐ 1-oct: convierte un día LOCAL en la ventana completa (los tests corren en America/Mexico_City)", () => {
     const w = dayWindow("2026-09-03");
-    expect(w.from).toBe("2026-09-03T00:00:00.000Z");
+    // Medianoche de México = 06:00 UTC. Antes era el día UTC: «Today» acababa
+    // a las 18:00 locales y arrancaba la tarde de ayer.
+    expect(w.from).toBe("2026-09-03T06:00:00.000Z");
     // Hasta el último milisegundo: usar 00:00 del día siguiente incluiría
     // estancias que empezaron ya en el día siguiente.
-    expect(w.to).toBe("2026-09-03T23:59:59.999Z");
+    expect(w.to).toBe("2026-09-04T05:59:59.999Z");
   });
 
   it("una fecha inservible no produce una ventana inventada", () => {
@@ -123,8 +125,8 @@ describe("dayWindow", () => {
 describe("rangeWindow / lastDaysRange", () => {
   it("un rango cubre desde el primer instante del primer día hasta el último del último", () => {
     expect(rangeWindow("2026-09-01", "2026-09-07")).toEqual({
-      from: "2026-09-01T00:00:00.000Z",
-      to: "2026-09-07T23:59:59.999Z",
+      from: "2026-09-01T06:00:00.000Z",
+      to: "2026-09-08T05:59:59.999Z",
     });
     // Un solo día sigue siendo el día entero: el caso de antes no cambia.
     expect(rangeWindow("2026-09-03", "2026-09-03")).toEqual(dayWindow("2026-09-03"));

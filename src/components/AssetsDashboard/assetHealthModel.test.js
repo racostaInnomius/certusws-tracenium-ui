@@ -35,9 +35,9 @@ describe("attentionRows", () => {
     expect(disk).toMatchObject({ count: 5, unknown: 1 });
   });
 
-  it("disco y memoria llevan a su filtro de Hardware Inventory; el resto no inventa uno", () => {
+  it("⭐ 1-oct: las CUATRO filas llevan a su filtro de Hardware Inventory (antes las de SO no tenían)", () => {
     const byKey = Object.fromEntries(attentionRows(A).map((r) => [r.key, r.fleetFilter]));
-    expect(byKey).toEqual({ disk: "disk_high", memory: "low_memory", os_unsupported: undefined, os_ending: undefined });
+    expect(byKey).toEqual({ disk: "disk_high", memory: "low_memory", os_unsupported: "os_unsupported", os_ending: "os_ending" });
   });
 
   it("los umbrales vienen del backend", () => {

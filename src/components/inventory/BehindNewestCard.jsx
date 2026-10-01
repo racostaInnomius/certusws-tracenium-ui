@@ -41,7 +41,9 @@ export default function BehindNewestCard({ rows = [], maxItems = 5, headerExtra 
     >
       <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>Behind the newest version</Typography>
       <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
-        Devices not on the newest version seen in your fleet
+        {/* Los navegadores se miden contra el fabricante en «Browser inventory»
+            (backend: excludeBrowsersFromBehindNewest). */}
+        Devices not on the newest version seen in your fleet · browsers are measured in Browser inventory
       </Typography>
       {headerExtra ? <Box sx={{ mt: 0.5 }}>{headerExtra}</Box> : null}
 

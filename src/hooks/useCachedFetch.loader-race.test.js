@@ -53,3 +53,25 @@ describe("useCachedFetch — el cargador es el de la clave que se carga", () => 
     await waitFor(() => expect(result.current.data).toEqual({ items: ["B-1", "B-2"] }));
   });
 });
+
+// 🔴 1-oct, Assets: cambiar un filtro estando en la página 3 lanzaba dos cargas;
+// si la de la clave VIEJA llegaba última, la tabla enseñaba su resultado bajo
+// el filtro nuevo («No hosts found»).
+describe("useCachedFetch — una respuesta de otra clave no se pinta", () => {
+  it("🔴 la carga lenta de la clave anterior no pisa a la de la clave vigente", async () => {
+    const delays = { old: 60, new: 5 };
+    const { result, rerender } = renderHook(
+      ({ key }) =>
+        useCachedFetch(`hosts:${key}`, () => new Promise((r) => setTimeout(() => r({ key }), delays[key]))),
+      { initialProps: { key: "old" } }
+    );
+    act(() => rerender({ key: "new" }));
+    await waitFor(() => expect(result.current.data).toEqual({ key: "new" }));
+    // La vieja llega después: no cambia nada.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 90));
+    });
+    expect(result.current.data).toEqual({ key: "new" });
+    expect(result.current.loading).toBe(false);
+  });
+});

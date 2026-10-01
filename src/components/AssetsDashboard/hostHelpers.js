@@ -943,13 +943,32 @@ export function lastDaysRange(days, now = new Date()) {
   return { from: fmt(desde), to: fmt(now) };
 }
 
+/**
+ * Un día del calendario del OPERADOR, como ventana UTC.
+ *
+ * ⚠️ Era el día UTC (`T00:00:00.000Z`) de una fecha que `lastDaysRange` y los
+ * selectores dan en hora LOCAL. En México (UTC−6), «Today» terminaba a las
+ * 18:00 locales —lo de las últimas horas del día no salía— y empezaba la tarde
+ * de AYER (1-oct). La página dice «Times are shown in your timezone»: el día
+ * también.
+ *
+ * Medianoche a medianoche locales, no `+ 86400000`: un día con cambio de horario
+ * dura 23 o 25 horas.
+ */
 export function dayWindow(yyyymmdd) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(yyyymmdd || ""))) return null;
-  const desde = new Date(`${yyyymmdd}T00:00:00.000Z`);
-  if (Number.isNaN(desde.getTime())) return null;
+  const m = String(yyyymmdd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])];
+  const desde = new Date(y, mo, d, 0, 0, 0, 0);
+  // `new Date(2026, 12, 45)` no falla: rueda a otra fecha. Una fecha inventada
+  // no puede producir una ventana.
+  if (Number.isNaN(desde.getTime()) || desde.getFullYear() !== y || desde.getMonth() !== mo || desde.getDate() !== d) {
+    return null;
+  }
+  const siguiente = new Date(y, mo, d + 1, 0, 0, 0, 0);
   return {
     from: desde.toISOString(),
-    to: new Date(desde.getTime() + 86400_000 - 1).toISOString(),
+    to: new Date(siguiente.getTime() - 1).toISOString(),
   };
 }
 

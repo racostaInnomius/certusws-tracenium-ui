@@ -155,6 +155,7 @@ function AgentDetailWorkbench({
   latestVersion = null,
   softwareRows,
   softwareTotal,
+  softwareAllTotal = null,
   softwareLoading = false,
   softwarePaginationModel,
   onSoftwarePaginationModelChange,
@@ -327,7 +328,7 @@ function AgentDetailWorkbench({
               isMobileDevice={isMobileDevice}
               commandDeviceId={commandDeviceId}
               platformKey={platformKey}
-              softwareCount={softwareCount}
+              softwareCount={softwareAllTotal}
               onOpenTab={(next) => onTabChange?.(null, next)}
             />
           ) : null}
@@ -437,6 +438,9 @@ export default function AssetsDashboard({
   // now" KPI and the traffic-light dot on each row in the hosts
   // table. Same endpoint the Overview Hero uses.
   const [connectedIds, setConnectedIds] = React.useState(() => new Set());
+  // ¿Se ha sabido alguna vez quién está conectado? Hasta entonces «Online now»
+  // no es 0, es «no se sabe».
+  const [connectedKnown, setConnectedKnown] = React.useState(false);
 
   // Deep-link filters (?platform=, ?versionBucket=, ?groupId=). Read once on
   // mount and kept in state so the chip X can dismiss them; dismissing also
@@ -593,6 +597,10 @@ export default function AssetsDashboard({
   const [agentHardware, setAgentHardware] = React.useState(null);
   const [agentSoftwareRows, setAgentSoftwareRows] = React.useState([]);
   const [agentSoftwareTotal, setAgentSoftwareTotal] = React.useState(0);
+  // ⚠️ El total SIN búsqueda, para la tarjeta «Software» de la pestaña Agent.
+  // `agentSoftwareTotal` respeta la búsqueda de la pestaña Software: buscar
+  // «chrome» y volver a Agent decía «2 apps» (1-oct). null = no se sabe.
+  const [agentSoftwareAllTotal, setAgentSoftwareAllTotal] = React.useState(null);
   const [agentSoftwareLoading, setAgentSoftwareLoading] = React.useState(false);
   const [agentSoftwarePaginationModel, setAgentSoftwarePaginationModel] = React.useState({
     page: 0,
@@ -710,6 +718,13 @@ export default function AssetsDashboard({
     ]);
     const [latestRes, agentVersionsRes] = await versionMetaPromise;
 
+    // ⚠️ Una tabla que no cargó NO es una flota vacía. Antes se devolvía
+    // `hosts: []` y useCachedFetch lo guardaba como dato bueno: un auto-refresco
+    // durante un corte cambiaba una tabla correcta por «No hosts found · 0
+    // total», y el respaldo «lo último que funcionó» nunca entraba. Lanzando,
+    // la caché se queda con lo último bueno (o la página lo dice como error).
+    if (hostsRes.status === "rejected") throw hostsRes.reason;
+
     const summaryOk = sumRes.status === "fulfilled";
     const rawHostsPayload = hostsRes.status === "fulfilled" ? hostsRes.value : null;
     const rawHostItems = Array.isArray(rawHostsPayload)
@@ -791,7 +806,7 @@ export default function AssetsDashboard({
   ]);
 
   const hostsCacheKey = `assets:bundle:hosts:${hostsPaginationModel.page}:${hostsPaginationModel.pageSize}:${hostsSearch}:${hostsSortBy}:${hostsSortDir}:${platformFilter}:${versionBucketFilter}:${groupFilter}:${checkInFilter}:${osKeysFilter}`;
-  const { data, loading, refetch } = useCachedFetch(hostsCacheKey, loader);
+  const { data, loading, refetch, error: hostsLoadError, temporaryError: hostsTemporaryError } = useCachedFetch(hostsCacheKey, loader);
   // Memoize the destructured slices so identity is stable across
   // renders — `data?.foo ?? []` would create a fresh fallback every
   // render and invalidate downstream useMemo deps unnecessarily.
@@ -832,9 +847,10 @@ export default function AssetsDashboard({
         summaryLoaded: false,
         hostsLoaded: false,
         summaryError: false,
-        hostsError: false,
+        // Sin datos y con error: la tabla no cargó (ver el `throw` del loader).
+        hostsError: Boolean(hostsLoadError || hostsTemporaryError),
       },
-    [data]
+    [data, hostsLoadError, hostsTemporaryError]
   );
 
   // Page-level refresh signal from the Assets wrapper — bumps the
@@ -1116,12 +1132,13 @@ export default function AssetsDashboard({
         // older deployment, and warns in dev if none matched (drift).
         const ids = listFrom(res, { keys: ["deviceIds", "items"], context: "getConnectedDevices" });
         setConnectedIds(new Set(ids.map((id) => String(id))));
+        setConnectedKnown(true);
       } catch (e) {
         if (cancelled) return;
-        // Silent: an auth blip or backend hiccup should leave the
-        // dots gray until next tick, not crash the page.
+        // ⚠️ Se conserva el último conjunto: vaciarlo ponía «Online now: 0» y
+        // todos los puntos en gris por un tick fallido, que se lee como «toda
+        // la flota se cayó».
         console.warn("devices-connected fetch failed:", e?.message || e);
-        setConnectedIds(new Set());
       }
     };
 
@@ -1205,6 +1222,7 @@ export default function AssetsDashboard({
     setAgentDetailFailures([]);
     setAgentDetailNotFound(false);
     detailShownRef.current = { agentId: null, profile: false, hardware: false };
+    setAgentSoftwareAllTotal(null);
     setAgentSoftwarePaginationModel({ page: 0, pageSize: SOFTWARE_PAGE_SIZE });
     setAgentSoftwareSort(DEFAULT_SOFTWARE_SORT);
     setAgentSoftwareSearch("");
@@ -1248,14 +1266,21 @@ export default function AssetsDashboard({
   // no devuelve —la versión del agente, entre otras—, así que entrando por
   // aquí con `{agent_id, hostname}` a secas la misma ficha salía incompleta:
   // dos vistas distintas del mismo equipo según por dónde se llegara.
-  const openDeviceExperience = React.useCallback(
-    (agentId, hostname) => {
+  const openDeviceById = React.useCallback(
+    (agentId, hostname = null) => {
+      if (!agentId) return;
       const row = hosts.find((h) => String(getHostDeviceId(h)) === String(agentId));
       handleAgentSelect(row ?? { agent_id: agentId, agentId, hostname });
-      setAgentDetailTab(EXPERIENCE_TAB);
       revealDevicesSection();
     },
     [handleAgentSelect, hosts, revealDevicesSection]
+  );
+  const openDeviceExperience = React.useCallback(
+    (agentId, hostname) => {
+      openDeviceById(agentId, hostname);
+      setAgentDetailTab(EXPERIENCE_TAB);
+    },
+    [openDeviceById]
   );
 
   const handleCloseAgentDetail = React.useCallback(() => {
@@ -1269,6 +1294,7 @@ export default function AssetsDashboard({
     setAgentHardware(null);
     setAgentSoftwareRows([]);
     setAgentSoftwareTotal(0);
+    setAgentSoftwareAllTotal(null);
     setAgentSoftwareLoading(false);
     setAgentSoftwarePaginationModel({ page: 0, pageSize: SOFTWARE_PAGE_SIZE });
     setAgentSoftwareSort(DEFAULT_SOFTWARE_SORT);
@@ -1384,6 +1410,7 @@ export default function AssetsDashboard({
         const rows = listFrom(res, { context: "hostRows" });
         setAgentSoftwareRows(rows);
         setAgentSoftwareTotal(Number(res?.total ?? rows.length));
+        if (!agentSoftwareQuery) setAgentSoftwareAllTotal(Number(res?.total ?? rows.length));
         markDetailPart("software", false);
       })
       .catch((err) => {
@@ -1391,6 +1418,8 @@ export default function AssetsDashboard({
         console.warn("agent software inventory load failed:", err?.message || err);
         setAgentSoftwareRows([]);
         setAgentSoftwareTotal(0);
+        // Un fallo no es «0 apps».
+        if (!agentSoftwareQuery) setAgentSoftwareAllTotal(null);
         markDetailPart("software", true);
       })
       .finally(() => {
@@ -1677,18 +1706,20 @@ const osVersionItems = React.useMemo(() => {
   // OS-platform + agent-version cardinality come straight from the
   // summary + hosts aggregates.
   const kpis = React.useMemo(() => {
-    const activeHosts = Number(summary?.activeHosts ?? hosts.length ?? 0);
-    const onlineCount = connectedIds.size;
+    // ⚠️ Sin resumen, «—» y no `hosts.length`: eso es el tamaño de la PÁGINA
+    // cargada (25), que se leía como «25 equipos activos».
+    const activeHosts = summary ? Number(summary.activeHosts ?? 0) : "—";
+    const onlineCount = connectedKnown ? connectedIds.size : "—";
     return {
       activeHosts,
       onlineCount,
-      inactiveAssets7d: Number(summary?.inactiveAssets7d ?? 0),
+      inactiveAssets7d: summary ? Number(summary.inactiveAssets7d ?? 0) : "—",
       // ⚠️ De la flota entera (el mismo agregado que el donut), no de `hosts`:
       // eso es la PÁGINA filtrada de la tabla, y el KPI pasaba de 5 a 1 al
       // pulsar «Current» en el donut. "unknown" no es una versión.
       versionCount: byVersion.filter((v) => v.count > 0 && v.version !== "unknown").length,
     };
-  }, [summary, hosts, connectedIds, byVersion]);
+  }, [summary, connectedIds, connectedKnown, byVersion]);
 
   if (capabilitiesLoading) {
     return (
@@ -1912,6 +1943,7 @@ const osVersionItems = React.useMemo(() => {
                 latestVersion={canonicalLatest}
                 softwareRows={agentSoftwareRows}
                 softwareTotal={agentSoftwareTotal}
+                softwareAllTotal={agentSoftwareAllTotal}
                 softwareLoading={agentSoftwareLoading}
                 canCaptureEvidence={canCaptureEvidence}
                 canReadEvidence={canReadEvidence}
@@ -2211,11 +2243,27 @@ const osVersionItems = React.useMemo(() => {
                         devices={fleetLocations?.devices || []}
                         withoutPosition={fleetLocations?.withoutPosition || 0}
                         loadError={fleetLocationsError}
-                        onSelectDevice={handleAgentSelect}
+                        // ⚠️ El mapa da el id, no la fila: con handleAgentSelect
+                        // directo la ficha salía vacía («Unknown device», 1-oct).
+                        onSelectDevice={openDeviceById}
                       />
                     )}
                   </React.Suspense>
                 ) : (
+                <>
+                {loadState.hostsError && hosts.length === 0 ? (
+                  <Alert
+                    severity="error"
+                    sx={{ mb: 1.5, borderRadius: 2 }}
+                    action={
+                      <Button color="inherit" size="small" onClick={() => refetch()} sx={{ textTransform: "none", fontWeight: 700 }}>
+                        Retry
+                      </Button>
+                    }
+                  >
+                    The device list could not be loaded. This is not an empty fleet.
+                  </Alert>
+                ) : null}
                 <HostsTable
                   rows={filteredHosts}
                   connectedIds={connectedIds}
@@ -2255,6 +2303,7 @@ const osVersionItems = React.useMemo(() => {
                     });
                   }}
                 />
+                </>
                 )}
               </>
             )}

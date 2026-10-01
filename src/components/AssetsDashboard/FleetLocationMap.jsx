@@ -346,7 +346,7 @@ export default function FleetLocationMap({
                 />
                 <Typography
                   component={onSelectDevice ? "button" : "span"}
-                  onClick={onSelectDevice ? () => onSelectDevice(d.agentId) : undefined}
+                  onClick={onSelectDevice ? () => onSelectDevice(d.agentId, d.hostname || null) : undefined}
                   sx={{
                     p: 0, border: 0, background: "none",
                     cursor: onSelectDevice ? "pointer" : "default",

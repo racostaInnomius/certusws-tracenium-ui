@@ -135,6 +135,14 @@ describe("ActivityView — lo que se dice sin que nadie pregunte", () => {
   });
 });
 
+describe("⭐ 1-oct: un rango inválido no deja el spinner para siempre", () => {
+  it("sin rango válido dice qué falta, no «Loading activity…»", () => {
+    render(<ActivityView data={null} loading={false} error={null} invalidRange />);
+    expect(screen.getByText(/Pick a valid date range/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Loading activity/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("groupByDay", () => {
   it("agrupa conservando el orden que trajo el backend", () => {
     // ⚠️ Horas elegidas para caer en el mismo día en la zona de la suite
@@ -166,8 +174,9 @@ describe("ActivityTab — la petición", () => {
     expect(id).toBe(AG);
     // Hasta el último milisegundo del día: 00:00 del siguiente dejaría fuera
     // lo que pasó esta tarde.
-    expect(params.from).toMatch(/T00:00:00\.000Z$/);
-    expect(params.to).toMatch(/T23:59:59\.999Z$/);
+    // Día LOCAL del operador (America/Mexico_City en los tests), no el día UTC.
+    expect(params.from).toMatch(/T06:00:00\.000Z$/);
+    expect(params.to).toMatch(/T05:59:59\.999Z$/);
     expect(params.lane).toBeUndefined();
     expect(await screen.findByText(/windows.registry.smb1/)).toBeInTheDocument();
   });

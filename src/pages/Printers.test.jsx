@@ -10,10 +10,11 @@ vi.mock("../api/inventoryDashboard", () => ({ getPrinterFleet: vi.fn() }));
 vi.mock("../hooks/useCachedFetch", () => ({
   useCachedFetch: (_k, fn) => {
     const [data, setData] = React.useState(null);
+    const [error, setError] = React.useState(null);
     React.useEffect(() => {
-      fn().then(setData);
+      fn().then(setData, setError);
     }, []);
-    return { data, loading: !data, refetch: () => {} };
+    return { data, error, loading: !data && !error, refetch: () => {} };
   },
 }));
 
@@ -131,5 +132,18 @@ describe("Printers tab", () => {
     getPrinterFleet.mockReturnValue(new Promise(() => {}));
     render(<Printers />);
     expect(screen.getAllByText("…").length).toBe(4);
+  });
+});
+
+// 1-oct: una carga fallida se pintaba como una flota sin impresoras (KPIs a 0,
+// «No printers reported»).
+describe("⭐ si la carga falla, lo dice", () => {
+  it("aviso con Retry y «—» en los KPIs, no ceros", async () => {
+    getPrinterFleet.mockRejectedValue(Object.assign(new Error("boom"), { status: 500 }));
+    render(<Printers />);
+    expect(await screen.findByText(/could not be loaded\. This is not a fleet without printers/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.queryByText("No printers reported")).not.toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(4);
   });
 });

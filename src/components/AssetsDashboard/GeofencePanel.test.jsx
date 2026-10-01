@@ -17,7 +17,7 @@ vi.mock("./GeofenceSitesMap", () => ({
   ),
 }));
 
-import GeofencePanel from "./GeofencePanel";
+import GeofencePanel, { radiusShortfall } from "./GeofencePanel";
 
 afterEach(cleanup);
 
@@ -63,12 +63,23 @@ describe("GeofencePanel", () => {
       />
     );
     const aviso = screen.getByText(/smaller than this site's own readings support/i);
-    // Dice lo que PASARÍA, no "valor inválido": el número es legal.
-    expect(aviso.textContent).toMatch(/No device would ever be confirmed\s+inside/i);
+    // Dice lo que PASARÍA, no "valor inválido": el número es legal. 100 m con
+    // lecturas que caen hasta 318 m: muchos presentes contarían fuera.
+    expect(aviso.textContent).toMatch(/counted as away/i);
     // Y trae las dos medidas que lo justifican, más el número que sí funciona.
     expect(aviso.textContent).toContain("35");
     expect(aviso.textContent).toContain("318");
     expect(aviso.textContent).toContain("400");
+  });
+
+  it("⭐ T111 1-oct: el aviso dice lo que pasaría según CUÁNTO falta, no siempre «nadie dentro»", () => {
+    const site = { observedAccuracyM: 94, observedP90DistanceM: 326 };
+    // Por debajo de la propia precisión: nadie queda confirmado dentro.
+    expect(radiusShortfall(80, site)).toMatch(/No device would ever be confirmed inside/);
+    // Por debajo de donde cae el 90 % de las lecturas: muchos presentes, fuera.
+    expect(radiusShortfall(200, site)).toMatch(/counted as away/);
+    // 400 m contra 450 sugeridos, con 55 equipos dentro: sólo el borde.
+    expect(radiusShortfall(400, site)).toMatch(/near the edge/);
   });
 
   it("⚠️ avisa MIENTRAS se teclea, no sólo después de guardar", () => {

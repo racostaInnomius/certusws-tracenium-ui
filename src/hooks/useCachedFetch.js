@@ -238,6 +238,15 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
 
   const mountedRef = useRef(true);
 
+  // ⚠️ La clave VIGENTE. Una respuesta que llega cuando la clave ya cambió es
+  // de otra pregunta: se guarda en su caché, pero no se pinta. Sin esto, en
+  // Assets cambiar un filtro estando en la página 3 lanzaba dos cargas (filtro
+  // nuevo + página 3, y filtro nuevo + página 1); si la vieja llegaba última,
+  // la tabla decía «No hosts found» bajo el chip del filtro (1-oct). Y su
+  // `finally` apagaba el indicador de carga de la petición nueva.
+  const keyRef = useRef(cacheKey);
+  keyRef.current = cacheKey;
+
   useEffect(() => {
     mountedRef.current = true;
 
@@ -308,14 +317,16 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
         }
 
         const fresh = await promise;
+        const current = mountedRef.current && keyRef.current === cacheKey;
 
-        if (mountedRef.current) {
+        if (current) {
           setData(fresh);
           setLastUpdatedAt(now());
         }
 
         return fresh;
       } catch (e) {
+        if (keyRef.current !== cacheKey) return null;
         // 401 is not a refresh problem and must never be downgraded to stale data.
         // http.js already emits the global auth-required event and has a redirect
         // fallback. Keep existing data untouched while the shell redirects.
@@ -354,7 +365,7 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
 
         return null;
       } finally {
-        if (mountedRef.current) {
+        if (mountedRef.current && keyRef.current === cacheKey) {
           setLoading(false);
           setRefreshing(false);
         }

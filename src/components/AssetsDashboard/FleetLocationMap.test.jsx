@@ -127,6 +127,14 @@ describe("FleetLocationMap — agrupación", () => {
     expect(screen.getByText("W11_JPR_LAB")).toBeInTheDocument();
   });
 
+  it("⭐ 1-oct: pulsar un equipo de la lista entrega su id Y su nombre (antes la ficha salía vacía)", () => {
+    const onSelectDevice = vi.fn();
+    render(<FleetLocationMap devices={two} onSelectDevice={onSelectDevice} />);
+    act(() => clusterHandlers.clusterclick({ layer: added.groups[0] }));
+    act(() => screen.getByText("W11_JPR_LAB").click());
+    expect(onSelectDevice).toHaveBeenCalledWith("a2", "W11_JPR_LAB");
+  });
+
   it("retira el grupo al desmontar, para no dejar una segunda copia", () => {
     const { unmount } = render(<FleetLocationMap devices={two} />);
     unmount();
