@@ -36,7 +36,7 @@ import { formatDate, formatRelative } from "../../utils/format";
 import SectionPaper from "../common/SectionPaper";
 import StatusChip from "./StatusChip";
 import ExceptionDialog from "./ExceptionDialog";
-import { catalogChanges, trendSegments } from "./assessmentModel";
+import { trendPoints } from "./assessmentModel";
 import ScoreCard from "./ScoreCard";
 import { useComplianceBands } from "../../hooks/useComplianceBands";
 import {
@@ -183,13 +183,9 @@ export default function InstanceDetail({ detail, canEdit, canDelete, viewer, onB
 
   const findings = sortFindings(detail.findings);
   const open = openBySeverity(detail.findings);
-  // ⚠️ La serie NO se une entre catálogos distintos: el score es un ratio y se
-  // infla al ampliar el catálogo (68 → 75 el 30-sep con el dominio intacto).
   // Sin useMemo: hay un return temprano más arriba, y sobre 500 puntos como
   // máximo esto es trivial. Un hook condicional sería peor que recalcular.
-  const trend = trendSegments(detail.history || []);
-  const history = trend.points.map((p) => ({ ...p, label: formatDate(p.at) }));
-  const cambios = catalogChanges(detail.history || []);
+  const history = trendPoints(detail.history || []).map((p) => ({ ...p, label: formatDate(p.at) }));
   const hayHallazgos = history.some((p) => typeof p.openFindings === "number");
   const lastRun = detail.runs?.[0] || null;
 
@@ -260,33 +256,10 @@ export default function InstanceDetail({ detail, canEdit, canDelete, viewer, onB
                 <YAxis domain={[0, 100]} tick={{ fontSize: TEXT.xs }} />
                 <RechartsTooltip />
                 <ReferenceLine y={target.value} stroke={BRAND.dark} strokeDasharray="4 4" label={{ value: `Target ${target.value}`, position: "insideTopRight", fontSize: TEXT.xs, fill: BRAND.dark }} />
-                {/* Marca dónde cambió lo que medimos. Va en la gráfica y no en una
-                    nota al pie: es la diferencia entre avisar y dejar que alguien
-                    lea una mejora que no existe. */}
-                {cambios.map((c) => (
-                  <ReferenceLine
-                    key={c.version}
-                    x={formatDate(c.at)}
-                    stroke={BRAND.alert.warningText}
-                    strokeDasharray="3 3"
-                    label={{ value: `catalog ${c.version}`, position: "insideTopLeft", fontSize: TEXT.xs, fill: BRAND.alert.warningText }}
-                  />
-                ))}
-                {/* Una línea por tramo: sólo se conectan los puntos medidos con el
-                    mismo catálogo. Con un catálogo distinto por corrida esto son
-                    puntos sueltos, y eso es la verdad. */}
-                {trend.segments.map((seg) => (
-                  <Line key={seg.key} type="monotone" dataKey={seg.key} stroke={BRAND.teal} strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} name="Score" />
-                ))}
+                <Line type="monotone" dataKey="score" stroke={BRAND.teal} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} name="Score" />
               </LineChart>
             </ResponsiveContainer>
           </Box>
-          {cambios.length > 0 ? (
-            <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 0.5 }}>
-              The score is a weighted ratio of the indicators assessed, so widening the catalogue raises it on its own. Points
-              measured with different catalogue versions are not joined, and are not comparable.
-            </Typography>
-          ) : null}
 
           {hayHallazgos ? (
             <>
@@ -297,16 +270,12 @@ export default function InstanceDetail({ detail, canEdit, canDelete, viewer, onB
                     <XAxis dataKey="label" tick={{ fontSize: TEXT.xs }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: TEXT.xs }} />
                     <RechartsTooltip />
-                    {/* Ésta SÍ es una serie continua: un indicador nuevo que pasa no
-                        suma hallazgos, así que el número no se infla al ampliar el
-                        catálogo. Es con el que un cliente se compara consigo mismo;
-                        el score sirve para comparar entre clientes en la cartera. */}
                     <Line type="monotone" dataKey="openFindings" stroke={BRAND.alert.errorText} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} name="Open findings" />
                   </LineChart>
                 </ResponsiveContainer>
               </Box>
               <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 0.5 }}>
-                Failing and needs-review indicators. Unlike the score, this does not go up just because the catalogue grew.
+                Failing and needs-review indicators.
               </Typography>
             </>
           ) : null}

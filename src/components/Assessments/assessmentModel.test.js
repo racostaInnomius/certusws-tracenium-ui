@@ -1,7 +1,7 @@
 // src/components/Assessments/assessmentModel.test.js
 
 import { describe, expect, it } from "vitest";
-import { adjustedScoreText, coverageText, describeRunNow, effectiveTarget, evidenceLine, liveExceptionCount, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText, exceptionHistoryLine, EXCEPTION_STATUS, exceptionGate, pendingRequestLine, trendSegments, catalogChanges
+import { adjustedScoreText, coverageText, describeRunNow, effectiveTarget, evidenceLine, liveExceptionCount, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText, exceptionHistoryLine, EXCEPTION_STATUS, exceptionGate, pendingRequestLine, trendPoints
 } from "./assessmentModel";
 import { formToPolicy, readFormFromPolicy } from "../Policies/policyTransforms";
 
@@ -214,62 +214,21 @@ describe("aprobación de segunda persona", () => {
   });
 });
 
-describe("tendencia: sólo se une lo comparable", () => {
-  // La serie REAL de T111. Cada punto con un catálogo distinto.
-  const real = [
-    { scoredAt: "2026-09-14T02:05:00Z", score: 51, openFindings: 14, catalogVersion: "1.0.0" },
-    { scoredAt: "2026-09-21T02:03:00Z", score: 65, openFindings: 18, catalogVersion: "1.1.0" },
-    { scoredAt: "2026-09-28T22:43:00Z", score: 68, openFindings: 20, catalogVersion: "1.2.0" },
-    { scoredAt: "2026-09-30T00:49:00Z", score: 75, openFindings: 23, catalogVersion: "1.7.0" },
-  ];
-
-  it("🔴 con un catálogo distinto por punto NO se dibuja ninguna línea: son cuatro puntos sueltos", () => {
-    // Es la verdad: 51 → 65 → 68 → 75 no es una mejora, son cuatro medidas
-    // distintas. Unirlas era la mentira.
-    const { points, segments } = trendSegments(real);
-    expect(segments).toHaveLength(4);
-    for (const seg of segments) expect(seg.from).toBe(seg.to);
-    // Y cada campo de tramo sólo tiene valor en su punto.
-    expect(points.map((p) => p.seg0)).toEqual([51, null, null, null]);
-    expect(points.map((p) => p.seg3)).toEqual([null, null, null, 75]);
-  });
-
-  it("⭐ dos corridas con el MISMO catálogo sí se unen: ahí la comparación vale", () => {
-    const mismo = [
-      { scoredAt: "a", score: 68, catalogVersion: "1.7.0" },
-      { scoredAt: "b", score: 71, catalogVersion: "1.7.0" },
-      { scoredAt: "c", score: 74, catalogVersion: "1.7.0" },
+describe("tendencia", () => {
+  it("score y hallazgos abiertos por corrida, en una sola serie aunque cambie el catálogo", () => {
+    // ASP está en beta: las ampliaciones del catálogo no se enseñan (1-oct).
+    const serie = [
+      { scoredAt: "2026-09-14T02:05:00Z", score: 51, openFindings: 14, catalogVersion: "1.0.0" },
+      { scoredAt: "2026-09-30T00:49:00Z", score: 75, openFindings: 23, catalogVersion: "1.7.0" },
     ];
-    const { points, segments } = trendSegments(mismo);
-    expect(segments).toHaveLength(1);
-    expect(points.map((p) => p.seg0)).toEqual([68, 71, 74]);
-  });
-
-  it("⚠️ un punto sin versión abre tramo propio: no se puede afirmar que case con el vecino", () => {
-    const conHueco = [
-      { scoredAt: "a", score: 60, catalogVersion: "1.7.0" },
-      { scoredAt: "b", score: 62, catalogVersion: null },
-      { scoredAt: "c", score: 64, catalogVersion: "1.7.0" },
-    ];
-    expect(trendSegments(conHueco).segments).toHaveLength(3);
-  });
-
-  it("los cambios de catálogo se listan para marcarlos en el eje", () => {
-    expect(catalogChanges(real).map((c) => c.version)).toEqual(["1.1.0", "1.2.0", "1.7.0"]);
-    // El primer punto no es un «cambio»: es el principio.
-    expect(catalogChanges(real)).toHaveLength(3);
-    expect(catalogChanges([])).toEqual([]);
-  });
-
-  it("⭐ los hallazgos abiertos sí forman una serie continua, y es la que no se infla", () => {
-    // El score subió 24 puntos en la serie; los hallazgos SUBIERON de 14 a 23.
-    // Las dos cosas a la vez sólo se entienden sabiendo que el catálogo creció.
-    const { points } = trendSegments(real);
-    expect(points.map((p) => p.openFindings)).toEqual([14, 18, 20, 23]);
+    expect(trendPoints(serie)).toEqual([
+      { at: "2026-09-14T02:05:00Z", score: 51, openFindings: 14 },
+      { at: "2026-09-30T00:49:00Z", score: 75, openFindings: 23 },
+    ]);
   });
 
   it("aguanta una historia vacía o rota", () => {
-    expect(trendSegments(null).points).toEqual([]);
-    expect(trendSegments([{}]).segments).toHaveLength(1);
+    expect(trendPoints(null)).toEqual([]);
+    expect(trendPoints([{}])).toEqual([{ at: null, score: null, openFindings: null }]);
   });
 });
