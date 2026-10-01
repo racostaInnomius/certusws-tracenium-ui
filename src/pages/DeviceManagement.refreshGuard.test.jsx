@@ -38,8 +38,8 @@ afterEach(() => {
 });
 
 // La política de la app vive en la pestaña Policies desde el rediseño en
-// pestañas (28-sep-2026).
-function mount(search = "?page=device-management&mdmTab=policies") {
+// pestañas (28-sep-2026), y desde el de Policies (1-oct) en su tarjeta.
+function mount(search = "?page=device-management&mdmTab=policies&mdmPolicy=app") {
   const calls = [];
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
@@ -74,7 +74,7 @@ describe("MDM / MAM — el refresco respeta la edición en curso", () => {
 
   it("❗ el tick del auto-refresco no pisa un cambio sin guardar", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    mount("?page=device-management&mdmTab=policies&deviceManagementAutoRefresh=60");
+    mount("?page=device-management&mdmTab=policies&mdmPolicy=app&deviceManagementAutoRefresh=60");
     const field = await editMinimumVersion(user);
 
     await act(async () => {
@@ -84,7 +84,7 @@ describe("MDM / MAM — el refresco respeta la edición en curso", () => {
     // Sin la guarda, `load` devolvía el formulario al valor del servidor ("").
     await new Promise((r) => setTimeout(r, 50));
     expect(field).toHaveValue("2.0.0");
-    expect(screen.getByText(/unsaved changes/i)).toBeTruthy();
+    expect(screen.getByText(/1 unsaved change$/i)).toBeTruthy();
   });
 
   it("❗ Refresh con cambios pregunta; cancelar no recarga ni borra nada", async () => {
@@ -137,6 +137,6 @@ describe("MDM / MAM — el refresco respeta la edición en curso", () => {
     await user.click(screen.getByRole("tab", { name: /policies/i }));
 
     expect(await screen.findByLabelText(/minimum app version/i)).toHaveValue("2.0.0");
-    expect(screen.getByText(/unsaved changes/i)).toBeTruthy();
+    expect(screen.getByText(/1 unsaved change$/i)).toBeTruthy();
   });
 });

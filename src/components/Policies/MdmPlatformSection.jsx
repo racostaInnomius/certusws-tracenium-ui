@@ -1,6 +1,6 @@
 // src/components/Policies/MdmPlatformSection.jsx
 //
-// Sección de autoría del modelo de intención MDM para UNA plataforma.
+// Editor del modelo de intención MDM para UNA plataforma.
 //
 // Por qué una sección por plataforma y no una lista unificada: las
 // políticas de macOS e iOS no son las mismas, y forzarlas a un esquema
@@ -13,60 +13,32 @@
 // conoce ningún ajuste por su nombre. Añadir una clave al catálogo la hace
 // aparecer aquí sin tocar la UI.
 //
-// Booleanos tri-estado (Unset / On / Off) igual que MAM: "Unset" significa
-// "sin opinión, deja el default de la plataforma" — distinto de "Off".
+// Rediseño 1-oct-2026: una fila por ajuste, agrupadas; buscar y ver sólo lo
+// configurado (de 45 ajustes de macOS, lo puesto se perdía entre los «Not
+// set»); qué se editó sin guardar; un valor fuera de rango se marca; y, con
+// el catálogo que lo dice, qué ajuste NO llega al equipo.
 
 import * as React from "react";
-import { Alert, Box, Chip, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, InputAdornment, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import SearchIcon from "@mui/icons-material/Search";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
+import {
+  deliveryOf,
+  filterGroups,
+  groupLabel,
+  isSet,
+  rangeText,
+  readByPath,
+  sameValue,
+  settingIssue,
+  settingLabel,
+  unitFor,
+  writeByPath,
+} from "./mdmPolicyModel";
+import { EnumSetting, NumberSetting, SettingGroup, SettingRow, TextSetting, TriStateToggle } from "./SettingRow";
 
-// Etiquetas legibles para los grupos derivados de la clave.
-const GROUP_LABELS = {
-  desktop: "Desktop",
-  screen: "Screen & lock",
-  apps: "Apps",
-  softwareUpdate: "Software updates",
-  passcode: "Passcode",
-  general: "General",
-};
-
-/** Lee un valor del bloque de política por su ruta con puntos. */
-export function readByPath(block, key) {
-  const parts = String(key).split(".").slice(1); // quita el prefijo de plataforma
-  let node = block;
-  for (const p of parts) {
-    if (node === null || node === undefined || typeof node !== "object") return undefined;
-    node = node[p];
-  }
-  return node;
-}
-
-/**
- * Escribe (o borra) un valor por ruta, devolviendo un bloque NUEVO.
- * `undefined` elimina la clave y poda los objetos que queden vacíos — así
- * el documento guardado solo contiene lo que el operador configuró de
- * verdad, sin objetos vacíos que el consumidor tenga que interpretar.
- */
-export function writeByPath(block, key, value) {
-  const parts = String(key).split(".").slice(1);
-  const clone = structuredClone(block ?? {});
-
-  const walk = (node, idx) => {
-    const p = parts[idx];
-    if (idx === parts.length - 1) {
-      if (value === undefined) delete node[p];
-      else node[p] = value;
-      return;
-    }
-    if (node[p] === null || typeof node[p] !== "object") node[p] = {};
-    walk(node[p], idx + 1);
-    if (Object.keys(node[p]).length === 0) delete node[p];
-  };
-
-  walk(clone, 0);
-  return clone;
-}
+const chipSx = { height: 20, fontSize: TEXT.xs, fontWeight: 800 };
 
 function SupervisionChip() {
   return (
@@ -78,112 +50,88 @@ function SupervisionChip() {
         size="small"
         icon={<ShieldOutlinedIcon sx={{ fontSize: ICON.sm }} />}
         label="Supervised only"
-        sx={{
-          height: 20,
-          fontSize: TEXT.xs,
-          fontWeight: 800,
-          bgcolor: "rgba(234,179,8,0.14)",
-          color: "#8a6d00",
-        }}
+        sx={{ ...chipSx, bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText }}
       />
     </Tooltip>
   );
 }
 
-function SettingControl({ setting, value, onChange, readOnly }) {
+function NotSentChip() {
+  return (
+    <Tooltip arrow title="Tracenium MDM doesn't send this setting to Macs yet. It is kept in the policy, but no device receives it.">
+      <Chip size="small" label="Not sent to Macs" sx={{ ...chipSx, bgcolor: BRAND.darkSoft, color: "text.secondary" }} />
+    </Tooltip>
+  );
+}
+
+function Control({ id, setting, value, onChange, readOnly, issue }) {
   const spec = setting.spec || {};
-
+  const delivery = deliveryOf(setting);
   if (spec.kind === "boolean") {
-    const v = value === true ? "on" : value === false ? "off" : "unset";
-    return (
-      <TextField
-        select
-        size="small"
-        label={setting.label || setting.key}
-        value={v}
-        onChange={(e) => {
-          const next =
-            e.target.value === "on" ? true : e.target.value === "off" ? false : undefined;
-          onChange(next);
-        }}
-        disabled={readOnly}
-        helperText={setting.description}
-        fullWidth
-      >
-        <MenuItem value="unset">Not set (system default)</MenuItem>
-        <MenuItem value="on">On</MenuItem>
-        <MenuItem value="off">Off</MenuItem>
-      </TextField>
-    );
+    const blocked = delivery.state === "partial" ? [true, false].filter((b) => !delivery.values.includes(b)) : [];
+    return <TriStateToggle id={id} value={value} onChange={onChange} blocked={blocked} disabled={readOnly} />;
   }
-
   if (spec.kind === "integer") {
+    const unit = unitFor(setting);
+    const range = rangeText(spec);
     return (
-      <TextField
-        size="small"
-        type="number"
-        label={setting.label || setting.key}
-        placeholder="not set"
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+      <NumberSetting
+        id={id}
+        value={value}
+        onChange={onChange}
+        unit={unit}
+        min={spec.min}
+        max={spec.max}
+        help={range ? `${range}${unit ? ` ${unit}` : ""}` : null}
+        issue={issue}
         disabled={readOnly}
-        inputProps={{ min: spec.min, max: spec.max }}
-        helperText={
-          setting.description ||
-          (spec.min !== undefined ? `${spec.min}–${spec.max}. Blank = not set.` : undefined)
-        }
-        fullWidth
       />
     );
   }
-
-  if (spec.kind === "enum") {
-    return (
-      <TextField
-        select
-        size="small"
-        label={setting.label || setting.key}
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
-        disabled={readOnly}
-        helperText={setting.description}
-        fullWidth
-      >
-        <MenuItem value="">Not set</MenuItem>
-        {(spec.values || []).map((v) => (
-          <MenuItem key={v} value={v}>
-            {v}
-          </MenuItem>
-        ))}
-      </TextField>
-    );
-  }
-
-  // string (default)
+  if (spec.kind === "enum") return <EnumSetting id={id} value={value} onChange={onChange} values={spec.values || []} disabled={readOnly} />;
   return (
-    <TextField
-      size="small"
-      label={setting.label || setting.key}
-      placeholder="not set"
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+    <TextSetting
+      id={id}
+      value={value}
+      onChange={onChange}
+      maxLength={spec.maxLength}
+      // Un texto para leer (el mensaje de la ventana de inicio) en varias
+      // líneas; una ruta larga, en una sola que ocupa la fila.
+      multiline={/Text$/.test(setting.key)}
+      full={(spec.maxLength ?? 0) > 200}
+      issue={issue}
       disabled={readOnly}
-      inputProps={{ maxLength: spec.maxLength }}
-      helperText={setting.description}
-      fullWidth
     />
   );
+}
+
+/** Por qué un lado del booleano no se puede elegir: siempre a la vista. */
+function partialHint(setting) {
+  const d = deliveryOf(setting);
+  if (d.state !== "partial") return null;
+  return `Only “${d.values[0] ? "On" : "Off"}” is sent to Macs — the profile has no value for the other.`;
+}
+
+/** Lo que dice la fila cuando el valor elegido no llega al equipo. */
+function deliveryNote(setting, value) {
+  const d = deliveryOf(setting);
+  if (d.state !== "partial" || !isSet(value) || d.values.includes(value)) return null;
+  return `“${value ? "On" : "Off"}” isn't sent: the profile only has a value for “${d.values[0] ? "On" : "Off"}”. Leave it Not set.`;
 }
 
 export default function MdmPlatformSection({
   platform,
   groups,
   block,
+  loadedBlock = block,
   onChangeBlock,
   readOnly = false,
   /** Nº de equipos de esta plataforma que NO están supervisados. */
   unsupervisedCount = null,
 }) {
+  const [query, setQuery] = React.useState("");
+  const [onlyConfigured, setOnlyConfigured] = React.useState(false);
+
   // Aviso de aplicabilidad: si el operador configuró alguna clave que
   // exige supervisión y hay equipos sin supervisar, decirlo. Sin esto
   // configuraría algo que silenciosamente no ocurre en parte del parque.
@@ -192,24 +140,38 @@ export default function MdmPlatformSection({
     for (const g of groups) {
       for (const s of g.items) {
         if (!s.requiresSupervision) continue;
-        if (readByPath(block, s.key) !== undefined) out.push(s.label || s.key);
+        if (isSet(readByPath(block, s.key))) out.push(s.label || s.key);
       }
     }
     return out;
   }, [groups, block]);
 
+  const configuredCount = React.useMemo(
+    () => groups.reduce((n, g) => n + g.items.filter((s) => isSet(readByPath(block, s.key))).length, 0),
+    [groups, block]
+  );
+  const total = groups.reduce((n, g) => n + g.items.length, 0);
+  const shown = React.useMemo(
+    () => filterGroups(groups, { block, loadedBlock, query, onlyConfigured }),
+    [groups, block, loadedBlock, query, onlyConfigured]
+  );
+
   if (!groups.length) {
     return (
-      <Typography variant="body2" sx={{ color: BRAND.gray }}>
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
         No settings for this platform in the catalog yet.
       </Typography>
     );
   }
 
+  // En iOS no se entrega nada todavía y la cabecera ya lo dice: un chip por
+  // fila sería ruido. En macOS casi todo llega, y lo que no, se marca.
+  const markNotSent = platform === "macos";
+
   return (
-    <Box>
+    <Box sx={{ display: "grid", gap: 2, minWidth: 0 }}>
       {configuredSupervisionKeys.length > 0 && unsupervisedCount > 0 ? (
-        <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
+        <Alert severity="warning" sx={{ borderRadius: 2 }}>
           <strong>
             {configuredSupervisionKeys.length} setting
             {configuredSupervisionKeys.length === 1 ? "" : "s"} won&apos;t apply on {unsupervisedCount}{" "}
@@ -220,40 +182,106 @@ export default function MdmPlatformSection({
         </Alert>
       ) : null}
 
-      {groups.map((group) => (
-        <Box key={group.name} sx={{ mb: 2.5 }}>
-          <Typography
-            variant="overline"
-            sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.1 }}
-          >
-            {GROUP_LABELS[group.name] || group.name}
+      <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center" }}>
+        <TextField
+          size="small"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Find a setting"
+          slotProps={{
+            htmlInput: { "aria-label": "Find a setting" },
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: ICON.lg, color: "text.secondary" }} />
+                </InputAdornment>
+              ),
+            },
+          }}
+          sx={{ width: { xs: "100%", sm: 300 } }}
+        />
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={onlyConfigured ? "configured" : "all"}
+          onChange={(_e, v) => v && setOnlyConfigured(v === "configured")}
+          aria-label="Which settings to show"
+          sx={{
+            "& .MuiToggleButton-root": { textTransform: "none", fontWeight: 700, fontSize: TEXT.sm, px: 1.5, py: 0.5, color: BRAND.dark },
+            "& .Mui-selected": { bgcolor: `${BRAND.tealSoftStrong} !important`, color: `${BRAND.tealText} !important` },
+          }}
+        >
+          <ToggleButton value="all">All {total}</ToggleButton>
+          <ToggleButton value="configured">Configured {configuredCount}</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
+      {shown.length === 0 ? (
+        <Box sx={{ py: 4, textAlign: "center", border: `1px dashed ${BRAND.borderStrong}`, borderRadius: 2 }}>
+          <Typography sx={{ fontSize: TEXT.base, color: BRAND.dark, fontWeight: 600 }}>
+            {query.trim() ? `No settings match “${query.trim()}”.` : "Nothing is configured yet."}
           </Typography>
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-              gap: 2,
-              mt: 1,
-            }}
+          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.5 }}>
+            {query.trim()
+              ? "Try another word, or clear the search."
+              : "Every setting is Not set, so devices keep their own values. Show all settings to choose some."}
+          </Typography>
+          <Button
+            size="small"
+            onClick={() => (query.trim() ? setQuery("") : setOnlyConfigured(false))}
+            sx={{ mt: 1, textTransform: "none", fontWeight: 700, color: BRAND.tealText }}
           >
-            {group.items.map((s) => (
-              <Box key={s.key}>
-                {s.requiresSupervision ? (
-                  <Box sx={{ mb: 0.5 }}>
-                    <SupervisionChip />
-                  </Box>
-                ) : null}
-                <SettingControl
-                  setting={s}
-                  value={readByPath(block, s.key)}
-                  onChange={(v) => onChangeBlock(writeByPath(block, s.key, v))}
-                  readOnly={readOnly}
-                />
-              </Box>
-            ))}
-          </Box>
+            {query.trim() ? "Clear search" : "Show all settings"}
+          </Button>
         </Box>
-      ))}
+      ) : (
+        shown.map((group) => {
+          const full = groups.find((g) => g.name === group.name) || group;
+          const set = full.items.filter((s) => isSet(readByPath(block, s.key))).length;
+          return (
+            <SettingGroup
+              key={group.name}
+              id={`mdm-${platform}-${group.name}`}
+              title={groupLabel(group.name)}
+              count={set ? `${set} of ${full.items.length} set` : null}
+            >
+              {group.items.map((s) => {
+                const id = `mdm-${s.key.replace(/[^A-Za-z0-9]/g, "-")}`;
+                const value = readByPath(block, s.key);
+                const issue = settingIssue(s, value);
+                const notSent = markNotSent && deliveryOf(s).state === "saved";
+                const meta = (
+                  <>
+                    {s.requiresSupervision ? <SupervisionChip /> : null}
+                    {notSent ? <NotSentChip /> : null}
+                  </>
+                );
+                return (
+                  <SettingRow
+                    key={s.key}
+                    id={id}
+                    label={settingLabel(s, group.name)}
+                    meta={meta}
+                    description={[s.description, partialHint(s)].filter(Boolean).join(" ") || null}
+                    note={deliveryNote(s, value)}
+                    edited={!sameValue(value, readByPath(loadedBlock, s.key))}
+                    stacked={s.spec?.kind === "string" && (s.spec?.maxLength ?? 0) > 200}
+                  >
+                    <Control
+                      id={id}
+                      setting={s}
+                      value={value}
+                      issue={issue}
+                      readOnly={readOnly}
+                      onChange={(v) => onChangeBlock(writeByPath(block, s.key, v))}
+                    />
+                  </SettingRow>
+                );
+              })}
+            </SettingGroup>
+          );
+        })
+      )}
     </Box>
   );
 }

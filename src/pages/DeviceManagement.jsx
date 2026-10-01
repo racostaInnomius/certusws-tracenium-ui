@@ -8,7 +8,8 @@
 //   - Overview: qué funciona hoy (lo dice `/api/v1/mdm/status`) y las cifras.
 //   - Devices: equipos por MDM y por la app, con su detalle.
 //   - Enrollment: dar de alta un Mac/iPhone/iPad por su número de serie.
-//   - Policies: la política de la app (MAM) y los ajustes macOS / iOS.
+//   - Policies: los ajustes macOS e iPhone & iPad (MDM) y la política de la
+//     app (MAM), una tarjeta y un editor por política (MdmPoliciesTab, 1-oct).
 //   - Apple setup: el certificado de push de APNs de la organización (28-sep).
 //     Sólo con la capacidad `enrollment`, como toda la API de MDM; descargar
 //     la solicitud e instalar el `.pem` piden además ADMIN/OWNER.
@@ -17,10 +18,7 @@
 // tocar los bloques de configuración del agente ni de seguridad.
 
 import * as React from "react";
-import { Alert, Box, Button, Chip, Tab, Tabs, Tooltip, Typography } from "@mui/material";
-import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
-import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
-import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
+import { Alert, Box, Button, Typography } from "@mui/material";
 import PhonelinkSetupOutlinedIcon from "@mui/icons-material/PhonelinkSetupOutlined";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
@@ -29,7 +27,6 @@ import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import AppleIcon from "@mui/icons-material/Apple";
 
 import PageHeader from "../components/common/PageHeader";
-import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
@@ -38,6 +35,7 @@ import MdmOverviewTab from "../components/DeviceManagement/MdmOverviewTab";
 import MdmDevicesTab from "../components/DeviceManagement/MdmDevicesTab";
 import MdmEnrollmentTab from "../components/DeviceManagement/MdmEnrollmentTab";
 import MdmAppleSetupTab from "../components/DeviceManagement/MdmAppleSetupTab";
+import MdmPoliciesTab from "../components/DeviceManagement/MdmPoliciesTab";
 import { getMdmStatus, listMdmDevices, listMdmEnrollments } from "../api/mdm";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
@@ -50,8 +48,7 @@ import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 import { useConfirm } from "../components/common/ConfirmDialog";
-import { BRAND, TEXT } from "../theme/brand";
-import { formatDate } from "../utils/format";
+import { BRAND } from "../theme/brand";
 import {
   downloadMacosOrganizationProfile,
   getTenantPolicy,
@@ -64,9 +61,12 @@ import {
   managedAppFormToPolicy,
   extractPolicyEnvelope,
 } from "../components/Policies/policyTransforms";
-import { DetailRow, shortHash } from "../components/Policies/policyDisplay";
-import ManagedAppSection from "../components/Policies/ManagedAppSection";
-import MdmPlatformSection from "../components/Policies/MdmPlatformSection";
+import {
+  POLICY_KINDS,
+  POLICY_NAMES,
+  keepEditsAfterReload,
+  policyDirty,
+} from "../components/Policies/mdmPolicyModel";
 import useMdmCatalog from "../hooks/useMdmCatalog";
 import { useUnsavedChanges } from "../components/AgentSettings/useUnsavedChanges";
 
@@ -90,6 +90,7 @@ function TabPanel({ value, tab, children }) {
 }
 
 const EMPTY_MDM = { access: "unknown", status: null, devices: [], enrollments: [] };
+const EMPTY_POLICIES = { macos: {}, ios: {}, app: readManagedAppFromPolicy({}) };
 
 export default function DeviceManagement({ onNavigate }) {
   const { auth } = useAuthContext();
@@ -155,18 +156,19 @@ export default function DeviceManagement({ onNavigate }) {
   const shownTab = tab === "apple-setup" && !canEnroll ? "overview" : tab;
 
   const [policyRow, setPolicyRow] = React.useState(null);
-  // ManagedAppSection is props-driven against `form.managedApp`.
-  const [form, setForm] = React.useState(() => ({ managedApp: readManagedAppFromPolicy({}) }));
-  const [loadedMam, setLoadedMam] = React.useState(null);
 
-  // ── Modelo de intención MDM (por plataforma) ────────────────────────
-  // Un estado por plataforma porque cada una guarda su PROPIO dominio de
-  // política: así una edición de macOS no puede pisar iOS ni MAM.
+  // ── Las tres políticas de la pestaña Policies ───────────────────────
+  // macOS, iPhone & iPad y la app (MAM): una edición y una base cargada por
+  // política, porque cada una guarda su PROPIO dominio del documento —una
+  // edición de macOS no puede pisar iOS ni MAM—. `app` es el formulario MAM.
   const { groupsFor, loading: catalogLoading } = useMdmCatalog();
-  const [mdmTab, setMdmTab] = React.useState(0); // 0 = macOS, 1 = iOS
-  const [mdmBlocks, setMdmBlocks] = React.useState({ macos: {}, ios: {} });
-  const [loadedMdm, setLoadedMdm] = React.useState({ macos: "{}", ios: "{}" });
-  const [savingMdm, setSavingMdm] = React.useState(null); // plataforma en curso
+  const [edits, setEdits] = React.useState(EMPTY_POLICIES);
+  const [baseline, setBaseline] = React.useState(null);
+  const editsRef = React.useRef(edits);
+  editsRef.current = edits;
+  const baselineRef = React.useRef(baseline);
+  baselineRef.current = baseline;
+  const [savingKind, setSavingKind] = React.useState(null); // política en curso
   const [devices, setDevices] = React.useState([]);
   const [mdm, setMdm] = React.useState(EMPTY_MDM);
   const [loading, setLoading] = React.useState(true);
@@ -174,7 +176,6 @@ export default function DeviceManagement({ onNavigate }) {
   // "todavía no hay" colapsaban en el mismo null, y ese null desarma el
   // If-Match además de pintar defaults sin avisar.
   const [loadError, setLoadError] = React.useState(null);
-  const [saving, setSaving] = React.useState(false);
   const [pushing, setPushing] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
 
@@ -207,8 +208,11 @@ export default function DeviceManagement({ onNavigate }) {
     [canEnroll, tenantId]
   );
 
-  const load = React.useCallback(async () => {
-    if (!canManage || !tenantId) return;
+  // `keep`: políticas cuya edición sin guardar se conserva (tras guardar
+  // OTRA, o tras un 409). Devuelve las que no se pudieron conservar porque
+  // en el servidor habían cambiado — ver keepEditsAfterReload.
+  const load = React.useCallback(async ({ keep = [] } = {}) => {
+    if (!canManage || !tenantId) return { replaced: [] };
     try {
       setLoading(true);
       const [policyRes, devicesRes] = await Promise.all([
@@ -220,23 +224,32 @@ export default function DeviceManagement({ onNavigate }) {
         listAllKnownDevices().catch(() => ({ items: [] })),
         loadMdm(),
       ]);
-      const env = extractPolicyEnvelope(policyRes);
-      const policy = env.raw ?? {};
+      setDevices(Array.isArray(devicesRes?.items) ? devicesRes.items : []);
       setPolicyRow(policyRes ?? null);
-      setForm({ managedApp: readManagedAppFromPolicy(policy) });
-      setLoadedMam(JSON.stringify(managedAppFormToPolicy(readManagedAppFromPolicy(policy))));
+      // Sin documento no hay con qué comparar: lo editado se queda como está.
+      if (!policyRes && keep.length) return { replaced: [] };
 
+      const policy = extractPolicyEnvelope(policyRes).raw ?? {};
       // Bloques MDM tal cual vienen del documento — el catálogo decide qué
       // se renderiza, así que aquí no se normaliza nada.
-      const macos = policy?.macos && typeof policy.macos === "object" ? policy.macos : {};
-      const ios = policy?.ios && typeof policy.ios === "object" ? policy.ios : {};
-      setMdmBlocks({ macos, ios });
-      setLoadedMdm({ macos: JSON.stringify(macos), ios: JSON.stringify(ios) });
-
-      setDevices(Array.isArray(devicesRes?.items) ? devicesRes.items : []);
+      const server = {
+        macos: policy?.macos && typeof policy.macos === "object" ? policy.macos : {},
+        ios: policy?.ios && typeof policy.ios === "object" ? policy.ios : {},
+        app: readManagedAppFromPolicy(policy),
+      };
+      const { values, replaced } = keepEditsAfterReload({
+        server,
+        loaded: baselineRef.current,
+        current: editsRef.current,
+        keep,
+      });
+      setEdits(values);
+      setBaseline(server);
+      return { replaced };
     } catch (e) {
       console.error(e);
       showSnack("Failed to load device management policy", "error");
+      return { replaced: [] };
     } finally {
       setLoading(false);
     }
@@ -249,19 +262,11 @@ export default function DeviceManagement({ onNavigate }) {
   // Tras crear o revocar un alta: de la red, no de la caché de 60 s.
   const reloadMdm = React.useCallback(() => loadMdm({ fresh: true }), [loadMdm]);
 
-  const currentSerialized = React.useMemo(
-    () => JSON.stringify(managedAppFormToPolicy(form.managedApp)),
-    [form.managedApp]
+  const dirty = React.useMemo(
+    () => Object.fromEntries(POLICY_KINDS.map((k) => [k, policyDirty(k, edits, baseline)])),
+    [edits, baseline]
   );
-  const dirty = loadedMam !== null && currentSerialized !== loadedMam;
-  const mdmDirty = React.useMemo(
-    () => ({
-      macos: JSON.stringify(mdmBlocks.macos || {}) !== loadedMdm.macos,
-      ios: JSON.stringify(mdmBlocks.ios || {}) !== loadedMdm.ios,
-    }),
-    [mdmBlocks, loadedMdm]
-  );
-  const anyDirty = dirty || mdmDirty.macos || mdmDirty.ios;
+  const anyDirty = POLICY_KINDS.some((k) => dirty[k]);
 
   // ⚠️ `load` REESCRIBE el formulario MAM y los bloques macOS/iOS con lo que
   // devuelve el servidor. Pasado tal cual a `useAutoRefresh` —que viene
@@ -304,65 +309,63 @@ export default function DeviceManagement({ onNavigate }) {
     return { ios, android, total: mobileDevices.length };
   }, [mobileDevices]);
 
-  const handleSave = async () => {
-    if (!canManage || !tenantId) return;
-    if (loadError) {
-      showSnack("The current policy could not be read — reload before saving.", "error");
-      return;
-    }
-    try {
-      setSaving(true);
-      const mam = managedAppFormToPolicy(form.managedApp);
-      // Replace-slice. Note the legacy `managedApp` alias is in this
-      // domain's whitelist too, so omitting it here removes it — the UI
-      // authors the canonical `mam` key only.
-      const slice = mam ? { mam } : {};
-      const expectedVersion = extractPolicyEnvelope(policyRow).version;
-      await patchTenantPolicyDomain(tenantId, "device-management", slice, { expectedVersion });
-      showSnack("Managed app policy saved", "success");
-      await load();
-    } catch (e) {
-      if (e?.status === 409) {
-        showSnack(
-          "Policy was modified by someone else. Reloaded — review your changes and save again.",
-          "warning"
-        );
-        await load();
-      } else {
-        console.error(e);
-        showSnack(e?.body?.message || "Failed to save managed app policy", "error");
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
+  const macAgentCount = React.useMemo(
+    () =>
+      devices.filter((d) => {
+        const p = String(d?.platform || d?.os || "").toLowerCase();
+        return p === "macos" || p === "darwin";
+      }).length,
+    [devices]
+  );
 
-  // Guardado del bloque MDM de UNA plataforma. Cada una va a su propio
-  // dominio (`mdm-macos` / `mdm-ios`), que es lo que garantiza que un
-  // guardado no pueda tocar la otra plataforma ni el bloque MAM.
-  const handleSaveMdm = async (platform) => {
+  // Guardado de UNA política. Cada una va a su propio dominio
+  // (`device-management` para la app, `mdm-macos` / `mdm-ios`), que es lo que
+  // garantiza que un guardado no pueda tocar las otras dos. Lo que esté a
+  // medio editar en las otras se conserva al recargar.
+  const handleSave = async (kind) => {
     if (!canManage || !tenantId) return;
     if (loadError) {
       showSnack("The current policy could not be read — reload before saving.", "error");
       return;
     }
+    const name = POLICY_NAMES[kind];
+    const others = POLICY_KINDS.filter((k) => k !== kind && dirty[k]);
+    const keptNote = (replaced) =>
+      replaced.length
+        ? ` Someone else saved the ${replaced.map((k) => POLICY_NAMES[k]).join(" and ")} policy meanwhile — your unsaved edits there were replaced with theirs.`
+        : "";
     try {
-      setSavingMdm(platform);
-      const block = mdmBlocks[platform] || {};
-      // Slice de reemplazo: un bloque vacío borra la sección entera, que
-      // es justo lo que el operador espera al dejar todo "sin definir".
-      const slice = Object.keys(block).length > 0 ? { [platform]: block } : {};
+      setSavingKind(kind);
+      let domain;
+      let slice;
+      if (kind === "app") {
+        // Replace-slice. Note the legacy `managedApp` alias is in this
+        // domain's whitelist too, so omitting it here removes it — the UI
+        // authors the canonical `mam` key only.
+        const mam = managedAppFormToPolicy(edits.app);
+        domain = "device-management";
+        slice = mam ? { mam } : {};
+      } else {
+        // Slice de reemplazo: un bloque vacío borra la sección entera, que
+        // es justo lo que el operador espera al dejar todo "sin definir".
+        const block = edits[kind] || {};
+        domain = `mdm-${kind}`;
+        slice = Object.keys(block).length > 0 ? { [kind]: block } : {};
+      }
       const expectedVersion = extractPolicyEnvelope(policyRow).version;
-      await patchTenantPolicyDomain(tenantId, `mdm-${platform}`, slice, { expectedVersion });
-      showSnack(`${platform === "macos" ? "macOS" : "iOS"} policy saved`, "success");
-      await load();
+      await patchTenantPolicyDomain(tenantId, domain, slice, { expectedVersion });
+      const { replaced } = await load({ keep: others });
+      const saved = kind === "app" ? "App policy saved." : `${name} settings saved.`;
+      showSnack(`${saved}${keptNote(replaced)}`, replaced.length ? "warning" : "success");
     } catch (e) {
       if (e?.status === 409) {
+        // Alguien guardó el documento mientras tanto: se recarga conservando
+        // lo editado donde el servidor no cambió, para revisar y volver a guardar.
+        const { replaced } = await load({ keep: POLICY_KINDS.filter((k) => dirty[k]) });
         showSnack(
-          "Policy was modified by someone else. Reloaded — review your changes and save again.",
+          `The policy was changed by someone else. Reloaded — your edits are kept where nothing changed; review and save again.${keptNote(replaced)}`,
           "warning"
         );
-        await load();
       } else {
         console.error(e);
         // El backend rechaza claves fuera del catálogo con el detalle por
@@ -371,10 +374,30 @@ export default function DeviceManagement({ onNavigate }) {
         const detail = Array.isArray(issues) && issues.length
           ? issues.map((i) => `${i.field}: ${i.message}`).join(" · ")
           : e?.body?.message;
-        showSnack(detail || "Could not save the policy", "error");
+        showSnack(detail || `Could not save the ${name} policy`, "error");
       }
     } finally {
-      setSavingMdm(null);
+      setSavingKind(null);
+    }
+  };
+
+  const handleDiscard = (kind) => {
+    if (!baseline) return;
+    setEdits((prev) => ({ ...prev, [kind]: baseline[kind] }));
+  };
+
+  // El perfil de la organización sale de la política GUARDADA de macOS.
+  const handleDownloadProfile = async () => {
+    try {
+      const name = await downloadMacosOrganizationProfile(tenantId);
+      showSnack(`Downloaded ${name || "the organization's profile"}`, "success");
+    } catch (e) {
+      showSnack(
+        e?.status === 404
+          ? "The macOS policy has no settings a profile can deliver yet."
+          : e?.body?.message || e?.message || "Could not download the profile.",
+        e?.status === 404 ? "info" : "error"
+      );
     }
   };
 
@@ -503,206 +526,29 @@ export default function DeviceManagement({ onNavigate }) {
       </TabPanel>
 
       <TabPanel value={shownTab} tab="policies">
-        {/* ── Política de la app (MAM) ───────────────────────────────── */}
-        <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
-          <Box sx={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 1, mb: 0.5 }}>
-            <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Tracenium app (MAM)</Typography>
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              Enforced by the app itself on iOS and Android, including personal devices.
-            </Typography>
-          </Box>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 1.5 }}>
-            <DetailRow label="Policy version" value={env.version ?? "—"} mono />
-            <DetailRow label="Hash" value={shortHash(env.hash)} mono />
-            <DetailRow label="Updated" value={formatDate(env.updatedAt)} />
-          </Box>
-
-          <ManagedAppSection form={form} onChange={setForm} readOnly={loading} />
-
-          <Box sx={{ mt: 2, display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-            <Button
-              variant="contained"
-              startIcon={<SaveOutlinedIcon />}
-              onClick={handleSave}
-              disabled={saving || loading || !dirty}
-              sx={{
-                textTransform: "none",
-                fontWeight: 800,
-                bgcolor: BRAND.teal,
-                "&:hover": { bgcolor: BRAND.tealHover },
-              }}
-            >
-              {saving ? "Saving…" : "Save app policy"}
-            </Button>
-            {dirty ? (
-              <Typography variant="caption" sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}>
-                Unsaved changes
-              </Typography>
-            ) : null}
-            {/* Aparte y con confirmación: empuja la política ENTERA del tenant
-                y borra los overrides por equipo (plan MDM/MAM, hallazgo 3). */}
-            <Box sx={{ ml: { sm: "auto" } }}>
-              <Tooltip title="Wakes every device to re-fetch the whole tenant policy and resets device-level overrides.">
-                <span>
-                  <Button
-                    variant="outlined"
-                    startIcon={<SendOutlinedIcon />}
-                    onClick={handlePush}
-                    disabled={pushing || loading}
-                    sx={{
-                      textTransform: "none",
-                      fontWeight: 700,
-                      borderColor: BRAND.teal,
-                      color: BRAND.tealText,
-                    }}
-                  >
-                    {pushing ? "Pushing…" : "Push to all devices…"}
-                  </Button>
-                </span>
-              </Tooltip>
-            </Box>
-          </Box>
-        </SectionPaper>
-
-        {/* ── Ajustes del sistema por plataforma (MDM) ───────────────────
-            Secciones separadas macOS / iOS: las políticas NO son las mismas
-            en ambas, y cada una guarda su propio dominio de política. Los
-            controles se renderizan desde el catálogo del backend — esta
-            página no conoce ningún ajuste por su nombre. */}
-        <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-            <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Device settings (MDM)</Typography>
-            <Chip
-              size="small"
-              label="beta"
-              sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray }}
-            />
-          </Box>
-          <Typography variant="body2" sx={{ color: "text.secondary", mb: 1.5 }}>
-            Operating-system settings for enrolled Macs, iPhones and iPads, per platform — macOS and
-            iOS settings aren&apos;t equivalent.{" "}
-            {/* 1-oct: los Macs del MDM de Tracenium reciben el perfil de la
-                organización en cada conexión (profile-delivery.service);
-                iPhone y iPad todavía no. `deliverable` es sólo el push. */}
-            {`macOS settings reach Macs enrolled in Tracenium MDM as a configuration profile on their next check-in${
-              mdm.status?.commands?.deliverable ? "" : " (about every 4 hours)"
-            }.`}{" "}
-            iPhone and iPad settings are saved, not sent to devices yet.
-          </Typography>
-
-          <Tabs
-            value={mdmTab}
-            onChange={(_e, v) => setMdmTab(v)}
-            sx={{
-              mb: 2,
-              borderBottom: `1px solid ${BRAND.border}`,
-              "& .MuiTab-root": { textTransform: "none", fontWeight: 800, minHeight: 42 },
-              "& .MuiTabs-indicator": { bgcolor: BRAND.teal, height: 3, borderRadius: 999 },
-            }}
-          >
-            <Tab label="macOS" />
-            <Tab label="iPhone & iPad" />
-          </Tabs>
-
-          {catalogLoading ? (
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              Loading settings…
-            </Typography>
-          ) : (
-            (() => {
-              const platform = mdmTab === 1 ? "ios" : "macos";
-              const block = mdmBlocks[platform] || {};
-              const isDirty = mdmDirty[platform];
-              // Sin estado de supervisión real todavía: el aviso de
-              // aplicabilidad cuenta toda la flota de esa plataforma.
-              const unsupervised =
-                platform === "ios" ? mobileCounts.ios : devices.filter((d) => {
-                  const p = String(d?.platform || d?.os || "").toLowerCase();
-                  return p === "macos" || p === "darwin";
-                }).length;
-
-              return (
-                <Box>
-                  <MdmPlatformSection
-                    platform={platform}
-                    groups={groupsFor(platform)}
-                    block={block}
-                    onChangeBlock={(next) =>
-                      setMdmBlocks((prev) => ({ ...prev, [platform]: next }))
-                    }
-                    readOnly={loading}
-                    unsupervisedCount={unsupervised}
-                  />
-                  <Box sx={{ mt: 1, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                    <Button
-                      variant="contained"
-                      startIcon={<SaveOutlinedIcon />}
-                      onClick={() => handleSaveMdm(platform)}
-                      disabled={savingMdm !== null || loading || !isDirty}
-                      sx={{
-                        textTransform: "none",
-                        fontWeight: 800,
-                        bgcolor: BRAND.teal,
-                        "&:hover": { bgcolor: BRAND.tealHover },
-                      }}
-                    >
-                      {savingMdm === platform
-                        ? "Saving…"
-                        : `Save ${platform === "macos" ? "macOS" : "iPhone & iPad"} settings`}
-                    </Button>
-                    {/* El perfil de la organización sale de la política GUARDADA:
-                        el mismo que el MDM de Tracenium entrega a sus Macs
-                        (ADR-0002). La descarga es para los Macs SIN nuestro
-                        MDM: a mano o por el MDM del cliente. Identificador
-                        fijo: uno nuevo reemplaza al anterior. */}
-                    {platform === "macos" ? (
-                      <Tooltip
-                        arrow
-                        title={
-                          isDirty
-                            ? "Save the policy first: the profile is built from the saved macOS policy."
-                            : "Macs enrolled in Tracenium MDM get this profile on their own. For other Macs, download it and upload it to your MDM, or open it on the Mac and approve it in System Settings › Privacy & Security › Profiles. A newer version replaces the old one."
-                        }
-                      >
-                        <span>
-                          <Button
-                            variant="outlined"
-                            startIcon={<DownloadOutlinedIcon />}
-                            disabled={isDirty || loading || !tenantId}
-                            onClick={async () => {
-                              try {
-                                const name = await downloadMacosOrganizationProfile(tenantId);
-                                showSnack(`Downloaded ${name || "the organization's profile"}`, "success");
-                              } catch (e) {
-                                showSnack(
-                                  e?.status === 404
-                                    ? "The macOS policy has no settings a profile can deliver yet."
-                                    : e?.body?.message || e?.message || "Could not download the profile.",
-                                  e?.status === 404 ? "info" : "error"
-                                );
-                              }
-                            }}
-                            sx={{ textTransform: "none", fontWeight: 700 }}
-                          >
-                            Download profile
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    ) : null}
-                    {isDirty ? (
-                      <Typography
-                        variant="caption"
-                        sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}
-                      >
-                        Unsaved changes
-                      </Typography>
-                    ) : null}
-                  </Box>
-                </Box>
-              );
-            })()
-          )}
-        </SectionPaper>
+        <MdmPoliciesTab
+          edits={edits}
+          baseline={baseline}
+          dirty={dirty}
+          onEdit={(kind, value) => setEdits((prev) => ({ ...prev, [kind]: value }))}
+          onSave={handleSave}
+          onDiscard={handleDiscard}
+          savingKind={savingKind}
+          loading={loading}
+          loadError={loadError}
+          onRetry={() => load()}
+          groupsFor={groupsFor}
+          catalogLoading={catalogLoading}
+          mdm={mdm}
+          appDeviceCount={mobileCounts.total}
+          // Sin estado de supervisión real todavía: el aviso de
+          // aplicabilidad cuenta toda la flota de esa plataforma.
+          unsupervised={{ ios: mobileCounts.ios, macos: macAgentCount }}
+          onPush={handlePush}
+          pushing={pushing}
+          onDownloadProfile={handleDownloadProfile}
+          envelope={env}
+        />
       </TabPanel>
 
       {canEnroll ? (
