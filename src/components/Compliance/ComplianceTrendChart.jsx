@@ -208,10 +208,10 @@ export default function ComplianceTrendChart({ notify, reloadKey, assetGroupId =
         </Box>
       ) : isFramework ? (
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={fw.rows} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+          <LineChart data={fw.rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={BRAND.border} vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={32} />
-            <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
+            <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={34} />
             <Tooltip contentStyle={{ fontSize: TEXT.sm, borderRadius: 8, border: `1px solid ${BRAND.border}` }} />
             <Legend wrapperStyle={{ fontSize: TEXT.xs }} />
             {orderSeries(fw.frameworks).map((f, i) => (
@@ -231,7 +231,7 @@ export default function ComplianceTrendChart({ notify, reloadKey, assetGroupId =
         </ResponsiveContainer>
       ) : (
         <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={fleet} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+          <AreaChart data={fleet} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="scpScoreFill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={BRAND.teal} stopOpacity={0.35} />
@@ -241,9 +241,9 @@ export default function ComplianceTrendChart({ notify, reloadKey, assetGroupId =
             <CartesianGrid strokeDasharray="3 3" stroke={BRAND.border} vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={32} />
             {view === "score" ? (
-              <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
+              <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={34} />
             ) : (
-              <YAxis allowDecimals={false} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
+              <YAxis allowDecimals={false} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={34} />
             )}
             <Tooltip
               contentStyle={{ fontSize: TEXT.sm, borderRadius: 8, border: `1px solid ${BRAND.border}` }}
