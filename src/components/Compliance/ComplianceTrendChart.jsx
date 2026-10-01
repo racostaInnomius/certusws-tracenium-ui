@@ -73,6 +73,22 @@ export function orderSeries(keys) {
   });
 }
 
+// Con la serie de una familia en el gráfico ("CIS Benchmarks (all)"), sus
+// benchmarks sueltos sobran: once líneas CIS encima de la suma no se leen.
+// Se quitan sólo cuando la serie de la familia está; si el filtro de la
+// página es un benchmark concreto, el backend no manda la familia y ese
+// benchmark se queda. `families` = lo que trae el resumen de la página
+// ({ key: "family:cis", frameworks: [...] }).
+export function collapseFamilyMembers(keys, families) {
+  const present = new Set(keys);
+  const hidden = new Set();
+  for (const fam of families || []) {
+    if (!fam?.key || !present.has(fam.key)) continue;
+    for (const m of Array.isArray(fam.frameworks) ? fam.frameworks : []) if (m !== fam.key) hidden.add(m);
+  }
+  return keys.filter((k) => !hidden.has(k));
+}
+
 function prettyFramework(key) {
   const raw = String(key);
   if (raw.startsWith("family:")) {
@@ -101,7 +117,9 @@ function scoreDelta(buckets) {
 // `assetGroupId` / `framework` — the page's filters. With a framework, "Avg
 // score" and "Devices" are measured against it (the last point is then the
 // filtered headline) and "By framework" shows only its lines.
-export default function ComplianceTrendChart({ notify, reloadKey, assetGroupId = "", framework = "" }) {
+// `families` — las familias del resumen de la página: en "By framework" la
+// familia es una línea y sus benchmarks no se dibujan aparte.
+export default function ComplianceTrendChart({ notify, reloadKey, assetGroupId = "", framework = "", families = [] }) {
   const [windowDays, setWindowDays] = React.useState(30);
   const [view, setView] = React.useState("score"); // 'score' | 'devices' | 'framework'
   const [fleet, setFleet] = React.useState([]);
@@ -161,9 +179,13 @@ export default function ComplianceTrendChart({ notify, reloadKey, assetGroupId =
     };
   }, [windowDays, isFramework, notify, reloadKey, assetGroupId, framework]);
 
+  const series = React.useMemo(
+    () => orderSeries(collapseFamilyMembers(fw.frameworks, families)),
+    [fw.frameworks, families]
+  );
   const delta = view === "score" ? scoreDelta(fleet) : null;
   const enoughData = isFramework
-    ? fw.rows.length >= 1 && fw.frameworks.length >= 1
+    ? fw.rows.length >= 1 && series.length >= 1
     : fleet.filter((b) => Number.isFinite(b.score)).length >= 2;
 
   return (
@@ -214,7 +236,7 @@ export default function ComplianceTrendChart({ notify, reloadKey, assetGroupId =
             <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={34} />
             <Tooltip contentStyle={{ fontSize: TEXT.sm, borderRadius: 8, border: `1px solid ${BRAND.border}` }} />
             <Legend wrapperStyle={{ fontSize: TEXT.xs }} />
-            {orderSeries(fw.frameworks).map((f, i) => (
+            {series.map((f, i) => (
               <Line
                 key={f}
                 type="monotone"

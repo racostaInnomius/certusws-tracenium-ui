@@ -9,7 +9,7 @@ vi.mock("../../api/compliance", () => ({
   getFrameworkComplianceTimeseries: vi.fn(),
 }));
 import { getFleetComplianceTimeseries, getFrameworkComplianceTimeseries } from "../../api/compliance";
-import ComplianceTrendChart, { orderSeries } from "./ComplianceTrendChart";
+import ComplianceTrendChart, { collapseFamilyMembers, orderSeries } from "./ComplianceTrendChart";
 
 afterEach(() => {
   cleanup();
@@ -86,6 +86,23 @@ describe("ComplianceTrendChart", () => {
       "nist_csf_2.0",
     ]);
     expect(orderSeries([])).toEqual([]);
+  });
+
+  it("draws a family as one line: its benchmarks go when the family series is there", () => {
+    const families = [
+      { key: "family:cis", label: "CIS Benchmarks", frameworks: ["cis_windows_11_v3.0", "cis_macos_15_v2.1.0"] },
+      { key: "nist_csf_2.0", label: "NIST CSF 2.0", frameworks: ["nist_csf_2.0"] },
+    ];
+    expect(
+      collapseFamilyMembers(["family:cis", "cis_windows_11_v3.0", "cis_macos_15_v2.1.0", "nist_csf_2.0"], families)
+    ).toEqual(["family:cis", "nist_csf_2.0"]);
+    // Filtro en un benchmark concreto: no llega la familia → el benchmark se queda.
+    expect(collapseFamilyMembers(["cis_windows_11_v3.0"], families)).toEqual(["cis_windows_11_v3.0"]);
+    // Sin familias (backend anterior): todo tal cual.
+    expect(collapseFamilyMembers(["family:cis", "cis_windows_11_v3.0"], undefined)).toEqual([
+      "family:cis",
+      "cis_windows_11_v3.0",
+    ]);
   });
 
   it("shows a per-framework empty state before any data is recorded", async () => {

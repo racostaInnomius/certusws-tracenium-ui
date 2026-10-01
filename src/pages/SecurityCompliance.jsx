@@ -1675,6 +1675,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             reloadKey={refreshToken}
             assetGroupId={assetGroupId}
             framework={selectedFramework}
+            families={families}
           />
         </AccordionDetails>
       </Accordion>
