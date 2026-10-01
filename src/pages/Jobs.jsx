@@ -7,15 +7,18 @@ import {
   Button,
   Checkbox,
   Chip,
+  CircularProgress,
   Collapse,
   Divider,
   FormControlLabel,
+  IconButton,
   MenuItem,
   Paper,
   Radio,
   RadioGroup,
   Stack,
   TextField,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme
@@ -40,6 +43,7 @@ import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
+import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import { DataGrid } from "@mui/x-data-grid";
 import { getJobsTimeseries } from "../api/overview";
 import JobsTimeseriesChart from "../components/Overview/JobsTimeseriesChart";
@@ -85,7 +89,7 @@ import {
   validateNumericField,
   resolveTypeFilter,
 } from "../utils/jobForm";
-import { deriveTriage, failureCausesOf, groupFailingDevices, groupFailureCauses, isStuckJob } from "../utils/jobInsights";
+import { deriveTriage, failureCausesOf, groupFailingDevices, groupFailureCauses, isInFlightStatus, isStuckJob } from "../utils/jobInsights";
 import { describeJobResult, isAckError, summarizeJobError } from "../utils/jobDescribe";
 import { CHART_CATEGORICAL } from "../theme/chartPalette";
 import {
@@ -884,6 +888,64 @@ export default function Jobs({ onNavigate }) {
     }
   }, [canManageJobs, tenantId, serverStatus, serverSince]);
 
+  /**
+   * Pide UN job al servidor y parchea su fila en el historial, sin tocar las
+   * demás. Devuelve el job, o null.
+   *
+   * ⚠️ `cache: "reload"` NO ES OPCIONAL. `getJob` pasa por la caché de 60 s de
+   * `httpGetJson`: sin esto, refrescar un job devolvía durante un minuto la
+   * misma fila guardada y el botón parecía no hacer nada — el mismo fallo que
+   * tuvo el Refresh de toda la página. «reload» va a la red sólo para esta URL
+   * y deja la entrada al día para el siguiente lector (el detalle).
+   */
+  const refreshJobRow = React.useCallback(async (jobId) => {
+    const response = await getJob(jobId, { cache: "reload" });
+    const job = response?.job ?? null;
+    if (job) {
+      setTenantJobs((prev) =>
+        prev.map((row) => (row.job_id === job.job_id ? { ...row, ...job } : row))
+      );
+    }
+    return job;
+  }, []);
+
+  // Las filas que se están refrescando ahora mismo, para su indicador de carga.
+  const [refreshingJobIds, setRefreshingJobIds] = React.useState(() => new Set());
+
+  /**
+   * El botón de refrescar de UNA fila del historial.
+   *
+   * Para «el job que acabo de enviar»: ver si ya pasó de `pending` sin recargar
+   * las 200 filas ni esperar al auto-refresco.
+   *
+   * ⚠️ Corta la propagación: la fila entera abre el detalle al pulsarla, y el
+   * botón no debe hacer eso.
+   */
+  const handleRefreshRow = React.useCallback(
+    async (jobId, event) => {
+      event?.stopPropagation?.();
+      if (!jobId) return;
+      setRefreshingJobIds((prev) => new Set(prev).add(jobId));
+      try {
+        const job = await refreshJobRow(jobId);
+        // Si es el job abierto en el detalle, que el detalle diga lo mismo
+        // que la fila: dos estados distintos del mismo job en pantalla es
+        // justo lo que `loadJobDetail` evita en la otra dirección.
+        if (job && job.job_id === selectedJobId) setSelectedJob(job);
+      } catch (e) {
+        console.error(e);
+        setSnackbar({ open: true, message: "Failed to refresh this job", severity: "error" });
+      } finally {
+        setRefreshingJobIds((prev) => {
+          const next = new Set(prev);
+          next.delete(jobId);
+          return next;
+        });
+      }
+    },
+    [refreshJobRow, selectedJobId]
+  );
+
   const loadJobDetail = React.useCallback(async (jobId) => {
     if (!canManageJobs || !jobId) {
       setSelectedJob(null);
@@ -892,20 +954,16 @@ export default function Jobs({ onNavigate }) {
 
     try {
       setLoadingJobDetail(true);
-      const response = await getJob(jobId);
-      const job = response?.job ?? null;
+      // The table row backing the detail may be stale (auto-refresh runs on
+      // its own cadence, not on every click), so the same fetch patches that
+      // row in place: a click never shows a status here that contradicts what
+      // is still sitting in Tenant Job History.
+      //
+      // ⚠️ Antes esto decía «the detail fetch is always fresh», y no lo era:
+      // `getJob` sin opciones salía de la caché de 60 s, así que reabrir un job
+      // antes de un minuto enseñaba —y copiaba a la fila— el estado guardado.
+      const job = await refreshJobRow(jobId);
       setSelectedJob(job);
-
-      // The detail fetch is always fresh; the table row backing it may
-      // not be (auto-refresh runs on its own cadence, not on every
-      // click). Patch just that row in place so a click never shows a
-      // status here that contradicts what's still sitting in Tenant
-      // Job History — no need to wait for the next refresh tick.
-      if (job) {
-        setTenantJobs((prev) =>
-          prev.map((row) => (row.job_id === job.job_id ? { ...row, ...job } : row))
-        );
-      }
     } catch (e) {
       console.error(e);
       setSelectedJob(null);
@@ -917,7 +975,7 @@ export default function Jobs({ onNavigate }) {
     } finally {
       setLoadingJobDetail(false);
     }
-  }, [canManageJobs]);
+  }, [canManageJobs, refreshJobRow]);
 
   // Reconcile the selected device / job type against the loaded metadata.
   // Idempotent: keeps the current selection when it's still valid, so it's
@@ -1435,9 +1493,40 @@ export default function Jobs({ onNavigate }) {
         // La línea legible, no el volcado: un lote fallido traía 23 KB de
         // base64 aquí y en el `title` (ver summarizeJobError).
         const error = summarizeJobError(params.row);
+        // ⚠️ SÓLO EN JOBS EN CURSO, y nunca en un lote. Uno terminado no cambia
+        // (Retry ya refresca solo). Un lote son N jobs —hasta 53 equipos en
+        // T111— y refrescarlo serían N peticiones por clic: para eso está el
+        // Refresh de la página, y si hiciera falta, un filtro por lote en el
+        // servidor. Va DENTRO de esta celda, no en una columna propia: le
+        // sobra sitio y no mueve el ancho de la tabla.
+        const canRefresh = isInFlightStatus(params.value) && Boolean(params.row.job_id);
+        const refreshing = refreshingJobIds.has(params.row.job_id);
         return (
           <Box sx={{ minWidth: 0, py: 0.5 }}>
-            {renderStatusChip(params.value, params.row.attempts)}
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+              {renderStatusChip(params.value, params.row.attempts)}
+              {canRefresh ? (
+                <Tooltip title="Refresh this job's status">
+                  <span>
+                    <IconButton
+                      size="small"
+                      aria-label="Refresh this job's status"
+                      disabled={refreshing}
+                      onClick={(e) => handleRefreshRow(params.row.job_id, e)}
+                      // `TEXT_MUTED`, no `BRAND.gray`: ése es un RELLENO
+                      // (#BEBEBE, 1,9:1 sobre blanco) y un icono pide 3:1.
+                      sx={{ p: 0.25, color: TEXT_MUTED, "&:hover": { color: BRAND.tealText } }}
+                    >
+                      {refreshing ? (
+                        <CircularProgress size={ICON.sm} sx={{ color: BRAND.tealText }} />
+                      ) : (
+                        <RefreshOutlinedIcon sx={{ fontSize: ICON.md }} />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              ) : null}
+            </Stack>
             {error ? (
               <Typography
                 sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText, mt: 0.25 }}

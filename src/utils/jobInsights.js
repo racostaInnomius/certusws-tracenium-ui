@@ -12,6 +12,18 @@ const IN_FLIGHT = ["pending", "sent", "running", "retrying"];
 const FAILED = ["failed", "timeout"];
 
 const lower = (v) => String(v || "").toLowerCase();
+
+/**
+ * ¿Puede cambiar todavía el estado de este job?
+ *
+ * Lo usa el botón de refrescar de cada fila del historial: un job terminado no
+ * cambia —salvo con Retry, que ya refresca por su cuenta—, así que el botón
+ * sólo sale donde puede servir. Es la MISMA lista que excluye lo «en vuelo» de
+ * la tasa de éxito; exportarla evita una tercera copia en Jobs.jsx.
+ */
+export function isInFlightStatus(status) {
+  return IN_FLIGHT.includes(lower(status));
+}
 const ms = (v) => {
   const t = Date.parse(v);
   return Number.isFinite(t) ? t : null;

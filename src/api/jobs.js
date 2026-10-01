@@ -77,8 +77,17 @@ export async function listDeviceJobs(deviceId, params = {}) {
   );
 }
 
-export async function getJob(jobId) {
-  return httpGetJson(`${BASE}/jobs/${encodeURIComponent(jobId)}`);
+/**
+ * Un job por su id.
+ *
+ * ⚠️ `options` llega tal cual a `httpGetJson`, que sirve de una caché de 60 s.
+ * Quien necesite el estado de AHORA —refrescar una fila, abrir su detalle—
+ * pasa `{ cache: "reload" }`: va a la red sólo para esta URL y deja la entrada
+ * actualizada para el siguiente lector. Sin eso, un «refrescar» devuelve
+ * durante un minuto la misma fila y parece que no hace nada.
+ */
+export async function getJob(jobId, options = {}) {
+  return httpGetJson(`${BASE}/jobs/${encodeURIComponent(jobId)}`, options);
 }
 
 export async function retryJob(jobId) {
