@@ -794,9 +794,11 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         const n = res?.added?.length ?? 0;
         showToast({
           severity: "success",
+          // 1-oct: los Macs del MDM de Tracenium lo reciben SOLOS
+          // (profile-delivery.service); el resto, con el perfil descargado.
           message: n
-            ? `Added ${n} setting${n === 1 ? "" : "s"} to the organization's macOS policy. Macs get ${n === 1 ? "it" : "them"} with the organization's profile.`
-            : "Already in the organization's macOS policy. Macs get it with the organization's profile.",
+            ? `Added ${n} setting${n === 1 ? "" : "s"} to the organization's macOS policy. Macs enrolled in Tracenium MDM get the updated profile on their next check-in (about every 4 hours); other Macs need the profile installed.`
+            : "Already in the organization's macOS policy. Macs enrolled in Tracenium MDM get it with the organization's profile; other Macs need the profile installed.",
           action: { label: "Download profile", onClick: handleDownloadMacProfile },
         });
         return res;
@@ -1298,7 +1300,12 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             canManage={canManage}
             onOpenAlertRules={openAlertRules}
           />
-          <RemediationHubPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} />
+          <RemediationHubPanel
+            reloadKey={refreshToken}
+            onToast={showToast}
+            canManage={canManage}
+            onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
+          />
         </Stack>
       ) : null}
 

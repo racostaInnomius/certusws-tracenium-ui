@@ -299,6 +299,10 @@ export default function DeviceDrawerContent({
     [visibleFindings, selectedIds]
   );
   const selectedFixPlan = React.useMemo(() => bulkFixPlan(selectedFindings), [selectedFindings]);
+  // Lo que sólo arregla un perfil también se arregla desde aquí: va a la
+  // política macOS (1-oct). Antes una selección SÓLO de esos dejaba el menú
+  // apagado y el diálogo que los añade era inalcanzable.
+  const selectedProfileSettings = onAddToMacPolicy ? selectedFixPlan.profileIntents.length : 0;
 
   if (!agentId) return null;
 
@@ -590,13 +594,15 @@ export default function DeviceDrawerContent({
                 pueden aplicar de verdad, y se apaga cuando no hay ninguno. */}
             <MenuItem
               onClick={() => { setBulkMenuAnchor(null); setBulkFixFindings(selectedFindings); }}
-              disabled={selectedFixPlan.checkIds.length === 0}
+              disabled={selectedFixPlan.checkIds.length === 0 && selectedProfileSettings === 0}
             >
               <BuildOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
               <Typography variant="body2">
                 {selectedFixPlan.checkIds.length > 0
                   ? `Apply fixes (${selectedFixPlan.checkIds.length})…`
-                  : "No selected finding can be fixed from here"}
+                  : selectedProfileSettings > 0
+                    ? `Add ${selectedProfileSettings} setting${selectedProfileSettings === 1 ? "" : "s"} to the macOS policy…`
+                    : "No selected finding can be fixed from here"}
               </Typography>
             </MenuItem>
             <MenuItem onClick={handleBulkRequestException}>

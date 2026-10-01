@@ -207,7 +207,7 @@ export default function BulkFixDialog({
           {plan.profile.length ? (
             <Alert severity="info">
               <Typography sx={{ fontSize: TEXT.sm }}>
-                {`${plan.profile.length} of the selected findings are settings macOS only enforces through a configuration profile. They go into the organization's macOS policy, and Macs get them with the organization's profile — installed by hand or from your MDM.`}
+                {`${plan.profile.length} of the selected findings are settings macOS only enforces through a configuration profile. They go into the organization's macOS policy: Macs enrolled in Tracenium MDM receive the organization's profile on their next check-in; other Macs need it installed by hand or from your MDM.`}
               </Typography>
               {onAddToMacPolicy ? (
                 <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
@@ -249,7 +249,7 @@ export default function BulkFixDialog({
             </Alert>
           ) : null}
 
-          {!launched ? (
+          {!launched && plan.checkIds.length === 0 ? null : !launched ? (
             <Box>
               <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
                 What would run ({plan.checkIds.length})
@@ -360,7 +360,7 @@ export default function BulkFixDialog({
             <Box sx={{ flex: 1 }} />
           </>
         )}
-        {!launched ? (
+        {!launched && plan.checkIds.length > 0 ? (
           <>
             <Button
               variant="contained"

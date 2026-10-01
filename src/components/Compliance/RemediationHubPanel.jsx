@@ -43,12 +43,22 @@ const SEVERITY_COLOR = {
 
 /** El texto del bloqueo. Nunca se deja un botón muerto sin explicación. */
 export function blockedReasonText(reason, guard = null) {
+  // macOS: sólo lo impone un perfil. No es un bloqueo: la acción es la
+  // política macOS, que los Macs del MDM de Tracenium reciben solos (1-oct).
+  if (reason === "profile_only") {
+    return "macOS only enforces this through a configuration profile: add it to the organization's macOS policy. Macs enrolled in Tracenium MDM get it on their next check-in; others need the profile installed.";
+  }
   // ADR-0035: el fix existe pero no se lanza desde aquí (encender el
   // firewall se planifica por equipo). No es «nadie sabe arreglarlo».
+  //
+  // ⚠️ Antes «Not applied from here: it ${guard}» — sólo se leía bien con los
+  // motivos que empiezan por verbo («turns on…»). Los de macOS no («every
+  // login shows…», «Tracenium never writes sudoers…», «macOS only enforces…»)
+  // salían como «it macOS only enforces…». Dos frases sirven para todos.
   if (reason === "guarded") {
-    return guard
-      ? `Not applied from here: it ${guard}.`
-      : "Not applied from here: this change is planned per device first.";
+    if (!guard) return "Not applied from here: this change is planned per device first.";
+    const text = guard.trim().replace(/\.$/, "");
+    return `Not applied from here. ${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
   }
   if (reason === "pmp_not_entitled") {
     return "Applying needs Patch Management, which is not in this tenant's plan. The finding is still tracked here.";
@@ -77,11 +87,12 @@ export function criticalDevicesLabel(action) {
   return `${n} critical`;
 }
 
-export default function RemediationHubPanel({ reloadKey, onToast, canManage = false }) {
+export default function RemediationHubPanel({ reloadKey, onToast, canManage = false, onAddToMacPolicy = null }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
   const [openAction, setOpenAction] = React.useState(null);
+  const [addingKey, setAddingKey] = React.useState(null);
 
   const load = React.useCallback(async () => {
     try {
@@ -253,16 +264,39 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Button
-                      size="small"
-                      variant="contained"
-                      startIcon={<ScienceOutlinedIcon />}
-                      disabled={!a.canApply || !canManage}
-                      onClick={() => setOpenAction(a)}
-                      sx={{ textTransform: "none", whiteSpace: "nowrap", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
-                    >
-                      Fix…
-                    </Button>
+                    {a.applyBlockedReason === "profile_only" && a.profileIntents?.length ? (
+                      <Tooltip title={onAddToMacPolicy ? "" : "Adding to the macOS policy needs Device Management access."}>
+                        <span>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={!onAddToMacPolicy || addingKey === a.key}
+                            onClick={async () => {
+                              setAddingKey(a.key);
+                              try {
+                                await onAddToMacPolicy(a.profileIntents);
+                              } finally {
+                                setAddingKey(null);
+                              }
+                            }}
+                            sx={{ textTransform: "none", whiteSpace: "nowrap", fontWeight: 700 }}
+                          >
+                            Add to macOS policy
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<ScienceOutlinedIcon />}
+                        disabled={!a.canApply || !canManage}
+                        onClick={() => setOpenAction(a)}
+                        sx={{ textTransform: "none", whiteSpace: "nowrap", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
+                      >
+                        Fix…
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               );

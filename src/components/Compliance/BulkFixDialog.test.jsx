@@ -134,10 +134,24 @@ describe("lo que promete el botón", () => {
     expect(screen.getByText("applied: 1").closest("[data-tone]")).toHaveAttribute("data-tone", "success");
   });
 
-  it("sin nada aplicable no se puede lanzar", () => {
+  it("sin nada aplicable no se puede lanzar: ni «Dry-run 0» ni «Apply 0»", () => {
     open({ findings: [f({ checkId: "m", agentRemediable: false })] });
-    expect(screen.getByRole("button", { name: /Dry-run 0/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Apply 0/ })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Dry-run/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Apply \d/ })).toBeNull();
+    expect(screen.queryByText(/What would run/)).toBeNull();
+  });
+
+  it("⭐ sólo ajustes de perfil (1-oct): el diálogo es «añadir a la política macOS», que llega solo a los Macs del MDM", async () => {
+    const onAddToMacPolicy = vi.fn().mockResolvedValue({ added: [] });
+    const intents = [{ key: "macos.privacy.allowPersonalizedAds", value: false }];
+    open({
+      findings: [f({ checkId: "p", agentRemediable: false, remediationPlan: { artifact: "mobileconfig", profileIntents: intents, guard: "macOS only enforces…" } })],
+      onAddToMacPolicy,
+    });
+    expect(screen.getByText(/Macs enrolled in Tracenium MDM receive the organization's profile on their next check-in/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Apply \d/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 setting to the macOS policy" }));
+    await waitFor(() => expect(onAddToMacPolicy).toHaveBeenCalledWith(intents));
   });
 
   it("quien sólo lee no lanza", () => {

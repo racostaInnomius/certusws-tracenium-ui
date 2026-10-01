@@ -89,7 +89,7 @@ describe("helpers", () => {
   it("encender el firewall (ADR-0035) dice por qué no hay botón, no «a mano»", () => {
     const guard = "turns on or reshapes the firewall — inbound connections no rule allows stop working; plan it per device first (ADR-0035)";
     const text = blockedReasonText("guarded", guard);
-    expect(text).toMatch(/^Not applied from here: it turns on/);
+    expect(text).toMatch(/^Not applied from here\. Turns on or reshapes the firewall/);
     expect(text).not.toMatch(/by hand/i);
     expect(blockedReasonText("guarded")).toMatch(/planned per device/);
   });
@@ -212,5 +212,35 @@ describe("los equipos críticos", () => {
 
   it("con alguno lo dice", () => {
     expect(criticalDevicesLabel({ criticalDevices: 3 })).toBe("3 critical");
+  });
+});
+
+describe("⭐ sólo lo impone un perfil (macOS, 1-oct)", () => {
+  const intents = [{ key: "macos.privacy.allowPersonalizedAds", value: false }];
+  const profileAction = action({
+    key: "macos.pref.ads", kind: "manual", handlerId: null, title: "Limit Ad Tracking Is Enabled", checkIds: ["macos.pref.ads"],
+    platforms: [], support: null, canApply: false, applyBlockedReason: "profile_only", profileIntents: intents, guard: "macOS only enforces this setting through a configuration profile",
+  });
+
+  it("la fila dice que va a la política macOS y su botón la añade", async () => {
+    getRemediationHub.mockResolvedValue(hub([profileAction]));
+    const onAddToMacPolicy = vi.fn().mockResolvedValue({ added: intents });
+    render(<RemediationHubPanel canManage onAddToMacPolicy={onAddToMacPolicy} />);
+    expect(await screen.findByText(/add it to the organization's macOS policy\. Macs enrolled in Tracenium MDM get it on their next check-in/)).toBeTruthy();
+    expect(screen.queryByText(/it macOS only/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add to macOS policy" }));
+    expect(onAddToMacPolicy).toHaveBeenCalledWith(intents);
+    expect(screen.queryByRole("button", { name: /Fix…/ })).toBeNull();
+  });
+
+  it("sin Device Management el botón está, apagado y explicado", async () => {
+    getRemediationHub.mockResolvedValue(hub([profileAction]));
+    render(<RemediationHubPanel canManage />);
+    expect(await screen.findByRole("button", { name: "Add to macOS policy" })).toBeDisabled();
+  });
+
+  it("un motivo de macOS que no empieza por verbo se lee bien («Not applied from here. Every login…»)", () => {
+    expect(blockedReasonText("guarded", "every login shows this text and waits for someone to click Accept"))
+      .toBe("Not applied from here. Every login shows this text and waits for someone to click Accept.");
   });
 });

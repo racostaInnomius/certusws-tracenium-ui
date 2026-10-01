@@ -141,6 +141,38 @@ describe("DeviceDrawerContent", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("Check one");
   });
 
+  it("⭐ una selección SÓLO de ajustes de perfil abre el diálogo para añadirlos a la política macOS (1-oct)", async () => {
+    // Antes el menú se apagaba («No selected finding can be fixed from here»)
+    // y el «Add N settings» del diálogo era inalcanzable.
+    const intents = [{ key: "macos.privacy.allowPersonalizedAds", value: false }];
+    const data = {
+      ...deviceData,
+      findings: [{ ...deviceData.findings[0], agentRemediable: false, remediationPlan: { artifact: "mobileconfig", profileIntents: intents } }, deviceData.findings[1]],
+    };
+    const onAddToMacPolicy = vi.fn().mockResolvedValue({ added: intents });
+    render(<DeviceDrawerContent {...baseProps} data={data} onAddToMacPolicy={onAddToMacPolicy} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all findings" }));
+    fireEvent.click(screen.getByRole("button", { name: /actions/i }));
+    const item = await screen.findByText("Add 1 setting to the macOS policy…");
+    // ⚠️ jsdom no aplica el pointer-events del MenuItem deshabilitado: el
+    // clic pasaría igual. Lo que lo prueba es el atributo.
+    expect(item.closest("li")).not.toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(item);
+    fireEvent.click(await screen.findByRole("button", { name: "Add 1 setting to the macOS policy" }));
+    await waitFor(() => expect(onAddToMacPolicy).toHaveBeenCalledWith(intents));
+  });
+
+  it("sin Device Management, una selección sólo de perfil sigue sin acción", async () => {
+    const data = {
+      ...deviceData,
+      findings: [{ ...deviceData.findings[0], agentRemediable: false, remediationPlan: { artifact: "mobileconfig", profileIntents: [{ key: "k", value: true }] } }, deviceData.findings[1]],
+    };
+    render(<DeviceDrawerContent {...baseProps} data={data} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all findings" }));
+    fireEvent.click(screen.getByRole("button", { name: /actions/i }));
+    expect((await screen.findByText("No selected finding can be fixed from here")).closest("li")).toHaveAttribute("aria-disabled", "true");
+  });
+
   it("⭐ tras aplicar se quedan marcados SÓLO los que no se pudieron enviar", async () => {
     const { remediateBatch } = await import("../../api/patchManagement");
     // Tres fallando: uno sale, otro lo rechaza el backend, el tercero no se
