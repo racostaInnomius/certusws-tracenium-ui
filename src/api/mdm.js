@@ -82,3 +82,11 @@ export function getMdmOrganizationProfile(udid, { fresh = false } = {}) {
 export function resendMdmOrganizationProfile(udid) {
   return httpPostJson(`${orgProfilePath(udid)}/resend`, {});
 }
+
+// ── DDM de un equipo (1-oct): sus declaraciones —y si el Mac las tiene
+// aplicadas— y el inventario que informa sin agente. Sólo lectura.
+
+/** → { reportedAt, declarations: [{identifier, purpose, state, reasons, ...}], inventory: {...} | null } */
+export function getMdmDeclarative(udid, { fresh = false } = {}) {
+  return httpGetJson(`/api/v1/mdm/devices/${encodeURIComponent(udid)}/ddm`, opts(fresh));
+}

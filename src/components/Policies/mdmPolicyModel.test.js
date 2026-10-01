@@ -4,6 +4,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  isLocalDateTime,
+  pairingIssue,
   deliveryOf,
   filterGroups,
   groupLabel,
@@ -94,7 +96,8 @@ describe("qué llega al equipo", () => {
   const [, , safari, sw] = [null, null, GROUPS[1].items[1], GROUPS[2].items[0]];
   it("entregado, parcial, sólo guardado y desconocido (backend anterior)", () => {
     expect(deliveryOf(GROUPS[1].items[0]).state).toBe("sent");
-    expect(deliveryOf(safari)).toEqual({ state: "partial", values: [true] });
+    expect(deliveryOf(safari)).toEqual({ state: "partial", values: [true], by: "profile" });
+    expect(deliveryOf({ key: "macos.softwareUpdate.deferMinorDays", delivery: { by: "ddm" } })).toEqual({ state: "sent", by: "ddm" });
     expect(deliveryOf(sw).state).toBe("saved");
     expect(deliveryOf({ key: "x", spec: { kind: "boolean" } }).state).toBe("unknown");
   });
@@ -192,5 +195,44 @@ describe("policyReach", () => {
     expect(policyReach("macos", { macCount: 0 }).tone).toBe("muted");
     expect(policyReach("ios").label).toBe("Not sent yet");
     expect(policyReach("app", { appCount: 2 }).detail).toBe("2 devices with the app");
+  });
+});
+
+// Actualizaciones por DDM (1-oct-2026): versión con forma de versión, fecha
+// LOCAL real, y la mínima nunca sin su fecha límite (como valida el backend).
+describe("ajustes de actualización por DDM", () => {
+  const VERSION = {
+    key: "macos.softwareUpdate.enforcedMinimumVersion",
+    label: "Minimum required macOS version",
+    spec: { kind: "string", maxLength: 12, pattern: "^\\d{1,3}(\\.\\d{1,3}){1,2}$", patternHint: "A version like 27.0.1" },
+    requires: "macos.softwareUpdate.enforcedMinimumDeadline",
+    delivery: { by: "ddm" },
+  };
+  const DEADLINE = {
+    key: "macos.softwareUpdate.enforcedMinimumDeadline",
+    label: "Deadline for the minimum version",
+    spec: { kind: "localDateTime" },
+    requires: "macos.softwareUpdate.enforcedMinimumVersion",
+    delivery: { by: "ddm" },
+  };
+  const GROUPS = [{ name: "softwareUpdate", items: [VERSION, DEADLINE] }];
+
+  it("versión y fecha con su forma", () => {
+    expect(settingIssue(VERSION, "latest")).toBe("A version like 27.0.1");
+    expect(settingIssue(VERSION, "27.0.1")).toBeNull();
+    expect(settingIssue(DEADLINE, "2026-10-15T21:00:00")).toBeNull();
+    expect(settingIssue(DEADLINE, "2026-02-30T21:00:00")).toBe("Pick a date and time");
+    expect(isLocalDateTime("2026-10-15T21:00")).toBe(false);
+  });
+
+  it("❗ la que falta de la pareja lo dice, y no se puede guardar", () => {
+    const block = { softwareUpdate: { enforcedMinimumVersion: "27.0.1" } };
+    const byKey = new Map([[VERSION.key, VERSION], [DEADLINE.key, DEADLINE]]);
+    expect(pairingIssue(DEADLINE, block, byKey)).toBe("Needed with “Minimum required macOS version”");
+    expect(pairingIssue(VERSION, block, byKey)).toBeNull();
+    expect(platformStats(GROUPS, block, {}).issues).toEqual([
+      { key: DEADLINE.key, label: "Deadline for the minimum version", issue: "Needed with “Minimum required macOS version”" },
+    ]);
+    expect(platformStats(GROUPS, { softwareUpdate: { enforcedMinimumVersion: "27.0.1", enforcedMinimumDeadline: "2026-10-15T21:00:00" } }, {}).issues).toEqual([]);
   });
 });

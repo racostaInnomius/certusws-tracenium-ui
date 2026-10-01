@@ -81,6 +81,7 @@ beforeEach(() => {
     osDeletes: 0,
     orgProfile: { delivery: null },
     orgResends: 0,
+    ddm: { reportedAt: null, declarations: [], inventory: null },
   };
   downloads.length = 0;
 });
@@ -116,6 +117,7 @@ function mount(search = "", extra = []) {
     http.get(/\/api\/v1\/mdm\/push-certificate$/, () => HttpResponse.json(state.setup)),
     http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/os-update$/, () => HttpResponse.json(state.osUpdate)),
     http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/organization-profile$/, () => HttpResponse.json(state.orgProfile)),
+    http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/ddm$/, () => HttpResponse.json(state.ddm)),
     http.post(/\/api\/v1\/mdm\/devices\/[^/]+\/organization-profile\/resend$/, () => {
       state.orgResends += 1;
       state.orgProfile = { delivery: null };
@@ -626,3 +628,61 @@ describe("MDM / MAM — el perfil de la organización en el Mac (1-oct)", () => 
   });
 });
 
+
+// ── DDM del Mac (1-oct-2026): inventario sin agente y estado de cada declaración ──
+
+describe("MDM / MAM — DDM del Mac (1-oct)", () => {
+  async function openMac() {
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    return screen.findByLabelText("Device status");
+  }
+
+  it("⭐ el cajón enseña lo que informa el Mac y qué hizo con cada declaración", async () => {
+    state.ddm = {
+      reportedAt: new Date().toISOString(),
+      inventory: {
+        marketingName: "MacBook Pro (14-inch, Nov 2023)", modelIdentifier: "Mac15,7", osVersion: "27.0.1", buildVersion: "26A434",
+        backgroundSecurityImprovement: "a", fileVault: true, batteryHealth: "service-recommended", lockdownMode: false,
+        enrollmentType: "supervised", betaProgram: null, certificates: [{ subject: "JPR-MacBookPro", isIdentity: true }], packages: [], managedApps: [],
+      },
+      declarations: [
+        { identifier: "com.tracenium.status-subscriptions", kind: "configuration", purpose: "status_reporting", state: "applied", reasons: [] },
+        { identifier: "com.tracenium.softwareupdate.settings", kind: "configuration", purpose: "software_update_settings", state: "invalid",
+          reasons: [{ code: "Error.InvalidPayload", description: "The Beta key isn't supported." }] },
+        { identifier: "com.tracenium.activation.default", kind: "activation", purpose: "activation", state: "applied", reasons: [] },
+      ],
+    };
+    const panel = await openMac();
+    expect(await within(panel).findByText("MacBook Pro (14-inch, Nov 2023)")).toBeTruthy();
+    expect(within(panel).getByText("27.0.1 (a) · 26A434")).toBeTruthy();
+    expect(within(panel).getByText("Service recommended")).toBeTruthy();
+    expect(within(panel).getByText("Supervised")).toBeTruthy();
+    expect(within(panel).getByText("JPR-MacBookPro · identity")).toBeTruthy();
+    const decls = within(panel).getByLabelText("Declarations");
+    expect(within(decls).getByText("Status reporting")).toBeTruthy();
+    expect(within(decls).getByText("Applied")).toBeTruthy();
+    expect(within(decls).getByText("Rejected by the Mac")).toBeTruthy();
+    expect(within(decls).getByText("The Beta key isn't supported")).toBeTruthy();
+    // La activación es fontanería: no se enseña si va bien.
+    expect(within(decls).queryByText("Activation")).toBeNull();
+  });
+
+  it("sin informe todavía lo dice, sin inventar valores", async () => {
+    const panel = await openMac();
+    expect(await within(panel).findByText("The Mac reports its status after its next check-in.")).toBeTruthy();
+  });
+
+  it("❗ la versión mínima de la política se ve en el Mac, pero no se cancela desde aquí", async () => {
+    state.osUpdate = {
+      ...state.osUpdate,
+      scheduled: { targetOSVersion: "27.0.1", targetBuildVersion: null, targetLocalDateTime: "2026-10-15T21:00:00", requestedAt: new Date().toISOString(), status: "pending", source: "policy" },
+    };
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    const panel = await screen.findByLabelText("OS update");
+    expect(await within(panel).findByText(/is the macOS policy's minimum, required by/)).toBeTruthy();
+    expect(within(panel).getByText(/Change it in Policies › macOS › Software updates/)).toBeTruthy();
+    expect(within(panel).queryByRole("button", { name: "Cancel update" })).toBeNull();
+  });
+});

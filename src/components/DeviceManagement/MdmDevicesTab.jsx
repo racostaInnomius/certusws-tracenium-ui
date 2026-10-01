@@ -46,6 +46,7 @@ import {
 import { Field, StatusChip } from "./mdmAtoms";
 import MdmOsUpdatePanel from "./MdmOsUpdatePanel";
 import MdmOrgProfilePanel from "./MdmOrgProfilePanel";
+import MdmDeclarativePanel from "./MdmDeclarativePanel";
 
 function rowsFrom(mdmDevices, appDevices) {
   const mdm = mdmDevices.map((d) => ({
@@ -295,6 +296,7 @@ function DeviceDetail({ row, commandsReason, commandsDeliverable, onClose, onNav
               </Button>
             ) : null}
           </Box>
+          {d.enrollmentState === "enrolled" ? <MdmDeclarativePanel udid={d.udid} /> : null}
           {d.enrollmentState === "enrolled" ? (
             <MdmOrgProfilePanel udid={d.udid} canConfigure={canConfigure} notify={notify} />
           ) : null}

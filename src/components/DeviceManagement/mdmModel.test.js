@@ -19,8 +19,7 @@ import {
   describeProfileDelivery,
   detectedOsUpdates,
   detectedUpdateLabel,
-  manualVersionNote,
-} from "./mdmModel";
+  manualVersionNote, describeDdmInventory, describeDeclaration, visibleDeclarations } from "./mdmModel";
 
 const NOW = Date.parse("2026-09-28T20:00:00Z");
 const future = new Date(NOW + 3_600_000).toISOString();
@@ -225,3 +224,35 @@ describe("describeProfileDelivery", () => {
   });
 });
 
+
+// DDM del Mac (1-oct-2026): declaraciones y el inventario que informa sin agente.
+describe("DDM del Mac", () => {
+  it("una declaración rechazada dice por qué; una aplicada, no", () => {
+    expect(describeDeclaration({ purpose: "software_update_settings", state: "invalid", reasons: [{ description: "Bad key." }, { code: "Error.X" }] })).toEqual({
+      name: "Software update settings",
+      chip: { label: "Rejected by the Mac", tone: "critical" },
+      reason: "Bad key; Error.X",
+    });
+    expect(describeDeclaration({ purpose: "status_reporting", state: "applied", reasons: [{ description: "x" }] }).reason).toBeNull();
+    expect(describeDeclaration({ identifier: "com.otro", purpose: "other", state: "removing" })).toMatchObject({ name: "com.otro", chip: { label: "Being removed" } });
+  });
+
+  it("❗ la activación sólo se enseña si va mal (sin ella no se aplica nada)", () => {
+    const list = [
+      { purpose: "activation", state: "applied" },
+      { purpose: "status_reporting", state: "applied" },
+    ];
+    expect(visibleDeclarations(list).map((d) => d.purpose)).toEqual(["status_reporting"]);
+    expect(visibleDeclarations([{ purpose: "activation", state: "invalid" }])).toHaveLength(1);
+  });
+
+  it("el inventario: lo que no informó queda en null, no se inventa", () => {
+    expect(describeDdmInventory(null)).toBeNull();
+    const x = describeDdmInventory({ osVersion: "27.0.1", backgroundSecurityImprovement: null, buildVersion: "26A434", fileVault: false, certificates: [] });
+    expect(x).toMatchObject({ os: "27.0.1 · 26A434", fileVault: { label: "Off", tone: "critical" }, battery: null, lockdownMode: null, enrollment: null, model: null });
+    expect(describeDdmInventory({ batteryHealth: "non-genuine", enrollmentType: "user" })).toMatchObject({
+      battery: { label: "Non-genuine battery", tone: "caution" },
+      enrollment: "User enrollment",
+    });
+  });
+});

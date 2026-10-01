@@ -136,6 +136,32 @@ export function settingIssue(setting, value) {
   if (spec.kind === "string" && spec.maxLength && String(value).length > spec.maxLength) {
     return `${spec.maxLength} characters at most`;
   }
+  if (spec.kind === "string" && spec.pattern && !new RegExp(spec.pattern).test(String(value))) {
+    return spec.patternHint || "Not a valid value";
+  }
+  if (spec.kind === "localDateTime" && !isLocalDateTime(value)) return "Pick a date and time";
+  return null;
+}
+
+/** `yyyy-mm-ddThh:mm:ss` sin zona y que sea una fecha de verdad (como el backend). */
+export function isLocalDateTime(value) {
+  const m = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(value) : null;
+  if (!m) return false;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+  return d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] && +m[4] < 24 && +m[5] < 60 && +m[6] < 60;
+}
+
+/**
+ * Ajustes que sólo valen juntos (`requires` del catálogo: la versión mínima y
+ * su fecha límite). En la fila del que FALTA: «Needed with “…”». PURO.
+ */
+export function pairingIssue(setting, block, settingsByKey) {
+  if (isSet(readByPath(block, setting.key))) return null;
+  for (const other of settingsByKey.values()) {
+    if (other.requires === setting.key && isSet(readByPath(block, other.key))) {
+      return `Needed with “${other.label || other.key}”`;
+    }
+  }
   return null;
 }
 
@@ -150,8 +176,9 @@ export function deliveryOf(setting) {
   if (!setting || !("delivery" in setting)) return { state: "unknown" };
   const d = setting.delivery;
   if (!d) return { state: "saved" };
-  if (Array.isArray(d.values) && d.values.length) return { state: "partial", values: d.values };
-  return { state: "sent" };
+  if (Array.isArray(d.values) && d.values.length) return { state: "partial", values: d.values, by: d.by };
+  // `by`: "profile" (el perfil de la organización) o "ddm" (una declaración).
+  return { state: "sent", by: d.by };
 }
 
 /** Si ESTE valor llega al equipo. «Not set» siempre «llega»: no escribe nada. */
@@ -170,13 +197,14 @@ export function platformStats(groups, block, loadedBlock) {
   const changed = [];
   const issues = [];
   const notDelivered = [];
+  const byKey = new Map((groups || []).flatMap((g) => g.items.map((s) => [s.key, s])));
   for (const g of groups || []) {
     for (const s of g.items) {
       total += 1;
       const value = readByPath(block, s.key);
       if (isSet(value)) configured += 1;
       if (!sameValue(value, readByPath(loadedBlock, s.key))) changed.push(s.key);
-      const issue = settingIssue(s, value);
+      const issue = settingIssue(s, value) || pairingIssue(s, block, byKey);
       if (issue) issues.push({ key: s.key, label: settingLabel(s, g.name), issue });
       if (!valueIsDelivered(s, value)) notDelivered.push(s.key);
     }

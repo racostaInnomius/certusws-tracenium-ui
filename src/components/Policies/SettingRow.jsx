@@ -117,6 +117,59 @@ export function TriStateToggle({ id, value, onChange, labels = {}, blocked = [],
   );
 }
 
+// El valor de «Not set» en los selectores segmentados (toggleSx lo pinta apagado).
+const UNSET = "unset";
+
+/**
+ * Lista cerrada corta como selector segmentado, igual que los booleanos:
+ * «Not set» + cada valor con su etiqueta (`labels` del catálogo; el valor es
+ * el de Apple). Para más de 4 valores, EnumSetting.
+ */
+export function EnumToggle({ id, value, onChange, values = [], labels = {}, disabled = false }) {
+  const v = value === undefined || value === null || value === "" ? UNSET : value;
+  return (
+    <ToggleButtonGroup
+      exclusive
+      size="small"
+      value={v}
+      disabled={disabled}
+      aria-labelledby={`${id}-label`}
+      onChange={(_e, next) => {
+        if (next === null || next === v) return;
+        onChange(next === UNSET ? undefined : next);
+      }}
+      sx={{ ...toggleSx, flexWrap: "wrap" }}
+    >
+      <ToggleButton value={UNSET}>Not set</ToggleButton>
+      {values.map((x) => (
+        <ToggleButton key={x} value={x}>
+          {labels[x] ?? x}
+        </ToggleButton>
+      ))}
+    </ToggleButtonGroup>
+  );
+}
+
+/**
+ * Fecha y hora LOCAL del equipo, sin zona (`yyyy-mm-ddThh:mm:ss`, el formato
+ * de Apple). El control del navegador da minutos; se guardan con `:00`.
+ */
+export function DateTimeSetting({ id, value, onChange, issue = null, help = null, disabled = false }) {
+  return (
+    <TextField
+      size="small"
+      type="datetime-local"
+      value={typeof value === "string" ? value.slice(0, 16) : ""}
+      onChange={(e) => onChange(e.target.value ? `${e.target.value.slice(0, 16)}:00` : undefined)}
+      disabled={disabled}
+      error={Boolean(issue)}
+      helperText={issue || help}
+      slotProps={{ htmlInput: { "aria-labelledby": `${id}-label` }, inputLabel: { shrink: true }, formHelperText: { sx: { mx: 0 } } }}
+      sx={{ width: 230 }}
+    />
+  );
+}
+
 /** Número entero con unidad; vacío = «Not set». */
 export function NumberSetting({ id, value, onChange, unit = null, min, max, help = null, issue = null, disabled = false, placeholder = "Not set" }) {
   return (
@@ -159,7 +212,7 @@ export function TextSetting({ id, value, onChange, maxLength, multiline = false,
 }
 
 /** Lista cerrada; «Not set» primero. */
-export function EnumSetting({ id, value, onChange, values = [], disabled = false }) {
+export function EnumSetting({ id, value, onChange, values = [], labels = {}, disabled = false }) {
   return (
     <TextField
       select
@@ -173,7 +226,7 @@ export function EnumSetting({ id, value, onChange, values = [], disabled = false
       <MenuItem value="">Not set</MenuItem>
       {values.map((v) => (
         <MenuItem key={v} value={v}>
-          {v}
+          {labels[v] ?? v}
         </MenuItem>
       ))}
     </TextField>

@@ -347,3 +347,72 @@ export function describeProfileDelivery(delivery, relative = (d) => String(d)) {
       return { chip: { label: "Unknown", tone: "muted" }, text: "", error: false };
   }
 }
+
+// ── DDM de un equipo (1-oct-2026, backend ddm-view.service) ─────────────────
+
+const DECLARATION_NAMES = {
+  status_reporting: "Status reporting",
+  software_update_settings: "Software update settings",
+  minimum_os_version: "Minimum macOS version (policy)",
+  forced_os_update: "Forced update (this Mac)",
+  activation: "Activation",
+};
+
+const DECLARATION_STATES = {
+  applied: { label: "Applied", tone: "positive" },
+  pending: { label: "Waiting for the Mac", tone: "info" },
+  invalid: { label: "Rejected by the Mac", tone: "critical" },
+  inactive: { label: "Not active", tone: "caution" },
+  removing: { label: "Being removed", tone: "muted" },
+};
+
+/**
+ * Una declaración para el cajón: nombre legible, chip y, si el Mac la
+ * rechazó, por qué (sus `reasons`, sin el punto final). PURO.
+ */
+export function describeDeclaration(d) {
+  const why = (d?.reasons || [])
+    .map((r) => r?.description || r?.code)
+    .filter(Boolean)
+    .map((t) => String(t).trim().replace(/\.$/, ""))
+    .join("; ");
+  return {
+    name: DECLARATION_NAMES[d?.purpose] || d?.identifier || "—",
+    chip: DECLARATION_STATES[d?.state] || { label: "Unknown", tone: "muted" },
+    reason: d?.state === "invalid" || d?.state === "inactive" ? why || null : null,
+  };
+}
+
+/**
+ * Las declaraciones que se enseñan: la activación es fontanería y sólo se
+ * enseña si algo va mal con ella (sin ella no se aplica nada). PURO.
+ */
+export function visibleDeclarations(list) {
+  return (list || []).filter((d) => d?.purpose !== "activation" || (d.state !== "applied" && d.state !== "pending"));
+}
+
+const BATTERY = {
+  normal: { label: "Normal", tone: "positive" },
+  "service-recommended": { label: "Service recommended", tone: "caution" },
+  "non-genuine": { label: "Non-genuine battery", tone: "caution" },
+  unknown: { label: "Unknown", tone: "muted" },
+  unsupported: { label: "No battery", tone: "muted" },
+};
+const ENROLLMENT = { supervised: "Supervised", device: "Device enrollment", user: "User enrollment", none: "Not enrolled" };
+
+/** El inventario que el Mac informa por DDM, en chips y textos. PURO. */
+export function describeDdmInventory(inv) {
+  if (!inv) return null;
+  const onOff = (v, on, off) => (v === true ? on : v === false ? off : null);
+  return {
+    model: inv.marketingName || inv.modelIdentifier || null,
+    fileVault: onOff(inv.fileVault, { label: "On", tone: "positive" }, { label: "Off", tone: "critical" }),
+    battery: inv.batteryHealth ? BATTERY[inv.batteryHealth] || { label: inv.batteryHealth, tone: "muted" } : null,
+    lockdownMode: onOff(inv.lockdownMode, { label: "On", tone: "info" }, { label: "Off", tone: "muted" }),
+    enrollment: inv.enrollmentType ? ENROLLMENT[inv.enrollmentType] || inv.enrollmentType : null,
+    // «(a)»: la Background Security Improvement que lleva encima la versión.
+    os: inv.osVersion ? `${inv.osVersion}${inv.backgroundSecurityImprovement ? ` (${inv.backgroundSecurityImprovement})` : ""}${inv.buildVersion ? ` · ${inv.buildVersion}` : ""}` : null,
+    beta: inv.betaProgram || null,
+    certificates: (inv.certificates || []).map((c) => ({ subject: c.subject || c.identifier || "—", identity: Boolean(c.isIdentity) })),
+  };
+}

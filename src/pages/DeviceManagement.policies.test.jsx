@@ -7,7 +7,7 @@
 // y que la pantalla no deje creer que llega al Mac algo que no llega.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { server, http, HttpResponse } from "../test/msw/server";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
@@ -46,7 +46,15 @@ const CATALOG = {
     setting("macos.screen.idleTimeoutSeconds", "Idle time before the screen saver", { kind: "integer", min: 60, max: 3600 }),
     setting("macos.safari.showFullURL", "Safari: show the full website address", { kind: "boolean" }),
     setting("macos.menuBar.showWiFi", "Show Wi-Fi in the menu bar", { kind: "boolean" }, { by: "profile", values: [true] }),
-    setting("macos.softwareUpdate.enforcedMinimumVersion", "Minimum required OS version", { kind: "string", maxLength: 32 }, null),
+    setting("macos.apps.requireAdminToInstall", "Require an administrator password to install apps", { kind: "boolean" }, null),
+    // Por DDM (1-oct): enumerado de Apple con etiquetas, y la mínima con su fecha.
+    setting("macos.softwareUpdate.automaticDownload", "Download updates automatically",
+      { kind: "enum", values: ["Allowed", "AlwaysOn", "AlwaysOff"], labels: { Allowed: "User decides", AlwaysOn: "Always on", AlwaysOff: "Always off" } }, { by: "ddm" }),
+    setting("macos.softwareUpdate.enforcedMinimumVersion", "Minimum required macOS version",
+      { kind: "string", maxLength: 12, pattern: "^\\d{1,3}(\\.\\d{1,3}){1,2}$", patternHint: "A version like 27.0.1" }, { by: "ddm" },
+      { requires: "macos.softwareUpdate.enforcedMinimumDeadline" }),
+    setting("macos.softwareUpdate.enforcedMinimumDeadline", "Deadline for the minimum version", { kind: "localDateTime" }, { by: "ddm" },
+      { requires: "macos.softwareUpdate.enforcedMinimumVersion" }),
     setting("ios.passcode.required", "Require a passcode", { kind: "boolean" }, null),
   ],
 };
@@ -119,7 +127,7 @@ describe("Policies — tarjetas", () => {
     mount();
     await macosReady();
     expect(card("macOS")).toHaveAttribute("aria-selected", "true");
-    expect(card("macOS").textContent).toMatch(/1 of 4 set/);
+    expect(card("macOS").textContent).toMatch(/1 of 7 set/);
     await waitFor(() => expect(card("macOS").textContent).toMatch(/Reaches 1 Mac enrolled in MDM/));
     expect(card("iPhone & iPad").textContent).toMatch(/Nothing set.*Not sent yet/);
     expect(card("Tracenium app").textContent).toMatch(/1 of 8 set.*Applied by the app/);
@@ -211,7 +219,7 @@ describe("Policies — lo que no llega al Mac", () => {
   it("❗ un ajuste que el perfil no entrega lleva su chip; un «Off» que no se escribe no se puede elegir", async () => {
     mount();
     await macosReady();
-    const row = screen.getByText("Minimum required OS version").closest("[data-setting]");
+    const row = screen.getByText("Require an administrator password to install apps").closest("[data-setting]");
     expect(within(row).getByText("Not sent to Macs")).toBeTruthy();
     const wifi = toggle("Show Wi-Fi in the menu bar");
     expect(within(wifi).getByRole("button", { name: "Off" })).toBeDisabled();
@@ -222,8 +230,8 @@ describe("Policies — lo que no llega al Mac", () => {
     const user = userEvent.setup();
     mount();
     await macosReady();
-    await user.type(screen.getByLabelText("Minimum required OS version"), "27.0");
-    expect(card("macOS").textContent).toMatch(/2 of 4 set · 1 not sent/);
+    await user.click(within(toggle("Require an administrator password to install apps")).getByRole("button", { name: "On" }));
+    expect(card("macOS").textContent).toMatch(/2 of 7 set · 1 not sent/);
   });
 });
 
@@ -236,7 +244,7 @@ describe("Policies — buscar y filtrar", () => {
     expect(screen.getAllByRole("group").map((g) => g.getAttribute("aria-labelledby"))).toHaveLength(2); // el filtro + el ajuste
     expect(screen.queryByRole("group", { name: "Show Wi-Fi in the menu bar" })).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "All 4" }));
+    await user.click(screen.getByRole("button", { name: "All 7" }));
     await user.type(screen.getByLabelText("Find a setting"), "wi-fi");
     expect(screen.getByRole("group", { name: "Show Wi-Fi in the menu bar" })).toBeTruthy();
     expect(screen.queryByRole("group", { name: "Show the full website address" })).toBeNull();
@@ -250,5 +258,45 @@ describe("Policies — buscar y filtrar", () => {
     expect(screen.getByText("No settings match “bluetooth”.")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Clear search" }));
     expect(screen.getByRole("group", { name: "Show Wi-Fi in the menu bar" })).toBeTruthy();
+  });
+});
+
+describe("Policies — actualizaciones por DDM (1-oct)", () => {
+  it("⭐ los valores de Apple con su nombre, segmentados; el canal se ve", async () => {
+    const user = userEvent.setup();
+    mount();
+    await macosReady();
+    const group = toggle("Download updates automatically");
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["Not set", "User decides", "Always on", "Always off"]);
+    const row = group.closest("[data-setting]");
+    expect(within(row).getByText("Declaration")).toBeTruthy();
+    await user.click(within(group).getByRole("button", { name: "Always on" }));
+    await user.click(screen.getByRole("button", { name: "Save macOS settings" }));
+    await waitFor(() => expect(state.patches).toHaveLength(1));
+    expect(state.patches[0].body.macos.softwareUpdate).toEqual({ automaticDownload: "AlwaysOn" });
+  });
+
+  it("❗ la versión mínima sin su fecha límite no se guarda, y se dice cuál falta", async () => {
+    const user = userEvent.setup();
+    mount();
+    await macosReady();
+    await user.type(screen.getByLabelText("Minimum required macOS version"), "27.0.1");
+    expect(screen.getByText("Needed with “Minimum required macOS version”")).toBeTruthy();
+    expect(screen.getByText("Fix “Deadline for the minimum version” before saving")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save macOS settings" })).toBeDisabled();
+
+    // Con la fecha (el control da minutos; se guarda con segundos, como Apple).
+    fireEvent.change(screen.getByLabelText("Deadline for the minimum version"), { target: { value: "2026-10-15T21:00" } });
+    await user.click(screen.getByRole("button", { name: "Save macOS settings" }));
+    await waitFor(() => expect(state.patches).toHaveLength(1));
+    expect(state.patches[0].body.macos.softwareUpdate).toEqual({ enforcedMinimumVersion: "27.0.1", enforcedMinimumDeadline: "2026-10-15T21:00:00" });
+  });
+
+  it("una versión con forma rara se marca", async () => {
+    const user = userEvent.setup();
+    mount();
+    await macosReady();
+    await user.type(screen.getByLabelText("Minimum required macOS version"), "latest");
+    expect(screen.getByText("A version like 27.0.1")).toBeTruthy();
   });
 });

@@ -28,6 +28,7 @@ import {
   filterGroups,
   groupLabel,
   isSet,
+  pairingIssue,
   rangeText,
   readByPath,
   sameValue,
@@ -36,7 +37,7 @@ import {
   unitFor,
   writeByPath,
 } from "./mdmPolicyModel";
-import { EnumSetting, NumberSetting, SettingGroup, SettingRow, TextSetting, TriStateToggle } from "./SettingRow";
+import { DateTimeSetting, EnumSetting, EnumToggle, NumberSetting, SettingGroup, SettingRow, TextSetting, TriStateToggle } from "./SettingRow";
 
 const chipSx = { height: 20, fontSize: TEXT.xs, fontWeight: 800 };
 
@@ -54,6 +55,27 @@ function SupervisionChip() {
       />
     </Tooltip>
   );
+}
+
+/**
+ * El canal, visible en la política (ADR-0036 D5): lo de DDM no va en el
+ * perfil, el Mac lo aplica solo y dice si lo tomó (cajón del equipo).
+ */
+function DeclarativeChip() {
+  return (
+    <Tooltip arrow title="Sent as a declaration (DDM), not in the profile. The Mac applies it on its own and reports whether it took effect — see the Mac's Declarations in Devices.">
+      <Chip size="small" label="Declaration" sx={{ ...chipSx, bgcolor: BRAND.alert.infoSoft, color: BRAND.alert.infoText }} />
+    </Tooltip>
+  );
+}
+
+/** Una fecha límite ya pasada: quien esté por debajo instala en cuanto la reciba. */
+function pastDeadlineNote(setting, value, now = new Date()) {
+  if (setting.spec?.kind !== "localDateTime" || typeof value !== "string") return null;
+  const t = new Date(value).getTime(); // sin zona: el navegador la lee como local, como la leerá el Mac
+  return Number.isFinite(t) && t < now.getTime()
+    ? "This date has passed: Macs below the minimum install it as soon as they get it, and restart."
+    : null;
 }
 
 function NotSentChip() {
@@ -88,7 +110,18 @@ function Control({ id, setting, value, onChange, readOnly, issue }) {
       />
     );
   }
-  if (spec.kind === "enum") return <EnumSetting id={id} value={value} onChange={onChange} values={spec.values || []} disabled={readOnly} />;
+  if (spec.kind === "enum") {
+    const values = spec.values || [];
+    // Pocos valores: segmentado, como los booleanos (todo a la vista, un clic).
+    return values.length <= 4 ? (
+      <EnumToggle id={id} value={value} onChange={onChange} values={values} labels={spec.labels || {}} disabled={readOnly} />
+    ) : (
+      <EnumSetting id={id} value={value} onChange={onChange} values={values} labels={spec.labels || {}} disabled={readOnly} />
+    );
+  }
+  if (spec.kind === "localDateTime") {
+    return <DateTimeSetting id={id} value={value} onChange={onChange} issue={issue} disabled={readOnly} />;
+  }
   return (
     <TextSetting
       id={id}
@@ -151,6 +184,7 @@ export default function MdmPlatformSection({
     [groups, block]
   );
   const total = groups.reduce((n, g) => n + g.items.length, 0);
+  const byKey = React.useMemo(() => new Map(groups.flatMap((g) => g.items.map((x) => [x.key, x]))), [groups]);
   const shown = React.useMemo(
     () => filterGroups(groups, { block, loadedBlock, query, onlyConfigured }),
     [groups, block, loadedBlock, query, onlyConfigured]
@@ -248,12 +282,14 @@ export default function MdmPlatformSection({
               {group.items.map((s) => {
                 const id = `mdm-${s.key.replace(/[^A-Za-z0-9]/g, "-")}`;
                 const value = readByPath(block, s.key);
-                const issue = settingIssue(s, value);
+                const issue = settingIssue(s, value) || pairingIssue(s, block, byKey);
                 const notSent = markNotSent && deliveryOf(s).state === "saved";
+                const declarative = markNotSent && deliveryOf(s).by === "ddm";
                 const meta = (
                   <>
                     {s.requiresSupervision ? <SupervisionChip /> : null}
                     {notSent ? <NotSentChip /> : null}
+                    {declarative ? <DeclarativeChip /> : null}
                   </>
                 );
                 return (
@@ -263,7 +299,7 @@ export default function MdmPlatformSection({
                     label={settingLabel(s, group.name)}
                     meta={meta}
                     description={[s.description, partialHint(s)].filter(Boolean).join(" ") || null}
-                    note={deliveryNote(s, value)}
+                    note={deliveryNote(s, value) || pastDeadlineNote(s, value)}
                     edited={!sameValue(value, readByPath(loadedBlock, s.key))}
                     stacked={s.spec?.kind === "string" && (s.spec?.maxLength ?? 0) > 200}
                   >

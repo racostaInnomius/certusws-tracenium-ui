@@ -132,6 +132,9 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
   const scheduled = view?.scheduled;
   // La orden ya se cumplió: el equipo informa esa versión (backend: scheduled.status).
   const done = scheduled?.status === "installed";
+  // La versión mínima de la política macOS, no una orden de este Mac: se
+  // cambia en Policies, no se cancela aquí (1-oct, ddm-policy).
+  const fromPolicy = scheduled?.source === "policy";
   const state = osUpdateInstallState(device?.installState);
   const pending = device?.pendingVersion?.["os-version"];
   const failure = describeOsUpdateFailure(device?.failureReason);
@@ -169,10 +172,12 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
         <Box sx={{ display: "grid", gap: 1 }}>
           <Typography variant="body2" sx={{ color: BRAND.dark }}>
             <strong>{scheduled.targetOSVersion}</strong>
-            {scheduled.targetBuildVersion ? ` (${scheduled.targetBuildVersion})` : ""} is forced by{" "}
-            <strong>{formatDeviceLocalDateTime(scheduled.targetLocalDateTime)}</strong>, device time.
+            {scheduled.targetBuildVersion ? ` (${scheduled.targetBuildVersion})` : ""}
+            {fromPolicy ? " is the macOS policy's minimum, required by " : " is forced by "}
+            <strong>{formatDeviceLocalDateTime(scheduled.targetLocalDateTime)}</strong>, device time
+            {fromPolicy ? ". Change it in Policies › macOS › Software updates." : "."}
           </Typography>
-          {canConfigure ? (
+          {canConfigure && !fromPolicy ? (
             <Box>
               <Button variant="outlined" color="error" onClick={cancel} disabled={busy} sx={{ textTransform: "none", fontWeight: 700 }}>
                 Cancel update
@@ -185,7 +190,11 @@ export default function MdmOsUpdatePanel({ udid, canConfigure, notify }) {
       {canConfigure ? (
         <Box component="form" noValidate onSubmit={(e) => { e.preventDefault(); schedule(); }} sx={{ display: "grid", gap: 1.25 }}>
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            {scheduled && !done ? "Schedule a different update:" : "Force an update. The device downloads it, reminds the user and, if it's still not installed at that time, installs it and restarts. On Apple silicon it needs no password."}
+            {scheduled && !done
+              ? fromPolicy
+                ? "Force a different update on this Mac — it takes the place of the policy's minimum until it's installed or cancelled:"
+                : "Schedule a different update:"
+              : "Force an update. The device downloads it, reminds the user and, if it's still not installed at that time, installs it and restarts. On Apple silicon it needs no password."}
           </Typography>
           {manual ? null : (
             <TextField select size="small" label="Update" value={choice} disabled={busy}
