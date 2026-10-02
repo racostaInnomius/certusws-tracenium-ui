@@ -31,6 +31,7 @@ import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlined";
 import RadioButtonUncheckedOutlinedIcon from "@mui/icons-material/RadioButtonUncheckedOutlined";
 import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined";
+import RestoreOutlinedIcon from "@mui/icons-material/RestoreOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 
@@ -77,6 +78,7 @@ import PriorityQueue from "../components/patch-management/PriorityQueue";
 import PatchStatusDonut from "../components/patch-management/PatchStatusDonut";
 import MissingBySeverityChart from "../components/patch-management/MissingBySeverityChart";
 import RollbackPointsPanel from "../components/patch-management/RollbackPointsPanel";
+import SnapshotHistoryPanel from "../components/patch-management/SnapshotHistoryPanel";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
 import { explainScanFailure } from "../components/patch-management/scanFailure";
 import {
@@ -229,6 +231,17 @@ const CATEGORIES = [
     icon: <BugReportOutlinedIcon />,
     blurb:
       "Surface installed software running a version with a known CVE, matched against your CVE catalog, and see how many devices are exposed.",
+    actions: [],
+  },
+  {
+    // ADR-0038 D10: every pre-change snapshot and how it ended. The live ones
+    // that need a decision also show on Patches; this is the permanent view —
+    // and the one an auditor reads. No `actions`.
+    key: "rollback-points",
+    label: "Rollback points",
+    icon: <RestoreOutlinedIcon />,
+    blurb:
+      "Every snapshot taken before a patch or a deployment: the ones still kept, and how each of the others ended.",
     actions: [],
   },
   {
@@ -785,6 +798,8 @@ export default function PatchManagement({ onNavigate }) {
   const [connectedKnown, setConnectedKnown] = React.useState(false);
 
   const [refreshNonce, setRefreshNonce] = React.useState(0);
+  // Rollback points tab: a decision above refreshes the history below it.
+  const [historyNonce, setHistoryNonce] = React.useState(0);
   const refreshAll = React.useCallback(() => {
     refetchSummary();
     refetchDevices();
@@ -1762,6 +1777,16 @@ export default function PatchManagement({ onNavigate }) {
             openCveId={pendingCveId}
             onOpened={() => setPendingCveId(null)}
           />
+        ) : tab === "rollback-points" ? (
+          <Box>
+            <RollbackPointsPanel
+              canManage={canManage}
+              notify={notify}
+              refreshNonce={refreshNonce}
+              onChanged={() => setHistoryNonce((n) => n + 1)}
+            />
+            <SnapshotHistoryPanel refreshNonce={refreshNonce + historyNonce} />
+          </Box>
         ) : tab === "settings" ? (
           <ConfigurePanel
             canManage={canManage}

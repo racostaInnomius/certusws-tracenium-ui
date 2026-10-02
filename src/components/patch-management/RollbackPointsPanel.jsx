@@ -73,7 +73,7 @@ function errMsg(err, fallback) {
   return err?.body?.message || err?.message || fallback;
 }
 
-export default function RollbackPointsPanel({ canManage, notify, refreshNonce = 0 }) {
+export default function RollbackPointsPanel({ canManage, notify, refreshNonce = 0, onChanged }) {
   const [points, setPoints] = React.useState([]);
   const [loaded, setLoaded] = React.useState(false);
   const [dialog, setDialog] = React.useState(null); // { kind, point }
@@ -131,6 +131,8 @@ export default function RollbackPointsPanel({ canManage, notify, refreshNonce = 
       }
       setDialog(null);
       await load();
+      // La pestaña «Rollback points» pinta el historial debajo: que se entere.
+      onChanged?.();
     } catch (err) {
       // El motivo DENTRO del diálogo, donde se está mirando — no en un aviso
       // de esquina que se va solo (la lección del «Deploy fix» de CVE).

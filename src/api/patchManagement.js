@@ -428,6 +428,12 @@ export async function listRollbackPoints() {
   return httpGetJson(`${BASE}/snapshots`);
 }
 
+// ADR-0038 D10: every snapshot of the tenant, live or not, with its lifecycle.
+// params: { status, gatewayDeviceId, deviceId, from, to, limit, offset }
+export async function listSnapshotHistory(params = {}) {
+  return httpGetJson(`${BASE}/snapshots/history${buildQuery(params)}`);
+}
+
 /** reason: "validated" | "accepted_failure" | "not_needed". */
 export async function releaseRollbackPoint(snapshotResultId, { reason, note } = {}) {
   return httpPostJson(`${BASE}/snapshots/${encodeURIComponent(snapshotResultId)}/release`, { reason, note });
