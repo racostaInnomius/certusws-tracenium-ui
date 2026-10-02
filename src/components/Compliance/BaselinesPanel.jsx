@@ -277,7 +277,7 @@ function ProposeDialog({ baseline, open, onClose, onAdded, onToast }) {
 function EntryFlags({ entry }) {
   const flags = [];
   if (entry.missing) flags.push(["Not in the catalog", "This check is no longer in the catalog. Remove it from the baseline."]);
-  else if (entry.catalogChanged) flags.push(["Catalog changed", "The catalog now expects a different value than when this check was added. Review it before the baseline is applied to devices."]);
+  else if (entry.catalogChanged) flags.push(["Catalog changed", "The catalog changed this check since it was added: a different value, fix or safeguard. Review it before the baseline is applied to devices."]);
   if (!entry.missing && !entry.fixable) {
     flags.push([
       "Manual fix",
