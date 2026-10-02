@@ -108,7 +108,7 @@ function ActionEditor({ action, onChange, onRemove }) {
         {action.kind === "remediate" ? (
           <>
             <Select size="small" value={action.mode} onChange={(e) => set({ mode: e.target.value })} inputProps={{ "aria-label": "Remediation mode" }} sx={{ minWidth: 140 }}>
-              <MenuItem value="apply">Apply the fix</MenuItem>
+              <MenuItem value="apply">Simulate, then apply where needed</MenuItem>
               <MenuItem value="dry_run">Simulate on the device</MenuItem>
             </Select>
             <TextField

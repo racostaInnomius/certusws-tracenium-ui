@@ -61,7 +61,9 @@ export function actionSummary(action) {
   if (!action) return "";
   if (action.kind === "live_query") return `Ask the device: ${PROBE_BY_KEY[action.probe]?.label ?? action.probe}`;
   const target = action.checkId ? action.checkId : "the check in the alert";
-  return `Remediate ${target} (${action.mode === "dry_run" ? "simulate" : "apply"})`;
+  // «apply» de un playbook simula primero y sólo aplica donde la simulación
+  // dice que cambiaría algo (el servidor lo garantiza, ADR-0037 F0).
+  return `Remediate ${target} (${action.mode === "dry_run" ? "simulate" : "simulate, then apply where needed"})`;
 }
 
 /** Qué permiso hace falta para ARMAR esto; espejo de capabilitiesForActions. */

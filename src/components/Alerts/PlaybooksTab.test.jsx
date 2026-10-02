@@ -61,7 +61,8 @@ describe("PlaybooksTab", () => {
     const card = within(await screen.findByTestId(`pb-${PB.id}`));
     expect(card.getByText("Rehearsal")).toBeInTheDocument();
     expect(card.getByText(/When an alert opens from Security compliance \(medium or worse\)|When an alert opens from/)).toBeInTheDocument();
-    expect(card.getByText(/Remediate the check in the alert \(apply\)/)).toBeInTheDocument();
+    // «apply» simula primero (ADR-0037 F0): la tarjeta lo dice.
+    expect(card.getByText(/Remediate the check in the alert \(simulate, then apply where needed\)/)).toBeInTheDocument();
     expect(card.getByText(/Up to 25 devices per run · 50 runs per day · 6 h cooldown per device · 3 today/)).toBeInTheDocument();
   });
 
