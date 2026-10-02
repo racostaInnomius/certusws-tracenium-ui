@@ -95,6 +95,7 @@ import SectionPaper from "../components/common/SectionPaper";
 import PageTabs from "../components/common/PageTabs";
 import ExceptionRequestsPanel from "../components/Compliance/ExceptionRequestsPanel";
 import RemediationHubPanel from "../components/Compliance/RemediationHubPanel";
+import BaselinesPanel from "../components/Compliance/BaselinesPanel";
 import { macPolicyKeys } from "../components/Compliance/macPolicyKeys";
 import SlaPanel from "../components/Compliance/SlaPanel";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
@@ -1186,6 +1187,10 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
             macPolicyKeys={macPolicyKeySet}
           />
+          {/* ADR-0037 F1 — el estándar declarado y quién está fuera de línea.
+              Después de la cola: es lo que se revisa de vez en cuando, no el
+              trabajo del día. Sólo con gestión (la API lo exige). */}
+          {canManage ? <BaselinesPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} /> : null}
         </Stack>
       ) : null}
 

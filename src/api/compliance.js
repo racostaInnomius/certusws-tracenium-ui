@@ -5,7 +5,7 @@
 // so callers can check `res.ok` before touching `res.items` etc.
 // The SCP page unwraps uniformly via a shared helper.
 
-import { httpGetJson, httpPostJson, httpPutJson } from "./http";
+import { httpDeleteJson, httpGetJson, httpPostJson, httpPutJson } from "./http";
 import { buildQuery } from "./query";
 
 const BASE = "/api/v1/security/compliance";
@@ -363,4 +363,36 @@ export async function bulkFindingOp({ op, findingIds, newStatus, note, kind, jus
     Object.assign(body, { newStatus, note: note ?? null });
   }
   return httpPostJson(`${BASE}/findings:bulk`, body);
+}
+
+// ── Baselines de remediación (ADR-0037 F1) ─────────────────────────────
+// El estándar del tenant, declarado. Sin caché: tras crear o añadir checks la
+// pantalla tiene que ver lo que acaba de pasar, no la lectura de hace un
+// minuto.
+const BASELINES = `${BASE}/baselines`;
+const fresh = { cache: "no-store" };
+
+export async function listBaselines() {
+  return httpGetJson(BASELINES, fresh);
+}
+export async function getBaselineDetail(id) {
+  return httpGetJson(`${BASELINES}/${encodeURIComponent(id)}`, fresh);
+}
+export async function getBaselineAlignment(id) {
+  return httpGetJson(`${BASELINES}/${encodeURIComponent(id)}/alignment`, fresh);
+}
+export async function getBaselineProposals(id, { minCoverage, days } = {}) {
+  return httpGetJson(`${BASELINES}/${encodeURIComponent(id)}/proposals${buildQuery({ minCoverage, days })}`, fresh);
+}
+export async function createBaseline(payload) {
+  return httpPostJson(BASELINES, payload);
+}
+export async function deleteBaseline(id) {
+  return httpDeleteJson(`${BASELINES}/${encodeURIComponent(id)}`);
+}
+export async function addBaselineEntries(id, checkIds, source = "manual") {
+  return httpPostJson(`${BASELINES}/${encodeURIComponent(id)}/entries`, { checkIds, source });
+}
+export async function removeBaselineEntry(id, checkId) {
+  return httpDeleteJson(`${BASELINES}/${encodeURIComponent(id)}/entries/${encodeURIComponent(checkId)}`);
 }
