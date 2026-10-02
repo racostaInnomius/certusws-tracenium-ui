@@ -31,6 +31,7 @@ import {
 import MaintenanceWindowDialog from "./MaintenanceWindowDialog";
 import { minutesToHHMM } from "./maintenanceWindowTime";
 import { listFrom } from "../../api/shape";
+import { useConfirm } from "../common/ConfirmDialog";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -59,6 +60,7 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
   const [loading, setLoading] = React.useState(true);
   const [dialog, setDialog] = React.useState(null); // { mode, entry }
   const [submitting, setSubmitting] = React.useState(false);
+  const confirm = useConfirm();
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -76,7 +78,35 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
     load();
   }, [load]);
 
+  /**
+   * ¿Esto deja el tenant SIN ninguna ventana activa? Sin ventanas no hay
+   * restricción (maintenance-window.ts): todo lo retenido sale en el siguiente
+   * barrido, a la hora que sea. Auditoría PMP 1-oct-2026: borrar la última era
+   * un clic, sin pregunta.
+   */
+  const leavesNoActiveWindow = (changedId, stillEnabled) =>
+    !items.some((w) => (w.id === changedId ? stillEnabled : w.enabled !== false));
+
+  const confirmUnrestricted = () =>
+    confirm({
+      title: "Remove the last active maintenance window?",
+      body:
+        "With no active window, patch installs and restarts are no longer held: anything waiting for a window " +
+        "is dispatched on the next sweep, during working hours if that is when it runs.",
+      confirmText: "Remove the restriction",
+      danger: true,
+    });
+
   const handleSubmit = async (payload) => {
+    if (
+      dialog?.mode === "edit" &&
+      payload?.enabled === false &&
+      dialog.entry?.enabled !== false &&
+      leavesNoActiveWindow(dialog.entry.id, false) &&
+      !(await confirmUnrestricted())
+    ) {
+      return;
+    }
     setSubmitting(true);
     try {
       if (dialog?.mode === "edit") await updateMaintenanceWindow(dialog.entry.id, payload);
@@ -92,6 +122,15 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
   };
 
   const handleDelete = async (entry) => {
+    const ok = leavesNoActiveWindow(entry.id, false)
+      ? await confirmUnrestricted()
+      : await confirm({
+          title: `Delete the window “${entry.name}”?`,
+          body: "Deployments and patch installs will only use the remaining windows.",
+          confirmText: "Delete window",
+          danger: true,
+        });
+    if (!ok) return;
     try {
       await deleteMaintenanceWindow(entry.id);
       notify?.("success", "Window deleted.");
