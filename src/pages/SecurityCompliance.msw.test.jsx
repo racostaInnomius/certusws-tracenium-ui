@@ -243,8 +243,25 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     // Tabs present (Fase B)
     expect(screen.getByRole("tab", { name: /Fleet status/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Catalog/ })).toBeInTheDocument();
-    // Baselines se retiró el 1-oct: sus modos no cambiaban lo que mide SCP.
-    expect(screen.queryByRole("tab", { name: /Baselines/ })).toBeNull();
+    // Baselines (ADR-0037, 2-oct): pestaña propia; antes quedaba escondida al
+    // final de Remediation.
+    expect(screen.getByRole("tab", { name: /Baselines/ })).toBeInTheDocument();
+  });
+
+  it("⭐ la pestaña Baselines enseña los baselines, y ?scpTab=baselines abre ahí", async () => {
+    window.history.replaceState({}, "", "/?page=ad&scpTab=baselines");
+    respond("get", `${BASE}/baselines`, {
+      ok: true,
+      baselines: [{ id: "b1", name: "Windows workstations", scopeKind: "platform", platform: "windows", assetGroupId: null, assetGroupName: null, mode: "report", entryCount: 5 }],
+    });
+    respond("get", /\/api\/v1\/security\/compliance\/baselines\/b1\/alignment/, {
+      ok: true,
+      alignment: { devicesInScope: 58, devicesAligned: 46, devicesUnmeasured: 3, byCheck: [], devices: [], totals: {} },
+    });
+    mountPage();
+    expect(await screen.findByText("Windows workstations")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Baselines/ })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText(/46 of 58 aligned/)).toBeInTheDocument();
   });
 
   it("⭐ la tabla de equipos dice quién está encendido AHORA, como Asset Management", async () => {
@@ -487,6 +504,7 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
   it("los mandos de la cabecera siguen ahí en LAS CUATRO pestañas", async () => {
     const { fireEvent } = await import("@testing-library/react");
     respond("get", `${BASE}/catalog`, { ok: true, checks: [] });
+    respond("get", `${BASE}/baselines`, { ok: true, baselines: [] });
     mountPage();
     await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
 
@@ -494,7 +512,7 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
       screen.getByRole("heading", { name: "Security Compliance" }).closest("div")
         ?.parentElement?.parentElement;
 
-    for (const pestana of [/Catalog/, /Compliance Settings/, /Fleet status/]) {
+    for (const pestana of [/Baselines/, /Catalog/, /Compliance Settings/, /Fleet status/]) {
       fireEvent.click(screen.getByRole("tab", { name: pestana }));
       await waitFor(() => {
         const fila = filaTitulo();

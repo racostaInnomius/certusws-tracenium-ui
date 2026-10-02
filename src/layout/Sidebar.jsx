@@ -801,9 +801,9 @@ export default function Sidebar({
     // Software Delivery (SDP) — Phase 1.
     { label: "Software Delivery", key: "software-delivery", icon: <CloudDownloadOutlinedIcon /> },
     // Security Compliance hosts the whole loop as tabs: Fleet status
-    // (evidence) | Fix | Exceptions | Catalog | Compliance Settings. The old
-    // Baselines tab was removed on 2026-10-01; its `security-baselines` key
-    // survives in pageRegistry as an alias for old links.
+    // (evidence) | Remediation | Baselines (ADR-0037, declared standard) |
+    // Exceptions | Catalog | Compliance Settings. `security-baselines` in
+    // pageRegistry is an alias that opens the Baselines tab.
     { label: "Security Compliance", key: "ad", icon: <GppGoodOutlinedIcon /> },
     { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon /> },
     { label: "Patch Management", key: "patch", icon: <SystemUpdateAltOutlinedIcon /> },

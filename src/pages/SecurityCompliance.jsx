@@ -99,6 +99,7 @@ import BaselinesPanel from "../components/Compliance/BaselinesPanel";
 import { macPolicyKeys } from "../components/Compliance/macPolicyKeys";
 import SlaPanel from "../components/Compliance/SlaPanel";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
+import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import DeviceDrawerContent from "../components/Compliance/DeviceDrawerContent";
@@ -340,17 +341,19 @@ function readUrlFilters() {
 }
 
 // Deep-linkable via ?scpTab=. Same pattern Configurations uses for
-// ?settingsTab=. "settings" y "exceptions" son sólo para roles con gestión —
-// `effectiveTab` las degrada a "posture" para un USER.
+// ?settingsTab=. "baselines", "settings" y "exceptions" son sólo para roles
+// con gestión — `effectiveTab` las degrada a "posture" para un USER.
 //
-// "baselines" ya no está (1-oct): sus modos por capability no los configuró
-// ningún tenant y no cambiaban lo que mide SCP. Un `?scpTab=baselines`
-// guardado cae a "posture" por no estar en la lista.
+// "baselines" (2-oct) es el baseline de ADR-0037: el estándar declarado y
+// quién está fuera de línea. Nació como sección al final de Remediation y
+// quedaba escondido; crecerá con la cola de aprobación (F2). Reutiliza el
+// valor de la pestaña vieja de modos por capability (retirada el 1-oct), así
+// que un enlace antiguo a `?scpTab=baselines` abre el baseline nuevo.
 //
 // ⚠️ Una pestaña que no esté en esta lista NO es alcanzable: ni por URL ni por
 // `setTab`, porque el efecto de abajo reescribe `?scpTab=` y al recargar
 // volvería a "posture". Añadir una pestaña a `PageTabs` sin tocar esto la deja muerta.
-const SCP_TABS = ["posture", "fix", "exceptions", "catalog", "settings"];
+const SCP_TABS = ["posture", "fix", "baselines", "exceptions", "catalog", "settings"];
 
 export default function SecurityCompliance({ initialTab, onNavigate }) {
   // ADR-0011 Phase 3 — gate on the "security_compliance" capability
@@ -415,7 +418,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // Las pestañas privilegiadas caen a Fleet status si el rol no las tiene:
   // un `?scpTab=settings` guardado por un ADMIN no puede dejar a un USER
   // mirando una pantalla vacía.
-  const effectiveTab = (tab === "settings" || tab === "exceptions") && !canManage ? "posture" : tab;
+  const effectiveTab = (tab === "settings" || tab === "exceptions" || tab === "baselines") && !canManage ? "posture" : tab;
 
   // Grupo y framework viven en la URL (?group= / ?framework=): ir a un equipo
   // y volver, recargar o compartir el enlace los perdía (walkthrough 25-sep #9).
@@ -1109,7 +1112,9 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
       <PageHeader
         title="Security Compliance"
         subtitle={
-          effectiveTab === "catalog" ? (
+          effectiveTab === "baselines" ? (
+            "Your standard configuration, written down: the checks each group of devices must pass, and which devices are out of line."
+          ) : effectiveTab === "catalog" ? (
             "Every control Tracenium evaluates, across platforms and frameworks. Read-only — the catalog is global."
           ) : effectiveTab === "settings" ? (
             "Thresholds and the frameworks you track. Both change what the rest of this page reports — and what the exports contain."
@@ -1213,6 +1218,9 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           { value: "fix", label: "Remediation", icon: <BuildOutlinedIcon /> },
           // P1-7 — solicitudes de excepción: se piden desde el hallazgo y se
           // deciden aquí. Sólo quien gestiona compliance las ve.
+          // ADR-0037 — el baseline: pegado a Remediation porque es su lado
+          // «estándar» (qué debe cumplir cada grupo), y con gestión.
+          canManage ? { value: "baselines", label: "Baselines", icon: <RuleOutlinedIcon /> } : null,
           canManage ? { value: "exceptions", label: "Exceptions", icon: <GppMaybeOutlinedIcon /> } : null,
           { value: "catalog", label: "Catalog", icon: <MenuBookOutlinedIcon /> },
           // Era un engrane en la fila de filtros. Los umbrales y los
@@ -1250,11 +1258,13 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
             macPolicyKeys={macPolicyKeySet}
           />
-          {/* ADR-0037 F1 — el estándar declarado y quién está fuera de línea.
-              Después de la cola: es lo que se revisa de vez en cuando, no el
-              trabajo del día. Sólo con gestión (la API lo exige). */}
-          {canManage ? <BaselinesPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} /> : null}
         </Stack>
+      ) : null}
+
+      {/* ADR-0037 — el estándar declarado y quién está fuera de línea. Sólo
+          con gestión (la API lo exige; effectiveTab ya lo degrada). */}
+      {effectiveTab === "baselines" ? (
+        <BaselinesPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} />
       ) : null}
 
       {effectiveTab === "exceptions" ? (
