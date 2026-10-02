@@ -40,6 +40,17 @@ describe("describeGateOutcome", () => {
   });
 });
 
+describe("describeGateOutcome — puertas ilegibles (1-oct-2026)", () => {
+  it("🔴 retenido porque no se pudieron leer las puertas: lo dice, no promete la ventana", () => {
+    const out = describeGateOutcome({
+      status: "pending",
+      gate: { status: "awaiting_window", opensAt: null, reason: "held:gates_unavailable" },
+    });
+    expect(out).toMatchObject({ severity: "warning", held: true });
+    expect(out.message).toMatch(/checks could not be read/);
+  });
+});
+
 describe("describeBlockedError", () => {
   it("un 409 de la puerta trae su motivo legible", () => {
     expect(

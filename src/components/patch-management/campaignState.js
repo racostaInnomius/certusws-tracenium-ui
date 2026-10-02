@@ -212,6 +212,12 @@ export const PATCH_ERROR_TEXT = {
   "deferred:window_check_unavailable": "Maintenance windows could not be read — delivery will be retried.",
   snapshot_no_response:
     "Not installed: the Infrastructure Gateway did not answer the pre-patch snapshot request in time.",
+  // 1-oct-2026: retenido al crear porque las puertas no se pudieron leer.
+  "held:gates_unavailable":
+    "Held: the maintenance-window and snapshot checks could not be read when it was created. It is released automatically once they respond.",
+  // 1-oct-2026: caducó retenido; el equipo no estuvo conectado en ninguna ventana.
+  held_window_never_reached:
+    "Expired: the device was never online during a maintenance window. Give it a window it is on for, or install outside the window.",
 };
 
 export function describePatchError(lastError) {

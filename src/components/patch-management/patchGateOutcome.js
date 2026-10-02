@@ -44,6 +44,16 @@ export function pendingKbIds(items) {
  */
 export function describeGateOutcome(res) {
   const status = res?.gate?.status || (res?.status === "queued" ? "pending" : res?.status);
+  // 1-oct-2026: si las puertas no se pudieron leer al crearlo, el backend lo
+  // retiene en vez de despachar sin ventana ni snapshot. No es la ventana.
+  if (status === "awaiting_window" && res?.gate?.reason === "held:gates_unavailable") {
+    return {
+      severity: "warning",
+      held: true,
+      message:
+        "Held: the maintenance-window and snapshot checks could not be read. It is released automatically once they respond",
+    };
+  }
   if (status === "awaiting_window") {
     const when = formatOpensAt(res?.gate?.opensAt);
     return {

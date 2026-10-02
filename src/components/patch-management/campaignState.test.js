@@ -267,3 +267,11 @@ describe("🔴 lastPatchJobCell — un corte NUESTRO no se cuenta como si el age
     expect(c.title).toMatch(/reported success/);
   });
 });
+
+describe("describePatchError — códigos nuevos (1-oct-2026)", () => {
+  it("retenido por puertas ilegibles y caducado sin ventana se leen", () => {
+    expect(describePatchError("held:gates_unavailable")).toMatch(/checks could not be read/);
+    expect(describePatchError("held_window_never_reached")).toMatch(/never online during a maintenance window/);
+  });
+});
+
