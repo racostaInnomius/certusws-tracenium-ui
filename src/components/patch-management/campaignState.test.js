@@ -254,6 +254,9 @@ describe("🔴 lastPatchJobCell — un corte NUESTRO no se cuenta como si el age
       .toMatch(/deadline passed/);
     expect(lastPatchJobCell({ state: "verifying", patch: cortado({ interruptedBy: "ipc_timeout", verifiedAt: null }) }).title)
       .toMatch(/privileged service/);
+    // 1-oct-2026: el agente reiniciado a mitad de la instalación.
+    expect(lastPatchJobCell({ state: "verifying", patch: cortado({ interruptedBy: "agent_restarted", verifiedAt: null }) }).title)
+      .toMatch(/agent restarted while the install was running/);
   });
 
   it("sin corte, los textos de siempre", () => {

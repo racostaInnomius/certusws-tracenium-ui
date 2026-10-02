@@ -66,6 +66,9 @@ export const INTERRUPTION_TEXT = {
   agent_timeout: "The agent stopped waiting for Windows Update after its time limit",
   backend_timeout: "The job's deadline passed with no answer from the device",
   ipc_timeout: "The agent's privileged service did not answer in time",
+  // 1-oct-2026: el agente se reinició con la instalación en vuelo; al volver a
+  // recibir el job lo dice en vez de reinstalar a ciegas.
+  agent_restarted: "The agent restarted while the install was running",
 };
 
 export function interruptionText(kind) {
