@@ -149,6 +149,46 @@ function mountPage({ settings = SETTINGS, onNavigate = vi.fn() } = {}) {
   return { ...render(<ConfirmProvider><SecurityCompliance onNavigate={onNavigate} /></ConfirmProvider>), onNavigate };
 }
 
+// 2-oct, validando en prod: un enlace con un grupo borrado y un framework
+// fuera del pack volvía bien a «All», pero las secciones ya habían pedido con
+// esos valores — 400 y 500 en cuatro endpoints. Ahora se validan ANTES.
+describe("SecurityCompliance — ámbito de la URL que ya no vale", () => {
+  it("⭐ un ?group= borrado y un ?framework= fuera del pack: ninguna petición los lleva, y la página queda en «All»", async () => {
+    window.history.replaceState({}, "", "/?page=ad&group=99999&framework=nope_framework");
+    const urls = [];
+    const onStart = ({ request }) => urls.push(request.url);
+    server.events.on("request:start", onStart);
+    try {
+      mountPage();
+      expect(await screen.findByText("WS-ALPHA")).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole("combobox", { name: "Filter by framework" })).toHaveTextContent(/All frameworks/));
+      expect(screen.getByRole("combobox", { name: "Filter by asset group" })).toHaveTextContent("All devices");
+      // Ni el grupo ni el framework inválidos salieron en ninguna petición.
+      expect(urls.filter((u) => /99999|nope_framework/.test(u))).toEqual([]);
+      // Y la carga sí se hizo, sin ámbito.
+      expect(urls.some((u) => /\/security\/compliance\/summary/.test(u))).toBe(true);
+    } finally {
+      server.events.removeListener("request:start", onStart);
+    }
+  });
+
+  it("un ?group= que existe se respeta desde la primera petición", async () => {
+    window.history.replaceState({}, "", "/?page=ad&group=4");
+    const urls = [];
+    const onStart = ({ request }) => urls.push(request.url);
+    server.events.on("request:start", onStart);
+    try {
+      mountPage();
+      expect(await screen.findByText("WS-ALPHA")).toBeInTheDocument();
+      const summaries = urls.filter((u) => /\/security\/compliance\/summary/.test(u));
+      expect(summaries.length).toBeGreaterThan(0);
+      expect(summaries.every((u) => /assetGroupId=4/.test(u))).toBe(true);
+    } finally {
+      server.events.removeListener("request:start", onStart);
+    }
+  });
+});
+
 describe("SecurityCompliance — real envelopes over MSW", () => {
   it("renders hero KPIs, framework table, device table and the pack chip from the real shapes", async () => {
     mountPage();

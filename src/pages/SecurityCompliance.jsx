@@ -465,6 +465,46 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   const [assetGroupId, setAssetGroupId] = React.useState(initialScope.assetGroupId);
   const [assetGroups, setAssetGroups] = React.useState([]);
 
+  // ── Un ?group= / ?framework= de la URL se valida ANTES de pedir nada ──
+  //
+  // 2-oct, validando en prod con un enlace a un grupo borrado y un framework
+  // que no está en el pack: la página volvía bien a «All», pero para entonces
+  // sus secciones ya habían pedido con los valores malos — 400 y 500 en
+  // cuatro endpoints, y a veces el aviso «Unable to refresh data». Ahora, si
+  // la URL trae ámbito, la carga y las secciones con ámbito esperan a
+  // comprobarlo (dos lecturas, la de frameworks cacheada para la carga).
+  // Sin ámbito en la URL no cambia nada.
+  const [scopeReady, setScopeReady] = React.useState(
+    () => !initialScope.assetGroupId && !initialScope.framework
+  );
+  React.useEffect(() => {
+    if (scopeReady) return undefined;
+    let alive = true;
+    Promise.allSettled([
+      initialScope.assetGroupId ? listAssetGroups({ pageSize: 100 }) : Promise.resolve(null),
+      initialScope.framework ? getFrameworks() : Promise.resolve(null),
+    ]).then(([groupsRes, fwRes]) => {
+      if (!alive) return;
+      if (initialScope.assetGroupId && groupsRes.status === "fulfilled") {
+        const items = listFrom(groupsRes.value, "items");
+        // Lista incompleta (≥ 100): no se puede afirmar que no exista.
+        if (items.length < 100 && !items.some((g) => String(g.id) === String(initialScope.assetGroupId))) setAssetGroupId("");
+      }
+      if (initialScope.framework && fwRes.status === "fulfilled") {
+        const fams = Array.isArray(fwRes.value?.families) ? fwRes.value.families : [];
+        const fws = Array.isArray(fwRes.value?.frameworks) ? fwRes.value.frameworks : [];
+        const valid = fams.some((f) => f.key === initialScope.framework) || fws.some((f) => f.framework === initialScope.framework);
+        if (!valid) setSelectedFramework("");
+      }
+      setScopeReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+    // Una vez, al montar: es la URL de entrada la que se valida.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   React.useEffect(() => {
     let alive = true;
     listAssetGroups({ pageSize: 100 })
@@ -595,7 +635,9 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   }, [selectedFramework, assetGroupId]);
 
   const cacheKey = `securityCompliance:${selectedFramework || "all"}:${assetGroupId || "fleet"}`;
-  const { data, loading, refreshing, error, refetch } = useCachedFetch(cacheKey, loader);
+  const { data, loading: dataLoading, refreshing, error, refetch } = useCachedFetch(cacheKey, loader, { enabled: scopeReady });
+  // Mientras se valida el ámbito de la URL, la página está cargando.
+  const loading = dataLoading || !scopeReady;
 
   // Sprint 2 item 4 — one refresh to rule them all. The header's
   // RefreshControl used to refetch only the four page-level calls; the
@@ -1488,22 +1530,26 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           alignItems: "stretch",
         }}
       >
-        <WhatToFixFirst
-          reloadKey={refreshToken}
-          framework={selectedFramework}
-          frameworkLabel={selectedFrameworkLabel}
-          assetGroupId={assetGroupId}
-          assetGroupLabel={assetGroupLabel}
-          onOpenCheck={(row) => {
-            setFocusCheckId(row?.checkId ?? null);
-            setFocusControl(null);
-            setTab("catalog");
-          }}
-          onRemediate={canRemediate ? handleRemediateCheck : null}
-          onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
-          macPolicyKeys={macPolicyKeySet}
-        />
-        <MttrCard reloadKey={refreshToken} assetGroupId={assetGroupId} framework={selectedFramework} scopeLabels={scopeLabels} />
+        {scopeReady ? (
+          <WhatToFixFirst
+            reloadKey={refreshToken}
+            framework={selectedFramework}
+            frameworkLabel={selectedFrameworkLabel}
+            assetGroupId={assetGroupId}
+            assetGroupLabel={assetGroupLabel}
+            onOpenCheck={(row) => {
+              setFocusCheckId(row?.checkId ?? null);
+              setFocusControl(null);
+              setTab("catalog");
+            }}
+            onRemediate={canRemediate ? handleRemediateCheck : null}
+            onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}
+            macPolicyKeys={macPolicyKeySet}
+          />
+        ) : null}
+        {scopeReady ? (
+          <MttrCard reloadKey={refreshToken} assetGroupId={assetGroupId} framework={selectedFramework} scopeLabels={scopeLabels} />
+        ) : null}
       </Box>
 
       {/* Fleet compliance trend over time — the audit / CIO "are we improving?"
@@ -1534,13 +1580,15 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           </Box>
         </AccordionSummary>
         <AccordionDetails sx={{ pt: 0 }}>
-          <ComplianceTrendChart
-            notify={notifyToast}
-            reloadKey={refreshToken}
-            assetGroupId={assetGroupId}
-            framework={selectedFramework}
-            families={families}
-          />
+          {scopeReady ? (
+            <ComplianceTrendChart
+              notify={notifyToast}
+              reloadKey={refreshToken}
+              assetGroupId={assetGroupId}
+              framework={selectedFramework}
+              families={families}
+            />
+          ) : null}
         </AccordionDetails>
       </Accordion>
 
@@ -1817,13 +1865,15 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           the fleet analogue of the drawer's per-device category grouping.
           Sits below the framework table (compliance vs benchmarks) and above
           the MTTR/device views (triage). */}
-      <ComplianceCategoryBreakdown
-        reloadKey={refreshToken}
-        onOpenDevice={openDrawer}
-        assetGroupId={assetGroupId}
-        framework={selectedFramework}
-        scopeLabels={scopeLabels}
-      />
+      {scopeReady ? (
+        <ComplianceCategoryBreakdown
+          reloadKey={refreshToken}
+          onOpenDevice={openDrawer}
+          assetGroupId={assetGroupId}
+          framework={selectedFramework}
+          scopeLabels={scopeLabels}
+        />
+      ) : null}
 
       {/* «Time to remediate» se mudó arriba, al lado de «What to fix first». */}
 
