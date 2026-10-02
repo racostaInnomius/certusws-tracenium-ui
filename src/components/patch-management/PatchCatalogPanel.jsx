@@ -41,6 +41,7 @@ import SectionPaper from "../common/SectionPaper";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { formatDate } from "../../utils/format";
 import { getPatchCatalogEntry, listPatchCatalog, updatePatchCatalogEntry } from "../../api/patchManagement";
+import OutOfBandPatches from "./OutOfBandPatches";
 import { APPROVAL_META, approvalMeta, confidenceText, decisionPayload, matchesFilter, pendingSinceText, targetsText } from "./patchCatalog";
 
 const TONE = {
@@ -418,6 +419,8 @@ export default function PatchCatalogPanel({ canManage, notify, refreshNonce = 0 
           </Table>
         </Box>
       )}
+
+      <OutOfBandPatches canManage={canManage} notify={notify} catalogItems={data?.items ?? []} onChanged={load} />
 
       <DecisionDialog
         item={deciding}

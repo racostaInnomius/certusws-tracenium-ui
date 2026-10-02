@@ -73,3 +73,38 @@ export function decisionPayload(form, now = new Date()) {
   body.supersededBy = sup || null;
   return { body };
 }
+
+// ── Out-of-band (.msu) ──────────────────────────────────────────────────────
+
+/**
+ * What a Microsoft Update Catalog file name gives away:
+ * "windows10.0-kb5129237-x64_<hash>.msu" → { patchId: "KB5129237", arch: "x64" }.
+ * A hint for the form, never a fact: the operator confirms it.
+ */
+export function guessFromMsuName(filename) {
+  const name = String(filename ?? "").toLowerCase();
+  const kb = /kb(\d{6,8})/.exec(name);
+  const arch = /-(x64|arm64|x86)[-_.]/.exec(name);
+  return { patchId: kb ? `KB${kb[1]}` : "", arch: arch ? arch[1] : "x64" };
+}
+
+/** Registration form → body, or { error }. */
+export function registrationPayload(f) {
+  const patchId = String(f.patchId ?? "").trim().toUpperCase();
+  if (!/^KB\d{6,8}$/.test(patchId)) return { error: "The KB number, e.g. KB5129237." };
+  const title = String(f.title ?? "").trim();
+  if (!title) return { error: "Give it a title (from the KB page)." };
+  if (!/^\d+\.\d+\.\d+$/.test(String(f.osBuild ?? "").trim())) return { error: "The OS build it applies to, e.g. 10.0.20348." };
+  const rev = Number(f.fixedRevision);
+  if (!Number.isInteger(rev) || rev <= 0) return { error: "The build revision it brings the system to — for “OS Build 20348.5655”, 5655." };
+  const kbOrNull = (v) => {
+    const s = String(v ?? "").trim().toUpperCase();
+    return s ? s : null;
+  };
+  const fixes = kbOrNull(f.fixes);
+  const supersedes = kbOrNull(f.supersedes);
+  if ((fixes && !/^KB\d{6,8}$/.test(fixes)) || (supersedes && !/^KB\d{6,8}$/.test(supersedes))) return { error: "“Fixes” and “Supersedes” take a KB number." };
+  return {
+    body: { intakeId: Number(f.intakeId), patchId, title, severity: f.severity, osBuild: String(f.osBuild).trim(), arch: f.arch, fixedRevision: rev, fixes, supersedes },
+  };
+}

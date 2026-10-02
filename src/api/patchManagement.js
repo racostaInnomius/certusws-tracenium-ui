@@ -4,7 +4,7 @@
 // envelope convention as compliance.js: callers should check
 // `res.ok` before touching the payload.
 
-import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson, httpGetBlob } from "./http";
+import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson, httpGetBlob, httpPostBinaryWithProgress } from "./http";
 import { saveBlob } from "../utils/browserState";
 import { buildQuery } from "./query";
 
@@ -358,6 +358,32 @@ export async function getPatchCatalogEntry(patchId) {
 /** body: { approval?, reason?, deferredUntil?, knownIssue?, supersededBy? } */
 export async function updatePatchCatalogEntry(patchId, body) {
   return httpPatchJson(`${BASE}/catalog/${encodeURIComponent(patchId)}`, body);
+}
+
+// ── Out-of-band patches (.msu, ADR-0038 D11) ──────────────────────────────
+// A Windows update package from the Microsoft Update Catalog is a PATCH: it is
+// uploaded and registered here (not in Software Delivery) and installed through
+// the same gate as any patch.
+
+export async function listOutOfBandPatches() {
+  return httpGetJson(`${BASE}/out-of-band`);
+}
+
+/** The same intake as Software Delivery (signature check, storage), .msu only. */
+export async function uploadOutOfBandMsu(file, { onProgress } = {}) {
+  return httpPostBinaryWithProgress(`${BASE}/out-of-band/upload${buildQuery({ filename: file?.name })}`, file, {
+    onProgress,
+    timeoutMs: 20 * 60 * 1000,
+  });
+}
+
+/** body: { intakeId, patchId, title, severity, osBuild, arch, fixedRevision, fixes?, supersedes? } */
+export async function registerOutOfBandPatch(body) {
+  return httpPostJson(`${BASE}/out-of-band`, body);
+}
+
+export async function installOutOfBandPatch(patchId, { rebootIfRequired = false, deviceIds } = {}) {
+  return httpPostJson(`${BASE}/out-of-band/${encodeURIComponent(patchId)}/install`, { rebootIfRequired, ...(deviceIds ? { deviceIds } : {}) });
 }
 
 // ── Infrastructure Gateway (ADR-0001) ────────────────────────────────────────
