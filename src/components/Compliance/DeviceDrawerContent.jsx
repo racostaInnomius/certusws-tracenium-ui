@@ -48,6 +48,7 @@ import StatusChangeDialog from "./StatusChangeDialog";
 import FindingHistoryDialog from "./FindingHistoryDialog";
 import DeviceDiffSection from "./DeviceDiffSection";
 import AppliedFixesSection from "./AppliedFixesSection";
+import DeviceBaselinesSection from "./DeviceBaselinesSection";
 import RescanComplianceButton from "./RescanComplianceButton";
 import FileIntegritySection from "./FileIntegritySection";
 import FleetRankingLine from "./FleetRankingLine";
@@ -537,6 +538,10 @@ export default function DeviceDrawerContent({
             patchSummary={device.patchSummary}
             recentPatches={device.recentPatches}
           />
+
+          {/* ADR-0037 — en qué baselines está y qué tiene fuera de línea.
+              Sólo con gestión (la API lo exige); sin baselines, nada. */}
+          {canManage ? <DeviceBaselinesSection agentId={agentId} /> : null}
 
           {/* ADR-0012 — Active Directory GPOs applied to the device/user -- */}
           {/* ⚠️ Las GPO aplicadas se mudaron a Asset Management > Windows GPOs.

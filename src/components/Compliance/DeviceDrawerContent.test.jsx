@@ -5,6 +5,8 @@ import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/re
 // / FindingHistoryDialog fetch on interaction, the mutation handlers call the API)
 // all import from api/compliance — mock the whole module so nothing hits the network.
 vi.mock("../../api/compliance", () => ({
+  // ADR-0037 — la sección de baselines de la ficha; sin baselines no pinta nada.
+  getDeviceBaselines: vi.fn().mockResolvedValue({ ok: true, baselines: [] }),
   getDeviceFleetRanking: vi.fn().mockResolvedValue({ ok: true, ranking: null }),
   getDeviceFindingsDiff: vi.fn().mockResolvedValue({ ok: true, diff: { referenceSnapshotAt: null } }),
   getFindingHistory: vi.fn().mockResolvedValue({ ok: true, events: [] }),

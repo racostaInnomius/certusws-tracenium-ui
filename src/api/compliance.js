@@ -396,3 +396,6 @@ export async function addBaselineEntries(id, checkIds, source = "manual") {
 export async function removeBaselineEntry(id, checkId) {
   return httpDeleteJson(`${BASELINES}/${encodeURIComponent(id)}/entries/${encodeURIComponent(checkId)}`);
 }
+export async function getDeviceBaselines(agentId) {
+  return httpGetJson(`${BASELINES}/device/${encodeURIComponent(agentId)}`, fresh);
+}
