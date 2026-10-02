@@ -46,7 +46,7 @@ import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import { BRAND, DATAGRID_SX, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { DataGrid } from "@mui/x-data-grid";
-import ActionOutlookNotice from "./ActionOutlookNotice";
+import RemediationOutlookNotice from "./RemediationOutlookNotice";
 import {
   getDevicesAffectedByCheck,
   remediate,
@@ -755,13 +755,14 @@ export default function FindingDetailDrawer({
               </Box>
 
               {/* What pressing these buttons would actually do — when it
-                  dispatches, what gets snapshotted, whether it can be undone.
-                  Directly above the buttons on purpose: it answers the
-                  questions people ask themselves in the second before they
-                  click, and it used to live two tabs away. */}
+                  goes out, whether anything is snapshotted, whether it can be
+                  undone. Directly above the buttons on purpose. Es el aviso
+                  de un ARREGLO, no el de instalar parches (ver
+                  RemediationOutlookNotice: el de parches prometía ventana,
+                  snapshot e «irreversible», y nada de eso era verdad aquí). */}
               {isAgentRemediable ? (
                 <Box sx={{ pt: 1 }}>
-                  <ActionOutlookNotice deviceIds={Array.from(selectedDeviceIds)} />
+                  <RemediationOutlookNotice />
                 </Box>
               ) : null}
 

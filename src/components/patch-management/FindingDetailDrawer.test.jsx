@@ -20,7 +20,6 @@ vi.mock("../../api/patchManagement", () => ({
   cancelRemediation: vi.fn(),
   listRemediations: vi.fn(),
 }));
-vi.mock("./ActionOutlookNotice", () => ({ default: () => null }));
 
 import { getDevicesAffectedByCheck, remediate, getRemediationResults, listRemediations } from "../../api/patchManagement";
 import FindingDetailDrawer from "./FindingDetailDrawer";
@@ -47,6 +46,22 @@ afterEach(cleanup);
 
 const open = (props = {}) =>
   render(<FindingDetailDrawer open finding={FINDING} canManage notify={vi.fn()} onClose={vi.fn()} {...props} />);
+
+// 2-oct, validando en prod: el drawer de un ARREGLO enseñaba el aviso de
+// instalar parches — «Held until…», «snapshotted in vCenter first» y «Not
+// reversible» —, y nada de eso pasa con un arreglo.
+describe("⭐ lo que dice antes de aplicar un arreglo es verdad", () => {
+  it("sale ahora, sin snapshot, y se puede deshacer; nada de ventana ni de «Not reversible»", async () => {
+    open();
+    const notice = await screen.findByTestId("remediation-outlook");
+    expect(notice).toHaveTextContent(/Goes out now/);
+    expect(notice).toHaveTextContent(/No vCenter snapshot is taken/);
+    expect(notice).toHaveTextContent(/Can be undone/);
+    expect(screen.queryByText(/Not reversible/)).toBeNull();
+    expect(screen.queryByText(/Held until/)).toBeNull();
+    expect(screen.queryByText(/will be snapshotted in vCenter/)).toBeNull();
+  });
+});
 
 describe("simular, luego aplicar", () => {
   it("⭐ el operador elige: simular o aplicar directo, los dos sobre lo seleccionado", async () => {
