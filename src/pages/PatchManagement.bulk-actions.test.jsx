@@ -12,8 +12,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { server, http, HttpResponse } from "../test/msw/server";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
 
+const caps = vi.hoisted(() => ({ value: { role: "ADMIN", permissions: ["patch_management"] } }));
 vi.mock("../api/roles", () => ({
-  getMyCapabilities: () => Promise.resolve({ role: "ADMIN", permissions: ["patch_management"] }),
+  getMyCapabilities: () => Promise.resolve(caps.value),
 }));
 vi.mock("../auth/AuthContext", () => ({
   useAuthContext: () => ({
@@ -83,6 +84,7 @@ async function remediate(actionName) {
 }
 
 afterEach(() => {
+  caps.value = { role: "ADMIN", permissions: ["patch_management"] };
   cleanup();
   server.resetHandlers();
   clearCachedFetch();
@@ -129,5 +131,20 @@ describe("Patch Management — acciones de flota", () => {
     expect(await screen.findByText("Install all other pending updates")).toBeInTheDocument();
     expect(screen.queryByText(/non-security/)).toBeNull();
     expect(screen.getByText(/which can include security fixes/)).toBeInTheDocument();
+  });
+
+  it("🔴 sin patch_management los botones de flota salen desactivados (el backend da 403)", async () => {
+    // Auditoría 1-oct-2026: /bulk-install sólo miraba el plan, así que
+    // cualquier miembro activo instalaba con reinicio en toda la flota.
+    caps.value = { role: "USER", permissions: ["jobs"] };
+    mount();
+    await screen.findByText("SRVOC-MainAgent");
+    expect(await screen.findByTestId("pmp-actions-need-permission")).toBeInTheDocument();
+
+    const title = screen.getByText("Install all other pending updates");
+    let row = title.parentElement;
+    while (row && !within(row).queryByRole("button", { name: /Remediate/ })) row = row.parentElement;
+    expect(within(row).getByRole("button", { name: /Remediate/ })).toBeDisabled();
+    expect(posts).toEqual([]);
   });
 });

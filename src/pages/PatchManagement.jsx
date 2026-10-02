@@ -331,12 +331,15 @@ function CampaignChip({ label, tone, title }) {
   );
 }
 
-function ActionsList({ actions, pmpEnabled, onRun }) {
+function ActionsList({ actions, pmpEnabled, canManage, onRun }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mt: 1.5 }}>
       {actions.map((a) => {
         const wired = Boolean(BULK_ACTION_MAP[a.id]);
-        const enabled = pmpEnabled && wired;
+        // Fleet-wide install/scan: the backend demands patch_management on
+        // /bulk-install and /bulk-scan, so a member without it gets a disabled
+        // button instead of a 403 after the confirm dialog.
+        const enabled = pmpEnabled && canManage && wired;
         return (
         <Box
           key={a.id}
@@ -396,7 +399,7 @@ function ActionsList({ actions, pmpEnabled, onRun }) {
   );
 }
 
-function CategoryPanel({ category, pmpEnabled, onRunAction }) {
+function CategoryPanel({ category, pmpEnabled, canManage, onRunAction }) {
   return (
     <SectionPaper
       variant="panel"
@@ -447,9 +450,20 @@ function CategoryPanel({ category, pmpEnabled, onRunAction }) {
         </Alert>
       ) : null}
 
+      {pmpEnabled && !canManage ? (
+        <Typography
+          data-testid="pmp-actions-need-permission"
+          sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 2 }}
+        >
+          Fleet-wide patch actions need the Patch management permission. Ask a
+          tenant admin if you should be running them.
+        </Typography>
+      ) : null}
+
       <ActionsList
         actions={category.actions}
         pmpEnabled={pmpEnabled}
+        canManage={canManage}
         onRun={onRunAction}
       />
     </SectionPaper>
@@ -1712,6 +1726,7 @@ export default function PatchManagement({ onNavigate }) {
             <CategoryPanel
               category={activeCategory}
               pmpEnabled={pmpEnabled}
+              canManage={canManage}
               onRunAction={handleRunCategoryAction}
             />
             <Box sx={{ mt: 3 }}>
@@ -1769,6 +1784,7 @@ export default function PatchManagement({ onNavigate }) {
           <CategoryPanel
             category={activeCategory}
             pmpEnabled={pmpEnabled}
+            canManage={canManage}
             onRunAction={handleRunCategoryAction}
           />
         )}
