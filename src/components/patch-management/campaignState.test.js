@@ -275,3 +275,23 @@ describe("describePatchError — códigos nuevos (1-oct-2026)", () => {
   });
 });
 
+describe("lastPatchJobCell — verificación post-parche (ADR-0038 F1)", () => {
+  const installed = (verification) => ({
+    state: "installed",
+    patch: { jobId: "j1", status: "completed", startedAt: "2026-09-12T18:20:00Z", finishedAt: "2026-09-12T18:58:59Z", installedCount: 2, othersPending: 0, verifiedAt: "2026-09-12T19:30:00Z", verification },
+  });
+
+  it("🔴 instalado pero con un servicio caído → no se pinta en verde", () => {
+    const c = lastPatchJobCell(installed({ status: "failed", completedAt: "2026-09-12T19:25:00Z", summary: "1 service did not come back (mssqlserver)" }));
+    expect(c.tone).toBe("critical");
+    expect(c.label).toMatch(/Not healthy$/);
+    expect(c.title).toMatch(/^After the patch: 1 service did not come back \(mssqlserver\)/);
+  });
+
+  it("en verde lo dice en el detalle; en curso, también", () => {
+    expect(lastPatchJobCell(installed({ status: "passed", completedAt: "2026-09-12T19:25:00Z", summary: null })).title).toMatch(/services and checks verified after the patch/);
+    expect(lastPatchJobCell(installed({ status: "dispatched", completedAt: null, summary: null })).title).toMatch(/checking that services came back/);
+    expect(lastPatchJobCell(installed({ status: "passed", completedAt: null, summary: null })).tone).toBe("positive");
+  });
+});
+

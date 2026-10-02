@@ -82,7 +82,42 @@ export function interruptionText(kind) {
  * La fecha va EN el rótulo cuando el estado es un resultado: un «Timed out» del
  * 14-ago no es lo mismo que uno de hoy, y sin fecha parecían iguales.
  */
+/**
+ * La celda, con lo que dijo la verificación post-parche encima (ADR-0038 F1).
+ *
+ * El estado de campaña dice si el parche ENTRÓ (lo dice el escaneo); la
+ * verificación, si una vez dentro el equipo sigue haciendo su trabajo. Un
+ * «Installed» con un servicio caído no puede pintarse en verde: es justo lo
+ * que nadie veía hasta que un usuario abría el informe.
+ */
 export function lastPatchJobCell(campaign) {
+  const cell = patchJobCellCore(campaign);
+  const v = campaign?.patch?.verification;
+  if (!v || cell.empty) return cell;
+  const at = shortDate(v.completedAt);
+  if (v.status === "failed") {
+    return {
+      ...cell,
+      label: `${cell.label} · Not healthy`,
+      tone: "critical",
+      title: [`After the patch: ${v.summary || "something did not come back"}${at ? ` (checked ${at})` : ""}`, cell.title]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  }
+  if (v.status === "dispatched") {
+    return { ...cell, title: [cell.title, "checking that services came back after the patch…"].filter(Boolean).join(" · ") };
+  }
+  if (v.status === "passed") {
+    return {
+      ...cell,
+      title: [cell.title, `services and checks verified after the patch${at ? ` on ${at}` : ""}`].filter(Boolean).join(" · "),
+    };
+  }
+  return cell;
+}
+
+function patchJobCellCore(campaign) {
   if (!campaign) return { label: "—", tone: "muted", title: "", empty: true };
   const p = campaign.patch || null;
   const state = campaign.state;
