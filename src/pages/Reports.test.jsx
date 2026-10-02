@@ -744,7 +744,10 @@ describe("Reports — vista previa", () => {
     for (const pagina of ["Overview", "Asset Management", "Security Compliance", "Crypto Discovery", "Audit"]) {
       await abrirPagina(pagina);
     }
-    const conJson = TYPES.types.filter((t) => t.formats.includes("json"));
+    // Con JSON, salvo los que exigen parámetros sin vista propia que los pida
+    // (ver «puedePrevisualizarse» al final).
+    const { puedePrevisualizarse } = await import("./Reports");
+    const conJson = TYPES.types.filter((t) => t.formats.includes("json") && puedePrevisualizarse(t));
     expect(screen.getAllByRole("button", { name: /^preview$/i })).toHaveLength(conJson.length);
 
     // El de sólo-CSV del fixture no lo tiene.
@@ -1501,5 +1504,18 @@ describe("Reports — informe de evidencia (ADR-0032)", () => {
     expect(within(menu).queryByRole("menuitem", { name: "Incident Evidence Report" })).toBeNull();
     // El resto siguen estando: lo que se quita es UNO, no la función.
     expect(within(menu).getByRole("menuitem", { name: "Evidence Pack" })).toBeInTheDocument();
+  });
+});
+
+// 2-oct, en prod: «Preview» del Evidence Pack pedía el informe sin sus
+// parámetros obligatorios y el diálogo enseñaba «HTTP 400: framework is
+// required». Sin vista a medida que los pida, no se ofrece.
+describe("puedePrevisualizarse", () => {
+  it("⭐ un informe con parámetros obligatorios y sin vista propia no ofrece Preview", async () => {
+    const { puedePrevisualizarse } = await import("./Reports");
+    expect(puedePrevisualizarse({ key: "scp.evidence-pack", formats: ["pdf", "json"], params: [{ name: "framework", required: true }] })).toBe(false);
+    expect(puedePrevisualizarse({ key: "x.optional", formats: ["json"], params: [{ name: "asset_group", required: false }] })).toBe(true);
+    expect(puedePrevisualizarse({ key: "x.plain", formats: ["json"] })).toBe(true);
+    expect(puedePrevisualizarse({ key: "x.pdf", formats: ["pdf"] })).toBe(false);
   });
 });

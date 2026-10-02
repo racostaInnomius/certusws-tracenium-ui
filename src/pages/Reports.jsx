@@ -96,8 +96,14 @@ const PREVIEW_BY_KEY = {
  * `audit.events` ganó `json` en el backend justamente para entrar aquí: era el
  * único informe del catálogo que había que sacar a ciegas.
  */
-function puedePrevisualizarse(type) {
-  return Boolean(PREVIEW_BY_KEY[type?.key]) || (type?.formats || []).includes("json");
+export function puedePrevisualizarse(type) {
+  if (PREVIEW_BY_KEY[type?.key]) return true;
+  // La vista genérica pide el informe SIN parámetros: uno que exige alguno
+  // (el Evidence Pack: framework y meses) contestaba un 400 crudo en el
+  // diálogo — «HTTP 400: framework is required» (2-oct, en prod). Sin vista
+  // a medida que los pida, no se ofrece; «Generate» sí los pide.
+  if ((type?.params || []).some((p) => p?.required)) return false;
+  return (type?.formats || []).includes("json");
 }
 
 // Las cuatro pestañas por nombre. Se guardan en la URL para que los once
