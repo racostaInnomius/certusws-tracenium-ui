@@ -32,6 +32,7 @@ import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlin
 import RadioButtonUncheckedOutlinedIcon from "@mui/icons-material/RadioButtonUncheckedOutlined";
 import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined";
 import RestoreOutlinedIcon from "@mui/icons-material/RestoreOutlined";
+import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 
@@ -79,6 +80,7 @@ import PatchStatusDonut from "../components/patch-management/PatchStatusDonut";
 import MissingBySeverityChart from "../components/patch-management/MissingBySeverityChart";
 import RollbackPointsPanel from "../components/patch-management/RollbackPointsPanel";
 import SnapshotHistoryPanel from "../components/patch-management/SnapshotHistoryPanel";
+import PatchCatalogPanel from "../components/patch-management/PatchCatalogPanel";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
 import { explainScanFailure } from "../components/patch-management/scanFailure";
 import {
@@ -201,6 +203,17 @@ const CATEGORIES = [
         impact: "none",
       },
     ],
+  },
+  {
+    // ADR-0038 F3 (D7): every patch the fleet has reported missing, since
+    // when, against the remediation targets, and the tenant's decision on it.
+    // No `actions`.
+    key: "catalog",
+    label: "Patch catalog",
+    icon: <ListAltOutlinedIcon />,
+    blurb:
+      "Every patch the fleet has reported missing, how long each device has been without it, and whether it is approved, deferred or blocked.",
+    actions: [],
   },
   {
     // Rendered by SecurityConfigPanel — no `actions`. Replaces the TLS, SMB,
@@ -1777,6 +1790,8 @@ export default function PatchManagement({ onNavigate }) {
             openCveId={pendingCveId}
             onOpened={() => setPendingCveId(null)}
           />
+        ) : tab === "catalog" ? (
+          <PatchCatalogPanel canManage={canManage} notify={notify} refreshNonce={refreshNonce} />
         ) : tab === "rollback-points" ? (
           <Box>
             <RollbackPointsPanel

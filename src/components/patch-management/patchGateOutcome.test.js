@@ -92,3 +92,12 @@ describe("formatOpensAt", () => {
     expect(formatOpensAt("2026-09-16T03:00:00.000Z")).toMatch(/^\w{3} \d{2}:\d{2}$/);
   });
 });
+
+describe("ADR-0038 F3 — catálogo", () => {
+  it("dice qué parches están bloqueados", async () => {
+    const { blockReasonText } = await import("./patchGateOutcome");
+    expect(blockReasonText("patch_blocked:KB5122882")).toBe("KB5122882 is blocked in the patch catalog");
+    expect(blockReasonText("patch_blocked:KB1,KB2")).toBe("KB1, KB2 are blocked in the patch catalog");
+    expect(blockReasonText("patch_catalog_unavailable")).toMatch(/could not be read/);
+  });
+});

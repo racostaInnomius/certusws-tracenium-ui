@@ -87,11 +87,18 @@ const BLOCK_REASON_TEXT = {
   invalid_patch_id: "an update id has an unexpected format",
   no_patches_selected: "no updates were selected",
   owner_authorization_required: "macOS updates on Apple silicon must be installed on the Mac itself",
+  // ADR-0038 F3: el catálogo de parches.
+  patch_catalog_unavailable: "the patch catalog could not be read, so blocked updates could not be ruled out — try again",
 };
 
 export function blockReasonText(reason) {
   if (!reason) return "blocked by the patch gate";
-  const code = String(reason).split(":")[0];
+  const [code, ...rest] = String(reason).split(":");
+  // `patch_blocked:KB1,KB2` — los que pidió están bloqueados en el catálogo.
+  if (code === "patch_blocked") {
+    const ids = rest.join(":");
+    return `${ids ? `${ids.split(",").join(", ")} ${ids.includes(",") ? "are" : "is"}` : "every selected update is"} blocked in the patch catalog`;
+  }
   return BLOCK_REASON_TEXT[code] || String(reason).replace(/_/g, " ");
 }
 

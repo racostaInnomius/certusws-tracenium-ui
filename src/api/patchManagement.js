@@ -342,6 +342,24 @@ export async function discoverListeners(assetGroupId = null) {
   return httpPostJson(`${BASE}/verification-checks/discover`, { assetGroupId });
 }
 
+// ── Fleet patch catalog (ADR-0038 F3) ─────────────────────────────────────
+// Every patch seen in the tenant, since when each device has been missing it,
+// how that stands against the remediation targets, and the tenant's decision
+// (approved / rejected / deferred / blocked — a blocked patch is never sent).
+
+export async function listPatchCatalog(scope = "pending") {
+  return httpGetJson(`${BASE}/catalog${buildQuery({ scope })}`);
+}
+
+export async function getPatchCatalogEntry(patchId) {
+  return httpGetJson(`${BASE}/catalog/${encodeURIComponent(patchId)}`);
+}
+
+/** body: { approval?, reason?, deferredUntil?, knownIssue?, supersededBy? } */
+export async function updatePatchCatalogEntry(patchId, body) {
+  return httpPatchJson(`${BASE}/catalog/${encodeURIComponent(patchId)}`, body);
+}
+
 // ── Infrastructure Gateway (ADR-0001) ────────────────────────────────────────
 // The vCenter snapshot broker. Note what is NOT here: no endpoint ever carries
 // a plaintext vCenter credential. The browser seals it against the gateway's
