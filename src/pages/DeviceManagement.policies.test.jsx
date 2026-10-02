@@ -129,7 +129,8 @@ describe("Policies — tarjetas", () => {
     expect(card("macOS")).toHaveAttribute("aria-selected", "true");
     expect(card("macOS").textContent).toMatch(/1 of 7 set/);
     await waitFor(() => expect(card("macOS").textContent).toMatch(/Reaches 1 Mac enrolled in MDM/));
-    expect(card("iPhone & iPad").textContent).toMatch(/Nothing set.*Not sent yet/);
+    // iOS (2-oct-2026): ya se entrega; sin iPhones enrolados en el fixture.
+    expect(card("iPhone & iPad").textContent).toMatch(/Nothing set.*Sent by MDM.*No iPhones or iPads enrolled in MDM yet/);
     expect(card("Tracenium app").textContent).toMatch(/1 of 8 set.*Applied by the app/);
   });
 
@@ -138,7 +139,7 @@ describe("Policies — tarjetas", () => {
     mount();
     await macosReady();
     await user.click(card("iPhone & iPad"));
-    expect(await screen.findByText(/doesn.t send settings to iPhones and iPads yet/)).toBeTruthy();
+    expect(await screen.findByText(/the passcode and the minimum iOS version go\s+as declarations/)).toBeTruthy();
     expect(screen.getByRole("group", { name: "Require a passcode" })).toBeTruthy();
     expect(window.location.search).toMatch(/mdmPolicy=ios/);
   });

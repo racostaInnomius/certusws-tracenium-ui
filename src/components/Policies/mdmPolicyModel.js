@@ -284,7 +284,7 @@ export const POLICY_NAMES = { macos: "macOS", ios: "iPhone & iPad", app: "app (M
  * pantalla anterior escondía en un párrafo (macOS se entrega, iPhone & iPad
  * sólo se guarda, la app la aplica ella misma).
  */
-export function policyReach(kind, { macCount = 0, appCount = 0 } = {}) {
+export function policyReach(kind, { macCount = 0, iosCount = 0, appCount = 0 } = {}) {
   const s = (n) => (n === 1 ? "" : "s");
   if (kind === "macos") {
     return {
@@ -293,7 +293,14 @@ export function policyReach(kind, { macCount = 0, appCount = 0 } = {}) {
       detail: macCount ? `Reaches ${macCount} Mac${s(macCount)} enrolled in MDM` : "No Macs enrolled in MDM yet",
     };
   }
-  if (kind === "ios") return { tone: "caution", label: "Not sent yet", detail: "Saved in the policy only" };
+  // Desde el 2-oct-2026: restricciones por perfil, código y versión mínima por DDM.
+  if (kind === "ios") {
+    return {
+      tone: iosCount ? "positive" : "muted",
+      label: "Sent by MDM",
+      detail: iosCount ? `Reaches ${iosCount} iPhone${s(iosCount)} and iPad${s(iosCount)} enrolled in MDM` : "No iPhones or iPads enrolled in MDM yet",
+    };
+  }
   return {
     tone: appCount ? "positive" : "muted",
     label: "Applied by the app",

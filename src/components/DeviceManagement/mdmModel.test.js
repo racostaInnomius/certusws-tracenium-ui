@@ -304,3 +304,33 @@ describe("Apple push — cómo llegan las órdenes (2-oct-2026)", () => {
     }
   });
 });
+
+describe("iPhone/iPad en el cajón (2-oct-2026)", () => {
+  const rel = (d) => `@${d}`;
+
+  it("⭐ el perfil de un iPhone habla del equipo y de SU política, sin agente que reevalúe", () => {
+    expect(describeProfileDelivery(null, rel, "ios").text).toBe("Sent on the device's next check-in once the organization's iPhone & iPad policy has settings.");
+    expect(describeProfileDelivery({ status: "pending", settingsCount: 2, enqueuedAt: "T" }, rel, "ios")).toMatchObject({
+      chip: { label: "Waiting for the device" },
+      text: "Queued @T with 2 settings. The device installs it on its next check-in, without asking the user.",
+    });
+    expect(describeProfileDelivery({ status: "installed", settingsCount: 2, completedAt: "T" }, rel, "ios").text).toBe("2 settings, installed @T.");
+    expect(describeProfileDelivery({ status: "error", errorChain: [] }, rel, "ios").chip.label).toBe("Rejected by the device");
+    // El Mac, como siempre.
+    expect(describeProfileDelivery({ status: "installed", settingsCount: 1, completedAt: "T" }, rel).text).toMatch(/If the Mac runs the Tracenium agent/);
+  });
+
+  it("la declaración del código y la versión mínima, con el nombre de su SO", () => {
+    expect(describeDeclaration({ purpose: "passcode_settings", state: "applied" }, "ios")).toMatchObject({ name: "Passcode requirements", chip: { label: "Applied" } });
+    expect(describeDeclaration({ purpose: "minimum_os_version", state: "pending" }, "ios")).toMatchObject({ name: "Minimum iOS version (policy)", chip: { label: "Waiting for the device" } });
+    expect(describeDeclaration({ purpose: "minimum_os_version", state: "invalid" })).toMatchObject({ name: "Minimum macOS version (policy)", chip: { label: "Rejected by the Mac" } });
+  });
+
+  it("❗ el código: sin código en rojo; con código, si cumple la política; en un Mac, nada", () => {
+    expect(describeDdmInventory({ passcodePresent: false, passcodeCompliant: false }).passcode).toEqual({ label: "No passcode", tone: "critical" });
+    expect(describeDdmInventory({ passcodePresent: true, passcodeCompliant: true }).passcode).toEqual({ label: "Complies with the policy", tone: "positive" });
+    expect(describeDdmInventory({ passcodePresent: true, passcodeCompliant: false }).passcode).toEqual({ label: "Doesn't comply with the policy", tone: "critical" });
+    expect(describeDdmInventory({ passcodePresent: true, passcodeCompliant: null }).passcode).toEqual({ label: "Set", tone: "info" });
+    expect(describeDdmInventory({ fileVault: true }).passcode).toBeNull();
+  });
+});

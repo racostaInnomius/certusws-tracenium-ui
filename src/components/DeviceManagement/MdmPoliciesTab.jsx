@@ -97,8 +97,7 @@ function PolicyCard({ kind, selected, stats, reach, unsaved, onSelect }) {
         ) : (
           "Nothing set"
         )}
-        {/* En iOS no se entrega nada y la etiqueta ya lo dice. */}
-        {kind === "macos" && stats.notDelivered?.length ? (
+        {kind !== "app" && stats.notDelivered?.length ? (
           <Box component="span" sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}>
             {` · ${stats.notDelivered.length} not sent`}
           </Box>
@@ -123,10 +122,16 @@ function EditorIntro({ kind, pushDeliverable }) {
     );
   }
   if (kind === "ios") {
+    // Un iPhone/iPad no se conecta por su cuenta (iOS 27, medido): sin Apple
+    // push, nada de esto le llega.
     return (
-      <Alert severity="info" sx={{ borderRadius: 2, py: 0.25 }}>
-        Saved in the policy only: Tracenium MDM doesn&apos;t send settings to iPhones and iPads yet.
-      </Alert>
+      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", maxWidth: 820 }}>
+        Restrictions go into the organization&apos;s iPhone &amp; iPad profile; the passcode and the minimum iOS version go
+        as declarations, and each device reports whether its passcode complies. iPhones and iPads enrolled in Tracenium
+        MDM get them {pushDeliverable ? "within seconds" : "once Tracenium can wake them with the Apple push certificate — they don't check in on their own"}.
+        Settings marked <strong>Supervised only</strong> need a device from Apple Business Manager. A setting left{" "}
+        <strong>Not set</strong> keeps the device&apos;s own value.
+      </Typography>
     );
   }
   return (
@@ -170,6 +175,10 @@ export default function MdmPoliciesTab({
 
   const macCount = React.useMemo(
     () => (mdm?.devices || []).filter((d) => mdmPlatform(d) === "macos" && MANAGED.has(mdmDeviceStatus(d).key)).length,
+    [mdm?.devices]
+  );
+  const iosCount = React.useMemo(
+    () => (mdm?.devices || []).filter((d) => mdmPlatform(d) === "ios" && MANAGED.has(mdmDeviceStatus(d).key)).length,
     [mdm?.devices]
   );
 
@@ -236,7 +245,7 @@ export default function MdmPoliciesTab({
             kind={k}
             selected={k === kind}
             stats={stats[k]}
-            reach={policyReach(k, { macCount, appCount: appDeviceCount })}
+            reach={policyReach(k, { macCount, iosCount, appCount: appDeviceCount })}
             unsaved={unsavedOf(k)}
             onSelect={setKind}
           />

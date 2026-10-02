@@ -745,3 +745,31 @@ describe("MDM / MAM — Apple push (aviso de MDM, 2-oct-2026)", () => {
     expect(screen.getByRole("button", { name: "Renew in Apple setup" })).toBeTruthy();
   });
 });
+
+describe("MDM / MAM — un iPhone en el cajón (2-oct-2026)", () => {
+  const IPHONE = {
+    ...MAC, udid: "00008130-000425C2228B803A", serialNumber: "DF9LT4J97R", deviceName: "iPhone de Javier",
+    productName: "iPhone16,1", model: "iPhone16,1", osVersion: "27.0", buildVersion: "24A100",
+  };
+
+  it("⭐ su código (cumple o no), la declaración del código y su perfil; sin el panel de actualización del Mac", async () => {
+    state.devices = [IPHONE];
+    state.ddm = {
+      reportedAt: new Date().toISOString(),
+      inventory: { marketingName: "iPhone 15 Pro", osVersion: "27.0", passcodePresent: true, passcodeCompliant: false, certificates: [], packages: [], managedApps: [] },
+      declarations: [{ identifier: "com.tracenium.passcode.settings", kind: "configuration", purpose: "passcode_settings", state: "applied", reasons: [] }],
+    };
+    state.orgProfile = { delivery: { requestType: "InstallProfile", status: "pending", settingsCount: 3, enqueuedAt: new Date().toISOString(), completedAt: null } };
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("iPhone de Javier")).closest("tr"));
+    const status = await screen.findByLabelText("Device status");
+    expect(await within(status).findByText("Doesn't comply with the policy")).toBeTruthy();
+    expect(within(status).getByText("Passcode requirements")).toBeTruthy();
+    expect(within(status).getByText(/reported by the device/)).toBeTruthy();
+    expect(within(status).getByText("iOS")).toBeTruthy();
+    expect(within(status).queryByText("macOS")).toBeNull();
+    const profile = await screen.findByLabelText("Organization profile");
+    expect(await within(profile).findByText(/The device installs it on its next check-in/)).toBeTruthy();
+    expect(screen.queryByLabelText("OS update")).toBeNull();
+  });
+});

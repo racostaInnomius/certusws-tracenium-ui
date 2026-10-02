@@ -294,15 +294,25 @@ export function manualVersionNote(detected, { chosen = false, when = null } = {}
 
 // ── Perfil de la organización en un Mac (1-oct) ─────────────────────────────
 
+/** Cómo se nombra al equipo y a su política en los textos del cajón. */
+const WHO = {
+  macos: { device: "the Mac", Device: "The Mac", policy: "macOS policy", os: "macOS" },
+  ios: { device: "the device", Device: "The device", policy: "iPhone & iPad policy", os: "iOS" },
+};
+const whoOf = (platform) => WHO[platform] || WHO.macos;
+
 /**
  * Lo que dice el cajón del perfil de la organización: `{chip, text, error}`.
  * `relative` formatea fechas («2 h ago»); se pasa para poder probarlo sin reloj.
+ * `platform`: el perfil de un iPhone/iPad (2-oct-2026) sale de su política y
+ * no tiene agente que reevalúe el cumplimiento.
  */
-export function describeProfileDelivery(delivery, relative = (d) => String(d)) {
+export function describeProfileDelivery(delivery, relative = (d) => String(d), platform = "macos") {
+  const w = whoOf(platform);
   if (!delivery) {
     return {
       chip: { label: "Not sent yet", tone: "muted" },
-      text: "Sent on the Mac's next check-in once the organization's macOS policy has settings.",
+      text: `Sent on ${w.device}'s next check-in once the organization's ${w.policy} has settings.`,
       error: false,
     };
   }
@@ -312,22 +322,25 @@ export function describeProfileDelivery(delivery, relative = (d) => String(d)) {
   switch (delivery.status) {
     case "pending":
       return {
-        chip: { label: "Waiting for the Mac", tone: "info" },
+        chip: { label: `Waiting for ${w.device}`, tone: "info" },
         text: removing
-          ? `Removal queued ${relative(delivery.enqueuedAt)}: the policy has no settings left. The Mac removes the profile on its next check-in.`
-          : `Queued ${relative(delivery.enqueuedAt)} with ${settings}. The Mac installs it on its next check-in, without asking the user.`,
+          ? `Removal queued ${relative(delivery.enqueuedAt)}: the policy has no settings left. ${w.Device} removes the profile on its next check-in.`
+          : `Queued ${relative(delivery.enqueuedAt)} with ${settings}. ${w.Device} installs it on its next check-in, without asking the user.`,
         error: false,
       };
     case "installed":
       return {
         chip: { label: "Installed", tone: "positive" },
-        text: `${settings}, installed ${relative(delivery.completedAt)}. If the Mac runs the Tracenium agent, its compliance is re-checked right after.`,
+        text:
+          platform === "macos"
+            ? `${settings}, installed ${relative(delivery.completedAt)}. If the Mac runs the Tracenium agent, its compliance is re-checked right after.`
+            : `${settings}, installed ${relative(delivery.completedAt)}.`,
         error: false,
       };
     case "removed":
       return {
         chip: { label: "Removed", tone: "muted" },
-        text: `Removed ${relative(delivery.completedAt)}: the organization's macOS policy has no settings.`,
+        text: `Removed ${relative(delivery.completedAt)}: the organization's ${w.policy} has no settings.`,
         error: false,
       };
     case "error": {
@@ -338,8 +351,8 @@ export function describeProfileDelivery(delivery, relative = (d) => String(d)) {
         ?.trim()
         .replace(/\.$/, "");
       return {
-        chip: { label: "Rejected by the Mac", tone: "critical" },
-        text: `The Mac rejected the profile${why ? `: ${why}` : ""}. It isn't retried on its own — change the policy or resend it.`,
+        chip: { label: `Rejected by ${w.device}`, tone: "critical" },
+        text: `${w.Device} rejected the profile${why ? `: ${why}` : ""}. It isn't retried on its own — change the policy or resend it.`,
         error: true,
       };
     }
@@ -350,35 +363,39 @@ export function describeProfileDelivery(delivery, relative = (d) => String(d)) {
 
 // ── DDM de un equipo (1-oct-2026, backend ddm-view.service) ─────────────────
 
-const DECLARATION_NAMES = {
-  status_reporting: "Status reporting",
-  software_update_settings: "Software update settings",
-  minimum_os_version: "Minimum macOS version (policy)",
-  forced_os_update: "Forced update (this Mac)",
-  activation: "Activation",
-};
+const declarationName = (purpose, w) =>
+  ({
+    status_reporting: "Status reporting",
+    software_update_settings: "Software update settings",
+    minimum_os_version: `Minimum ${w.os} version (policy)`,
+    forced_os_update: platformForcedLabel(w),
+    passcode_settings: "Passcode requirements",
+    activation: "Activation",
+  })[purpose];
+const platformForcedLabel = (w) => (w.os === "macOS" ? "Forced update (this Mac)" : "Forced update (this device)");
 
-const DECLARATION_STATES = {
+const declarationStates = (w) => ({
   applied: { label: "Applied", tone: "positive" },
-  pending: { label: "Waiting for the Mac", tone: "info" },
-  invalid: { label: "Rejected by the Mac", tone: "critical" },
+  pending: { label: `Waiting for ${w.device}`, tone: "info" },
+  invalid: { label: `Rejected by ${w.device}`, tone: "critical" },
   inactive: { label: "Not active", tone: "caution" },
   removing: { label: "Being removed", tone: "muted" },
-};
+});
 
 /**
- * Una declaración para el cajón: nombre legible, chip y, si el Mac la
+ * Una declaración para el cajón: nombre legible, chip y, si el equipo la
  * rechazó, por qué (sus `reasons`, sin el punto final). PURO.
  */
-export function describeDeclaration(d) {
+export function describeDeclaration(d, platform = "macos") {
+  const w = whoOf(platform);
   const why = (d?.reasons || [])
     .map((r) => r?.description || r?.code)
     .filter(Boolean)
     .map((t) => String(t).trim().replace(/\.$/, ""))
     .join("; ");
   return {
-    name: DECLARATION_NAMES[d?.purpose] || d?.identifier || "—",
-    chip: DECLARATION_STATES[d?.state] || { label: "Unknown", tone: "muted" },
+    name: declarationName(d?.purpose, w) || d?.identifier || "—",
+    chip: declarationStates(w)[d?.state] || { label: "Unknown", tone: "muted" },
     reason: d?.state === "invalid" || d?.state === "inactive" ? why || null : null,
   };
 }
@@ -400,11 +417,23 @@ const BATTERY = {
 };
 const ENROLLMENT = { supervised: "Supervised", device: "Device enrollment", user: "User enrollment", none: "Not enrolled" };
 
-/** El inventario que el Mac informa por DDM, en chips y textos. PURO. */
+/**
+ * El código de un iPhone/iPad (2-oct-2026): sin código, en rojo; con código,
+ * si cumple la política (`passcode.is-compliant`). null en un Mac. PURO.
+ */
+function passcodeChip(inv) {
+  if (inv.passcodePresent === false) return { label: "No passcode", tone: "critical" };
+  if (inv.passcodeCompliant === true) return { label: "Complies with the policy", tone: "positive" };
+  if (inv.passcodeCompliant === false) return { label: "Doesn't comply with the policy", tone: "critical" };
+  return inv.passcodePresent === true ? { label: "Set", tone: "info" } : null;
+}
+
+/** El inventario que el equipo informa por DDM, en chips y textos. PURO. */
 export function describeDdmInventory(inv) {
   if (!inv) return null;
   const onOff = (v, on, off) => (v === true ? on : v === false ? off : null);
   return {
+    passcode: passcodeChip(inv),
     model: inv.marketingName || inv.modelIdentifier || null,
     fileVault: onOff(inv.fileVault, { label: "On", tone: "positive" }, { label: "Off", tone: "critical" }),
     battery: inv.batteryHealth ? BATTERY[inv.batteryHealth] || { label: inv.batteryHealth, tone: "muted" } : null,

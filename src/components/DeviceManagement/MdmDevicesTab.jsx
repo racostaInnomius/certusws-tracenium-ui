@@ -310,11 +310,13 @@ function DeviceDetail({ row, commands, onClose, onNavigate, onOpenTab, canConfig
               </Button>
             ) : null}
           </Box>
-          {d.enrollmentState === "enrolled" ? <MdmDeclarativePanel udid={d.udid} /> : null}
+          {d.enrollmentState === "enrolled" ? <MdmDeclarativePanel udid={d.udid} platform={row.platform} /> : null}
           {d.enrollmentState === "enrolled" ? (
-            <MdmOrgProfilePanel udid={d.udid} canConfigure={canConfigure} notify={notify} />
+            <MdmOrgProfilePanel udid={d.udid} canConfigure={canConfigure} notify={notify} platform={row.platform} />
           ) : null}
-          {d.enrollmentState === "enrolled" ? (
+          {/* Forzar una versión a mano elige de lo que encontró el AGENTE del
+              Mac; un iPhone/iPad no tiene agente: su mínima va por la política. */}
+          {d.enrollmentState === "enrolled" && row.platform === "macos" ? (
             <MdmOsUpdatePanel udid={d.udid} canConfigure={canConfigure} notify={notify} />
           ) : null}
         </>

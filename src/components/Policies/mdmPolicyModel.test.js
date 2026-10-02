@@ -193,7 +193,9 @@ describe("policyReach", () => {
   it("macOS se entrega, iPhone & iPad no, la app la aplica ella", () => {
     expect(policyReach("macos", { macCount: 1 })).toEqual({ tone: "positive", label: "Sent by MDM", detail: "Reaches 1 Mac enrolled in MDM" });
     expect(policyReach("macos", { macCount: 0 }).tone).toBe("muted");
-    expect(policyReach("ios").label).toBe("Not sent yet");
+    // iOS (2-oct-2026): ya se entrega.
+    expect(policyReach("ios", { iosCount: 1 })).toEqual({ tone: "positive", label: "Sent by MDM", detail: "Reaches 1 iPhone and iPad enrolled in MDM" });
+    expect(policyReach("ios")).toMatchObject({ tone: "muted", detail: "No iPhones or iPads enrolled in MDM yet" });
     expect(policyReach("app", { appCount: 2 }).detail).toBe("2 devices with the app");
   });
 });

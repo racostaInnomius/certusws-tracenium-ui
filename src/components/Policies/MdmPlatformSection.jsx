@@ -63,7 +63,7 @@ function SupervisionChip() {
  */
 function DeclarativeChip() {
   return (
-    <Tooltip arrow title="Sent as a declaration (DDM), not in the profile. The Mac applies it on its own and reports whether it took effect — see the Mac's Declarations in Devices.">
+    <Tooltip arrow title="Sent as a declaration (DDM), not in the profile. The device applies it on its own and reports whether it took effect — see its Declarations in Devices.">
       <Chip size="small" label="Declaration" sx={{ ...chipSx, bgcolor: BRAND.alert.infoSoft, color: BRAND.alert.infoText }} />
     </Tooltip>
   );
@@ -74,14 +74,17 @@ function pastDeadlineNote(setting, value, now = new Date()) {
   if (setting.spec?.kind !== "localDateTime" || typeof value !== "string") return null;
   const t = new Date(value).getTime(); // sin zona: el navegador la lee como local, como la leerá el Mac
   return Number.isFinite(t) && t < now.getTime()
-    ? "This date has passed: Macs below the minimum install it as soon as they get it, and restart."
+    ? "This date has passed: devices below the minimum install it as soon as they get it, and restart."
     : null;
 }
 
-function NotSentChip() {
+const DEVICES = { macos: "Macs", ios: "iPhones and iPads" };
+
+function NotSentChip({ platform }) {
+  const devices = DEVICES[platform] || "devices";
   return (
-    <Tooltip arrow title="Tracenium MDM doesn't send this setting to Macs yet. It is kept in the policy, but no device receives it.">
-      <Chip size="small" label="Not sent to Macs" sx={{ ...chipSx, bgcolor: BRAND.darkSoft, color: "text.secondary" }} />
+    <Tooltip arrow title={`Tracenium MDM doesn't send this setting to ${devices} yet. It is kept in the policy, but no device receives it.`}>
+      <Chip size="small" label={`Not sent to ${devices}`} sx={{ ...chipSx, bgcolor: BRAND.darkSoft, color: "text.secondary" }} />
     </Tooltip>
   );
 }
@@ -198,9 +201,10 @@ export default function MdmPlatformSection({
     );
   }
 
-  // En iOS no se entrega nada todavía y la cabecera ya lo dice: un chip por
-  // fila sería ruido. En macOS casi todo llega, y lo que no, se marca.
-  const markNotSent = platform === "macos";
+  // macOS e iOS (desde el 2-oct-2026) se entregan: lo que no llega, y lo que
+  // va por declaración en vez de por perfil, se marca en su fila. (La app la
+  // aplica la propia app: no pasa por aquí.)
+  const markNotSent = platform === "macos" || platform === "ios";
 
   return (
     <Box sx={{ display: "grid", gap: 2, minWidth: 0 }}>
@@ -288,7 +292,7 @@ export default function MdmPlatformSection({
                 const meta = (
                   <>
                     {s.requiresSupervision ? <SupervisionChip /> : null}
-                    {notSent ? <NotSentChip /> : null}
+                    {notSent ? <NotSentChip platform={platform} /> : null}
                     {declarative ? <DeclarativeChip /> : null}
                   </>
                 );

@@ -15,7 +15,8 @@ import { getMdmDeclarative } from "../../api/mdm";
 import { describeDdmInventory, describeDeclaration, visibleDeclarations } from "./mdmModel";
 import { Field, FieldGrid, StatusChip } from "./mdmAtoms";
 
-export default function MdmDeclarativePanel({ udid }) {
+export default function MdmDeclarativePanel({ udid, platform = "macos" }) {
+  const who = platform === "ios" ? "the device" : "the Mac";
   const [view, setView] = React.useState(undefined);
 
   React.useEffect(() => {
@@ -39,7 +40,7 @@ export default function MdmDeclarativePanel({ udid }) {
           Device status
         </Typography>
         <Typography variant="body2" sx={{ color: "text.secondary" }}>
-          The Mac reports its status after its next check-in.
+          {platform === "ios" ? "The device" : "The Mac"} reports its status after its next check-in.
         </Typography>
       </Box>
     );
@@ -51,14 +52,19 @@ export default function MdmDeclarativePanel({ udid }) {
       <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 700 }}>
         Device status
         {view?.reportedAt ? (
-          <Box component="span" sx={{ fontWeight: 400 }}>{` · reported by the Mac ${formatRelative(view.reportedAt)}`}</Box>
+          <Box component="span" sx={{ fontWeight: 400 }}>{` · reported by ${who} ${formatRelative(view.reportedAt)}`}</Box>
         ) : null}
       </Typography>
 
       {inv ? (
         <FieldGrid>
           {inv.model ? <Field label="Model name">{inv.model}</Field> : null}
-          {inv.os ? <Field label="macOS">{inv.os}</Field> : null}
+          {inv.passcode ? (
+            <Field label="Passcode">
+              <StatusChip status={inv.passcode} />
+            </Field>
+          ) : null}
+          {inv.os ? <Field label={platform === "ios" ? "iOS" : "macOS"}>{inv.os}</Field> : null}
           {inv.fileVault ? (
             <Field label="FileVault">
               <StatusChip status={inv.fileVault} />
@@ -87,10 +93,10 @@ export default function MdmDeclarativePanel({ udid }) {
       {decls.length ? (
         <Box aria-label="Declarations" sx={{ display: "grid", gap: 0.75 }}>
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            Declarations — what Tracenium declared to this Mac, and what the Mac says it did with each
+            Declarations — what Tracenium declared to {platform === "ios" ? "this device" : "this Mac"}, and what {who} says it did with each
           </Typography>
           {decls.map((d) => {
-            const x = describeDeclaration(d);
+            const x = describeDeclaration(d, platform);
             return (
               <Box key={`${d.kind}:${d.identifier}`} sx={{ display: "grid", gap: 0.25 }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>

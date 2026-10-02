@@ -16,7 +16,7 @@ import { getMdmOrganizationProfile, resendMdmOrganizationProfile } from "../../a
 import { describeProfileDelivery } from "./mdmModel";
 import { Field, StatusChip } from "./mdmAtoms";
 
-export default function MdmOrgProfilePanel({ udid, canConfigure, notify }) {
+export default function MdmOrgProfilePanel({ udid, canConfigure, notify, platform = "macos" }) {
   const [delivery, setDelivery] = React.useState(undefined);
   const [busy, setBusy] = React.useState(false);
 
@@ -37,13 +37,13 @@ export default function MdmOrgProfilePanel({ udid, canConfigure, notify }) {
   }, [load]);
 
   if (delivery === undefined) return null;
-  const d = describeProfileDelivery(delivery, formatRelative);
+  const d = describeProfileDelivery(delivery, formatRelative, platform);
 
   async function resend() {
     setBusy(true);
     try {
       await resendMdmOrganizationProfile(udid);
-      notify?.("The Mac gets the organization's profile again on its next check-in.", "success");
+      notify?.(`${platform === "ios" ? "The device" : "The Mac"} gets the organization's profile again on its next check-in.`, "success");
       await load({ fresh: true });
     } catch (err) {
       notify?.(err?.body?.message || err?.message || "Could not resend the profile.", "error");
