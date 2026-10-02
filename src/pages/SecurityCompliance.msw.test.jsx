@@ -30,7 +30,6 @@ vi.mock("../auth/AuthContext", () => ({
 vi.mock("../components/Compliance/ComplianceTrendChart", () => ({ default: () => <div data-testid="trend" /> }));
 vi.mock("../components/Compliance/MttrCard", () => ({ default: () => <div data-testid="mttr" /> }));
 vi.mock("../components/Compliance/ComplianceCategoryBreakdown", () => ({ default: () => <div data-testid="categories" /> }));
-vi.mock("./SecurityBaselines", () => ({ default: () => <div data-testid="baselines" /> }));
 // Trae su propio fetch y tiene su propia suite.
 vi.mock("../components/Compliance/WhatToFixFirst", () => ({ default: () => <div data-testid="fixfirst" /> }));
 
@@ -140,7 +139,7 @@ function mountPage({ settings = SETTINGS, onNavigate = vi.fn() } = {}) {
   // Columna «Online»: las sesiones gRPC vivas, la misma fuente que Asset
   // Management. WS-ALPHA encendido, WS-BETA no.
   respond("get", "/api/v1/orchestrator/devices-connected", { ok: true, tenantId: "1", deviceIds: ["dev-a"], count: 1 });
-  // Fase C policy read for the baseline bridge — minimal valid envelope.
+  // La política del tenant (lo ya guardado en la política macOS) — envelope mínimo.
   respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
   // ADR-0011 Phase 3 — canManage now comes from this endpoint instead
   // of MOCK_AUTH's role directly; ADMIN holds security_compliance.
@@ -170,8 +169,9 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     expect(screen.getByText("WS-BETA")).toBeInTheDocument();
     // Tabs present (Fase B)
     expect(screen.getByRole("tab", { name: /Fleet status/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Baselines/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Catalog/ })).toBeInTheDocument();
+    // Baselines se retiró el 1-oct: sus modos no cambiaban lo que mide SCP.
+    expect(screen.queryByRole("tab", { name: /Baselines/ })).toBeNull();
   });
 
   it("⭐ la tabla de equipos dice quién está encendido AHORA, como Asset Management", async () => {
@@ -391,7 +391,7 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
   });
 
   it("hides the filter row on tabs that nothing filters", async () => {
-    // Baselines and Catalog are not scoped by framework or group, and a
+    // Catalog is not scoped by framework or group, and a
     // row of inert filters is worse than no row.
     const { fireEvent } = await import("@testing-library/react");
     mountPage();
@@ -421,7 +421,7 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
       screen.getByRole("heading", { name: "Security Compliance" }).closest("div")
         ?.parentElement?.parentElement;
 
-    for (const pestana of [/Baselines/, /Catalog/, /Compliance Settings/, /Fleet status/]) {
+    for (const pestana of [/Catalog/, /Compliance Settings/, /Fleet status/]) {
       fireEvent.click(screen.getByRole("tab", { name: pestana }));
       await waitFor(() => {
         const fila = filaTitulo();

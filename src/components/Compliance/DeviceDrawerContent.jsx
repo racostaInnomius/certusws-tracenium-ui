@@ -86,13 +86,6 @@ export default function DeviceDrawerContent({
   // would render and then 403). Defaults to true so existing tests
   // and call sites keep the privileged rendering.
   canManage = true,
-  // Fase C — (finding) => {mode, capabilities[]} | null. When a failing
-  // finding's CHECK is governed by an enforceable baseline capability not
-  // yet in auto, FindingCard shows the "auto-fix available" hint and
-  // onOpenBaselines jumps to the Baselines tab. Por hallazgo, no por
-  // categoría: por categoría, un Secure Boot de Windows ofrecía Gatekeeper.
-  baselineHintForFinding = null,
-  onOpenBaselines = null,
   // Sprint 4 — one-click fix (finding) => Promise. Provided by the page,
   // which owns the confirm dialog + POST /remediate + toast.
   onRemediateFinding = null,
@@ -735,8 +728,6 @@ export default function DeviceDrawerContent({
                         onShowHistory={(finding) => setHistoryDialog({ finding })}
                         pendingAction={pendingAction}
                         readOnly={!canManage}
-                        baselineHint={baselineHintForFinding ? baselineHintForFinding(f) : null}
-                        onOpenBaselines={onOpenBaselines}
                         onRemediate={canManage && onRemediateFinding ? onRemediateFinding : null}
                         onOpenVulnerabilities={onOpenVulnerabilities}
                         deviceVulnerability={device?.vulnerability ?? null}

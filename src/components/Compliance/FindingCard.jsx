@@ -68,12 +68,6 @@ export default function FindingCard({
   // (compliance.routes.ts requireTenantAdmin) so a USER never sees
   // buttons that would 403.
   readOnly = false,
-  // Fase C — {mode, capabilities[]} when this finding's category maps
-  // to an enforceable baseline capability not yet in auto: the agent
-  // COULD fix this drift but is only reporting it. Clicking jumps to
-  // the Baselines tab (onOpenBaselines).
-  baselineHint = null,
-  onOpenBaselines = null,
   // Sprint 4 — one-click fix. Rendered only when the backend flags the
   // finding `agentRemediable` (detection↔remediation crosswalk) AND
   // it's failing AND the viewer can manage. The handler receives the
@@ -573,31 +567,6 @@ export default function FindingCard({
                 <Button size="small" variant="text" onClick={() => onExportFix(finding, "gpo")} sx={{ textTransform: "none", color: BRAND.teal }}>
                   GPO script
                 </Button>
-              </Tooltip>
-            ) : null}
-            {/* Fase C — this drift is auto-fixable but the baseline is
-                only reporting it. Only on failing findings: a pass
-                doesn't need fixing and the chip would be noise. */}
-            {baselineHint && finding.status === "fail" ? (
-              <Tooltip
-                title={`${baselineHint.capabilities.join(", ")} can remediate this automatically — currently ${baselineHint.mode}. Click to configure.`}
-                arrow
-              >
-                <Chip
-                  size="small"
-                  icon={<BuildOutlinedIcon sx={{ fontSize: ICON.xs }} />}
-                  label={`Auto-fix available · ${baselineHint.mode}`}
-                  onClick={onOpenBaselines || undefined}
-                  clickable={Boolean(onOpenBaselines)}
-                  sx={{
-                    height: 24,
-                    fontSize: TEXT.xs,
-                    fontWeight: 700,
-                    bgcolor: BRAND.tealSoft,
-                    color: BRAND.tealText,
-                    "& .MuiChip-icon": { color: BRAND.tealText },
-                  }}
-                />
               </Tooltip>
             ) : null}
             {canExplain && finding.status === "fail" && finding.id ? (

@@ -104,7 +104,7 @@ export default function DeviceManagement({ onNavigate }) {
 
   // ADR-0011 Phase 3: gate on the "device_management" capability
   // instead of a hardcoded OWNER/ADMIN name check — see the same fix
-  // already applied to Jobs.jsx/Audit.jsx/PKI.jsx/SecurityBaselines.jsx.
+  // already applied to Jobs.jsx/Audit.jsx/PKI.jsx.
   // Defaults to disabled while the fetch is in flight (fail-closed).
   const [myPermissions, setMyPermissions] = React.useState(null);
   // El mismo endpoint devuelve el rol EFECTIVO que resuelve el servidor, y el
@@ -172,9 +172,10 @@ export default function DeviceManagement({ onNavigate }) {
   const [devices, setDevices] = React.useState([]);
   const [mdm, setMdm] = React.useState(EMPTY_MDM);
   const [loading, setLoading] = React.useState(true);
-  // Ver el comentario homólogo en SecurityBaselines: "no pude leerla" y
-  // "todavía no hay" colapsaban en el mismo null, y ese null desarma el
-  // If-Match además de pintar defaults sin avisar.
+  // "No pude leerla" y "todavía no hay" colapsaban en el mismo null, y ese
+  // null desarma el If-Match (extractPolicyEnvelope(null) da version=null →
+  // el PATCH va sin If-Match y pisa lo del servidor) además de pintar
+  // defaults sin avisar.
   const [loadError, setLoadError] = React.useState(null);
   const [pushing, setPushing] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });

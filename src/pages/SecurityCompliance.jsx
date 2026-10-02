@@ -50,7 +50,6 @@ import {
   Typography
 } from "@mui/material";
 import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
-import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 // Sprint 4 — diff + export
 // Sprint 5 — settings panel trigger
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
@@ -79,21 +78,12 @@ import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
-import { useConfirm } from "../components/common/ConfirmDialog";
-// Fase C — the posture side of the capability↔category bridge: mode
-// chips on the category breakdown, "auto-fix available" hints on
-// findings, and a set-to-auto quick action that patches the security
-// policy domain without leaving the Posture tab.
-import { addMdmIntents, downloadMacosOrganizationProfile, getTenantPolicy, patchTenantPolicyDomain } from "../api/policies";
+// La política macOS (añadir intenciones, descargar el perfil).
+import { addMdmIntents, downloadMacosOrganizationProfile, getTenantPolicy } from "../api/policies";
 // Sprint 4 — one-click fix from the finding card (crosswalk-gated).
 import { downloadRemediationArtifact } from "../api/patchManagement";
 import FindingDetailDrawer from "../components/patch-management/FindingDetailDrawer";
-import {
-  readSecurityFromPolicy,
-  securityFormToPolicy,
-  extractPolicyEnvelope,
-} from "../components/Policies/policyTransforms";
-import { baselineModeForCategory, baselineModeForFinding } from "../components/Compliance/capabilityBridge";
+import { extractPolicyEnvelope } from "../components/Policies/policyTransforms";
 import PageHeader from "../components/common/PageHeader";
 import GoToReportButton from "../components/common/GoToReportButton";
 
@@ -348,19 +338,18 @@ function readUrlFilters() {
   return parseUrlFilters(window.location.search);
 }
 
-// Fase B — Baselines lives as a tab of this page. Lazy so Posture (the
-// default and most-visited tab) doesn't pay for the policy editor until
-// the operator actually switches.
-const SecurityBaselines = React.lazy(() => import("./SecurityBaselines"));
-
 // Deep-linkable via ?scpTab=. Same pattern Configurations uses for
-// ?settingsTab=. "baselines" y "settings" son sólo para roles con gestión —
+// ?settingsTab=. "settings" y "exceptions" son sólo para roles con gestión —
 // `effectiveTab` las degrada a "posture" para un USER.
+//
+// "baselines" ya no está (1-oct): sus modos por capability no los configuró
+// ningún tenant y no cambiaban lo que mide SCP. Un `?scpTab=baselines`
+// guardado cae a "posture" por no estar en la lista.
 //
 // ⚠️ Una pestaña que no esté en esta lista NO es alcanzable: ni por URL ni por
 // `setTab`, porque el efecto de abajo reescribe `?scpTab=` y al recargar
 // volvería a "posture". Añadir una pestaña a `PageTabs` sin tocar esto la deja muerta.
-const SCP_TABS = ["posture", "fix", "baselines", "exceptions", "catalog", "settings"];
+const SCP_TABS = ["posture", "fix", "exceptions", "catalog", "settings"];
 
 export default function SecurityCompliance({ initialTab, onNavigate }) {
   // ADR-0011 Phase 3 — gate on the "security_compliance" capability
@@ -402,7 +391,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // sólo enseña el nivel de compliance. `isEntitled` responde `true` mientras
   // no se sepa, así que un backend viejo o un parpadeo NO esconde la acción a
   // quien sí pagó; el control de verdad es el 402 de la API.
-  const { isEntitled, capabilityAuto, capabilityCatalogChecks } = usePluginCatalog();
+  const { isEntitled } = usePluginCatalog();
   const canRemediate = canManage && isEntitled("pmp");
 
   // Sprint 2 item 1 — tenant-configured score bands (85/60 defaults).
@@ -411,7 +400,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
 
   // Fase B — tab state. URL param wins over the prop so a reload after
   // switching tabs stays where the operator left it (the prop is only
-  // the seed the `security-baselines` registry alias plants); then the
+  // the seed a registry alias plants); then the
   // effect mirrors every change back to ?scpTab=.
   const [tab, setTab] = React.useState(() => {
     const fromUrl = getSearchParam("scpTab", "");
@@ -422,51 +411,10 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   React.useEffect(() => {
     updateSearchParams({ scpTab: tab === "posture" ? "" : tab });
   }, [tab]);
-  // Baselines is privileged-only (the page itself hard-blocks USER, but
-  // the tab shouldn't even render). Deep links degrade to Posture.
-  // Las dos pestañas privilegiadas caen a Fleet status si el rol no las
-  // tiene: un `?scpTab=settings` guardado por un ADMIN no puede dejar a un
-  // USER mirando una pantalla vacía.
-  const effectiveTab =
-    (tab === "baselines" || tab === "settings" || tab === "exceptions") && !canManage ? "posture" : tab;
-
-  // ── Fase C — baseline modes on the Posture tab ─────────────────────
-  //
-  // Fail-soft policy read: when it errors (or the viewer is USER) the
-  // Posture tab renders exactly as before the bridge existed — no
-  // chips, no hints. `policyRefresh` bumps after a set-to-auto patch.
-  const confirmDialog = useConfirm();
-  const [securityForm, setSecurityForm] = React.useState(null);
-  const [policyRefresh, setPolicyRefresh] = React.useState(0);
-  React.useEffect(() => {
-    if (!canManage || !tenantId) return undefined;
-    let cancelled = false;
-    getTenantPolicy(tenantId)
-      .then((res) => {
-        if (cancelled) return;
-        const env = extractPolicyEnvelope(res);
-        setSecurityForm(readSecurityFromPolicy(env.raw ?? {}));
-      })
-      .catch(() => {
-        if (!cancelled) setSecurityForm(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canManage, tenantId, policyRefresh, tab]);
-
-  const modeForCategory = React.useCallback(
-    (category) =>
-      securityForm
-        ? baselineModeForCategory(securityForm, category, (cap) => capabilityAuto(cap.key, cap.enforcer))
-        : null,
-    // `capabilityAuto` faltaba y ya lo avisaba exhaustive-deps: es un
-    // useCallback estable de usePluginCatalog que sólo cambia cuando llega la
-    // matriz de remediación, así que omitirlo dejaba este cálculo mirando la
-    // matriz de antes. Sale aquí al quitar los botones de export porque el
-    // compilador de React abandonaba el componente antes por otro motivo.
-    [securityForm, capabilityAuto]
-  );
+  // Las pestañas privilegiadas caen a Fleet status si el rol no las tiene:
+  // un `?scpTab=settings` guardado por un ADMIN no puede dejar a un USER
+  // mirando una pantalla vacía.
+  const effectiveTab = (tab === "settings" || tab === "exceptions") && !canManage ? "posture" : tab;
 
   // Grupo y framework viven en la URL (?group= / ?framework=): ir a un equipo
   // y volver, recargar o compartir el enlace los perdía (walkthrough 25-sep #9).
@@ -862,66 +810,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
     [canRemediate]
   );
 
-  // Fase C — "Set to auto-remediate" from a category row. Re-reads the
-  // policy immediately before patching (not the cached securityForm) so
-  // the optimistic-lock version is fresh, flips ONLY the enforceable
-  // capabilities mapped to this category, and writes through the same
-  // domain-scoped PATCH the Baselines editor uses — a save here can't
-  // touch anything outside the security block.
-  const handleSetCategoryAuto = React.useCallback(
-    async (category) => {
-      if (!canRemediate || !tenantId) return;
-      const info = securityForm
-        ? baselineModeForCategory(securityForm, category, (cap) => capabilityAuto(cap.key, cap.enforcer))
-        : null;
-      const targets = info?.autoUpgradable ?? [];
-      if (!targets.length) return;
-      const labels = targets.map((c) => c.label).join(", ");
-      const ok = await confirmDialog({
-        title: "Enable auto-remediation?",
-        body:
-          `This sets ${labels} to auto — the agent will FIX drift on the ` +
-          "device, not just report it, starting with the next compliance " +
-          "pass after the policy reaches the fleet.\n\nVet in report-only " +
-          "first if you haven't.",
-        confirmText: "Set to auto",
-        danger: true,
-      });
-      if (!ok) return;
-      try {
-        const res = await getTenantPolicy(tenantId);
-        const env = extractPolicyEnvelope(res);
-        const fresh = readSecurityFromPolicy(env.raw ?? {});
-        const capabilities = { ...fresh.capabilities };
-        for (const cap of targets) {
-          capabilities[cap.key] = {
-            ...(capabilities[cap.key] || { mode: null, values: {} }),
-            mode: "auto",
-          };
-        }
-        const security = securityFormToPolicy({ ...fresh, capabilities });
-        await patchTenantPolicyDomain(tenantId, "security", security ? { security } : {}, {
-          expectedVersion: env.version,
-        });
-        setPolicyRefresh((n) => n + 1);
-        showToast({
-          severity: "success",
-          message: `${labels} set to auto-remediate. Push or wait for the next policy sync to reach devices.`,
-        });
-      } catch (e) {
-        showToast({
-          severity: "error",
-          message:
-            e?.status === 409
-              ? "Policy was modified by someone else — try again."
-              : e?.body?.message || "Failed to update the baseline.",
-        });
-      }
-    },
-    // Mismo caso que arriba: `capabilityAuto` se usa dentro y faltaba.
-    [canRemediate, tenantId, securityForm, confirmDialog, showToast, capabilityAuto]
-  );
-
   // Sprint 4 — remediation on the open device. Opens the same drawer the PM
   // grid uses, preselected to this device: dry-run first, apply only if it
   // says something would change. The backend translates the catalog id to
@@ -968,19 +856,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
     },
     [showToast]
   );
-
-  // Fase C — bundle handed to the category breakdown (chips + actions).
-  const baselineBridge = React.useMemo(() => {
-    if (!canManage || !securityForm) return null;
-    return {
-      modeForCategory,
-      // Sin derecho a PMP no se ofrece "poner en auto": ese modo hace que el
-      // agente REMEDIE, y es justo lo que este plan no incluye. Los chips de
-      // modo siguen visibles — ver el estado del baseline es compliance.
-      onSetAuto: canRemediate ? handleSetCategoryAuto : null,
-      onConfigure: () => setTab("baselines"),
-    };
-  }, [canManage, canRemediate, securityForm, modeForCategory, handleSetCategoryAuto]);
 
   // Sprint 4/6 — CSV/PDF export. Downloads go through httpGetBlob (see
   // api/compliance.js) rather than a plain `<a href>` so an MSP operator's
@@ -1170,9 +1045,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
       <PageHeader
         title="Security Compliance"
         subtitle={
-          effectiveTab === "baselines" ? (
-            "The endpoint state you require — and whether the agent may correct drift automatically. Posture shows the evidence of that state."
-          ) : effectiveTab === "catalog" ? (
+          effectiveTab === "catalog" ? (
             "Every control Tracenium evaluates, across platforms and frameworks. Read-only — the catalog is global."
           ) : effectiveTab === "settings" ? (
             "Thresholds and the frameworks you track. Both change what the rest of this page reports — and what the exports contain."
@@ -1246,9 +1119,8 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         }
       />
 
-      {/* Las caras del módulo: lo que observamos (Fleet status), lo que
-          exigimos (Baselines), lo que evaluamos (Catalog) y cómo se mide
-          (Settings).
+      {/* Las caras del módulo: lo que observamos (Fleet status), qué hacer
+          (Fix), lo que evaluamos (Catalog) y cómo se mide (Settings).
 
           Mismo formato que Asset Management —envueltos en SectionPaper, sin
           padding, scrollable— para que las dos páginas con pestañas se vean
@@ -1265,7 +1137,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           // mismo nombre a un palmo de distancia es justo el tipo de ruido que
           // esta pasada viene a quitar.
           { value: "posture", label: "Fleet status", icon: <GppGoodOutlinedIcon /> },
-          canManage ? { value: "baselines", label: "Baselines", icon: <ShieldOutlinedIcon /> } : null,
           // El hub de remediación. Va aquí, pegado a Posture, porque es el
           // paso siguiente a mirar la postura: de "qué está mal" a "qué hago".
           // NO se gatea con `canManage`: ver qué habría que arreglar es parte
@@ -1292,25 +1163,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           canManage ? { value: "settings", label: "Compliance Settings", icon: <SettingsOutlinedIcon /> } : null,
         ]}
       />
-
-      {effectiveTab === "baselines" ? (
-        <React.Suspense
-          fallback={
-            <Box sx={{ display: "grid", placeItems: "center", minHeight: 240 }}>
-              <CircularProgress size={26} sx={{ color: BRAND.teal }} />
-            </Box>
-          }
-        >
-          {/* onNavigate: inside the tab, "go see the evidence" means
-              switching to Posture, not a page navigation.
-
-              `reloadKey`: el Refresh de la cabecera es el de la página, y
-              tiene que llegar hasta aquí. Embebido, este componente ya NO
-              pinta su propio RefreshControl — había dos, con dos cadencias
-              distintas, una encima de otra. */}
-          <SecurityBaselines embedded reloadKey={refreshToken} onNavigate={() => setTab("posture")} />
-        </React.Suspense>
-      ) : null}
 
       {effectiveTab === "fix" ? (
         <Stack spacing={2}>
@@ -1956,7 +1808,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           Sits below the framework table (compliance vs benchmarks) and above
           the MTTR/device views (triage). */}
       <ComplianceCategoryBreakdown
-        baselineBridge={baselineBridge}
         reloadKey={refreshToken}
         onOpenDevice={openDrawer}
         assetGroupId={assetGroupId}
@@ -2286,25 +2137,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           onRequestRefetch={refetchDrawer}
           onToast={showToast}
           canManage={canManage}
-          // Fase C — "auto-fix available" hints on findings whose CHECK is
-          // governed by an enforceable capability not yet in auto. Por
-          // hallazgo y con la plataforma del equipo: por categoría, el Secure
-          // Boot de un Windows decía «Gatekeeper can remediate this».
-          baselineHintForFinding={
-            baselineBridge
-              ? (finding) => {
-                  const info = baselineModeForFinding(
-                    securityForm,
-                    finding,
-                    { platform: drawerData?.device?.platform ?? null, catalogChecksFor: capabilityCatalogChecks },
-                    (cap) => capabilityAuto(cap.key, cap.enforcer)
-                  );
-                  if (!info || info.mode === "auto" || !info.autoUpgradable.length) return null;
-                  return { mode: info.mode, capabilities: info.autoUpgradable.map((c) => c.label) };
-                }
-              : null
-          }
-          onOpenBaselines={() => setTab("baselines")}
           onRemediateFinding={canManage ? handleRemediateFinding : null}
           onExportFix={canRemediate ? handleExportFix : null}
           onAddToMacPolicy={canManageMdm ? handleAddToMacPolicy : null}

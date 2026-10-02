@@ -57,11 +57,10 @@ export function usePluginCatalog() {
         // ("no tienes ninguno"): con null la UI no debe esconder nada, o un
         // parpadeo dejaría la consola inservible.
         entitled: Array.isArray(resp?.entitled) ? resp.entitled : null,
-        // La matriz de remediación de PMP (ADR pendiente; ver
-        // patch-management/remediation-matrix.ts en el backend). null = el
-        // backend aún no la sirve: la UI cae al flag estático `enforcer` de
-        // policyTransforms.js, que un test de contrato del backend mantiene
-        // igual a la matriz. Así un despliegue a medias no deja cards mudas.
+        // La matriz de remediación de PMP (ver patch-management/
+        // remediation-matrix.ts en el backend). null = el backend aún no la
+        // sirve. La leían las cards de Baselines (retiradas el 1-oct); se
+        // sigue exponiendo tal cual, normalizada.
         remediation:
           resp?.remediation && typeof resp.remediation === "object" ? resp.remediation : null,
       };
@@ -160,53 +159,12 @@ export function usePluginCatalog() {
 
   const remediation = payload?.remediation ?? null;
 
-  /**
-   * ¿Puede `mode=auto` hacer algo en esta capability?
-   *
-   * Derivado de la matriz del backend cuando existe; si no, del flag estático
-   * que se pasa como `fallback`. Hasta hoy el flag se escribía a mano y decía
-   * «auto coming soon» del único handler validado en producción — la matriz es
-   * la fuente, el flag es la red.
-   */
-  const capabilityAuto = useCallback(
-    (key, fallback = false) => {
-      const cap = remediation?.capabilities?.[String(key)];
-      return cap ? Boolean(cap.autoAvailable) : Boolean(fallback);
-    },
-    [remediation]
-  );
-
-  /** Plataformas con handler para la capability, o null si la matriz no llegó. */
-  const capabilityPlatforms = useCallback(
-    (key) => {
-      const cap = remediation?.capabilities?.[String(key)];
-      return cap ? cap.platforms.map((p) => p.platform) : null;
-    },
-    [remediation]
-  );
-
-  /**
-   * Los checks del catálogo que gobierna la capability, o null si la matriz no
-   * los trae (backend anterior). Con ellos se decide si un hallazgo concreto
-   * es de una capability — ver capabilityBridge.capabilitiesForFinding.
-   */
-  const capabilityCatalogChecks = useCallback(
-    (key) => {
-      const checks = remediation?.capabilities?.[String(key)]?.catalogChecks;
-      return Array.isArray(checks) ? checks : null;
-    },
-    [remediation]
-  );
-
   return {
     catalog,
     addons,
     entitled,
     isEntitled,
     remediation,
-    capabilityAuto,
-    capabilityPlatforms,
-    capabilityCatalogChecks,
     loading: Boolean(fetched?.loading),
     error: fetched?.error ?? null,
     refetch: fetched?.refetch ?? (async () => {}),

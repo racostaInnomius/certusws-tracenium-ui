@@ -26,10 +26,10 @@ const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
 const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
 const Billing = React.lazy(() => import("../components/Billing/Billing"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
-// SecurityBaselines is no longer mounted directly — Fase B folded it
-// into Security Compliance as the Baselines tab; the `security-baselines`
-// key below is a route alias, same pattern as `agent-settings`/`policies`
-// aliasing into Configurations.
+// `security-baselines` (below) is a route alias kept for old deep links. It
+// opened Security Compliance on the Baselines tab; that tab was removed on
+// 2026-10-01 (no tenant had configured a mode, and the modes did not change
+// what SCP measures), so it now lands on Fleet status.
 const DeviceManagement = React.lazy(() => import("../pages/DeviceManagement"));
 const Audit = React.lazy(() => import("../pages/Audit"));
 const PKI = React.lazy(() => import("../pages/PKI"));
@@ -111,7 +111,7 @@ export const PAGE_REGISTRY = {
   // aliases so existing deep links (and the Patch Management CTA) keep
   // working; they just open Settings on the agent tab.
   "agent-settings": (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
-  "security-baselines": (ctx) => <SecurityCompliance initialTab="baselines" onNavigate={ctx.onNavigate} />,
+  "security-baselines": (ctx) => <SecurityCompliance onNavigate={ctx.onNavigate} />,
   "device-management": (ctx) => <DeviceManagement onNavigate={ctx.onNavigate} />,
   policies: (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
 

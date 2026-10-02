@@ -26,13 +26,12 @@ import {
   CircularProgress,
   Tooltip,
 } from "@mui/material";
-import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import { scoreBandRole, scoreBandTextRole } from "../../theme/scoreBands";
 import { useComplianceBands } from "../../hooks/useComplianceBands";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
+import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getCategorySummary } from "../../api/compliance";
 import CategoryDrilldown from "./CategoryDrilldown";
 import { ScopeChip } from "./complianceChips";
@@ -64,79 +63,6 @@ function PassRateBar({ rate }) {
   );
 }
 
-// Fase C — mode chip + quick actions per row when the host page hands a
-// `baselineBridge` ({ modeForCategory, onSetAuto, onConfigure }). Null
-// bridge (USER role, policy fetch failed, standalone usage) renders the
-// pre-bridge table untouched.
-const MODE_CHIP = {
-  auto: { label: "auto", title: "The agent fixes drift in this category automatically." },
-  // Dos textos: el que invita a la llave inglesa sólo vale cuando la llave
-  // existe. Sin derecho a PMP no hay botón, y prometerlo en el tooltip sería el
-  // mismo "ofrecer lo que no se puede cumplir" que este gate viene a quitar.
-  "report-only": {
-    label: "report-only",
-    title: "Drift is detected and reported, never fixed. Click the wrench to enable auto-remediation.",
-    titleNoAuto: "Drift is detected and reported, never fixed. Auto-remediation requires Patch Management.",
-  },
-  off: { label: "off", title: "The mapped baseline capabilities are disabled." },
-};
-
-function BaselineCell({ row, bridge }) {
-  if (!bridge) return null;
-  const info = bridge.modeForCategory(row.category);
-  if (!info) {
-    // Category has no mapped capability (e.g. antimalware, patching) —
-    // em-dash, not an empty cell, so the column reads as "not
-    // configurable" rather than "broken".
-    return (
-      <TableCell align="right">
-        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>—</Typography>
-      </TableCell>
-    );
-  }
-  const meta = MODE_CHIP[info.mode] ?? MODE_CHIP["report-only"];
-  // `onSetAuto` llega null cuando el tenant no tiene derecho a PMP (gate de
-  // tier): hay capacidades que PODRÍAN pasar a auto, pero remediar no entra en
-  // su plan, así que no se ofrece el botón. El chip de modo se queda: ver el
-  // estado del baseline es compliance, no remediación.
-  const canAuto = info.autoUpgradable.length > 0 && typeof bridge.onSetAuto === "function";
-  return (
-    <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-      <Stack direction="row" spacing={0.5} justifyContent="flex-end" alignItems="center">
-        <Tooltip
-          title={`${!canAuto && meta.titleNoAuto ? meta.titleNoAuto : meta.title} Capabilities: ${info.capabilities.map((c) => c.label).join(", ")}`}
-          arrow
-        >
-          <Chip
-            size="small"
-            label={meta.label}
-            onClick={bridge.onConfigure}
-            clickable
-            sx={{
-              height: 20,
-              fontSize: TEXT.xs,
-              fontWeight: 700,
-              bgcolor: info.mode === "auto" ? BRAND.tealSoft : info.mode === "off" ? BRAND.surfaceMuted : BRAND.darkSoft,
-              color: info.mode === "auto" ? BRAND.tealText : info.mode === "off" ? BRAND.gray : BRAND.dark,
-            }}
-          />
-        </Tooltip>
-        {canAuto && row.failed > 0 ? (
-          <Tooltip title={`Set ${info.autoUpgradable.map((c) => c.label).join(", ")} to auto-remediate`} arrow>
-            <IconButton
-              aria-label={`Enable auto-remediation for ${row.category}`}
-              size="small"
-              onClick={() => bridge.onSetAuto(row.category)}
-            >
-              <BuildOutlinedIcon sx={{ fontSize: ICON.sm }} />
-            </IconButton>
-          </Tooltip>
-        ) : null}
-      </Stack>
-    </TableCell>
-  );
-}
-
 function CategoryName({ category }) {
   const description = categoryDescription(category);
   const name = (
@@ -163,7 +89,7 @@ function CategoryName({ category }) {
   );
 }
 
-function CategoryRow({ row, baselineBridge, onOpenDevice, assetGroupId, framework }) {
+function CategoryRow({ row, onOpenDevice, assetGroupId, framework }) {
   const [open, setOpen] = React.useState(false);
   const expandable = row.failed > 0;
   return (
@@ -212,11 +138,10 @@ function CategoryRow({ row, baselineBridge, onOpenDevice, assetGroupId, framewor
             {row.devices ? <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray }}> / {row.devices}</Typography> : null}
           </Typography>
         </TableCell>
-        <BaselineCell row={row} bridge={baselineBridge} />
       </TableRow>
       {expandable ? (
         <TableRow>
-          <TableCell colSpan={baselineBridge ? 8 : 7} sx={{ py: 0, borderBottom: open ? `1px solid ${BRAND.border}` : "none" }}>
+          <TableCell colSpan={7} sx={{ py: 0, borderBottom: open ? `1px solid ${BRAND.border}` : "none" }}>
             <Collapse in={open} timeout="auto" unmountOnExit>
               <Box sx={{ pl: 5, pr: 2 }}>{open ? (
                 <CategoryDrilldown category={row.category} onOpenDevice={onOpenDevice} assetGroupId={assetGroupId} framework={framework} />
@@ -234,7 +159,6 @@ function CategoryRow({ row, baselineBridge, onOpenDevice, assetGroupId, framewor
 // or framework (walkthrough 25-sep #7).
 export default function ComplianceCategoryBreakdown({
   reloadKey,
-  baselineBridge = null,
   onOpenDevice = null,
   assetGroupId = "",
   framework = "",
@@ -313,9 +237,6 @@ export default function ComplianceCategoryBreakdown({
                 <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Failed</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Critical/High</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Devices failing</TableCell>
-                {baselineBridge ? (
-                  <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Baseline</TableCell>
-                ) : null}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -323,7 +244,6 @@ export default function ComplianceCategoryBreakdown({
                 <CategoryRow
                   key={r.category}
                   row={r}
-                  baselineBridge={baselineBridge}
                   onOpenDevice={onOpenDevice}
                   assetGroupId={assetGroupId}
                   framework={framework}

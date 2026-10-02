@@ -800,12 +800,10 @@ export default function Sidebar({
     { label: "Asset Management", key: "assets", icon: <ComputerOutlinedIcon /> },
     // Software Delivery (SDP) — Phase 1.
     { label: "Software Delivery", key: "software-delivery", icon: <CloudDownloadOutlinedIcon /> },
-    // Security Compliance hosts the whole loop as tabs since Fase B:
-    // Posture (evidence) | Baselines (desired state, privileged) |
-    // Catalog (what we evaluate). "Security Baselines" briefly had its
-    // own entry right here (Fase A, 2026-08-13) before being folded in
-    // as a tab the same day — the `security-baselines` key survives in
-    // pageRegistry as an alias that opens the tab.
+    // Security Compliance hosts the whole loop as tabs: Fleet status
+    // (evidence) | Fix | Exceptions | Catalog | Compliance Settings. The old
+    // Baselines tab was removed on 2026-10-01; its `security-baselines` key
+    // survives in pageRegistry as an alias for old links.
     { label: "Security Compliance", key: "ad", icon: <GppGoodOutlinedIcon /> },
     { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon /> },
     { label: "Patch Management", key: "patch", icon: <SystemUpdateAltOutlinedIcon /> },

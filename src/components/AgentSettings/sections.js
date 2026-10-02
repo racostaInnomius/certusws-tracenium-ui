@@ -33,8 +33,8 @@ export const SECTIONS = [
     id: "scp",
     label: "Security Compliance",
     plugin: "scp",
-    description: "Compliance evaluation cadence. Remediation baselines live in Security Compliance.",
-    related: { label: "Open Security Compliance", page: "security-baselines" },
+    description: "Compliance evaluation cadence. Findings and their fixes live in Security Compliance.",
+    related: { label: "Open Security Compliance", page: "ad" },
   },
   {
     id: "pmp",

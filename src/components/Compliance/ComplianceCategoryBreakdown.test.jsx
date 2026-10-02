@@ -130,39 +130,6 @@ describe("ComplianceCategoryBreakdown", () => {
   });
 });
 
-describe("gate de tier — el botón de auto-remediar", () => {
-  // F4.3: `auto` hace que el agente REMEDIE, y eso lo habilita PMP
-  // (business). SecurityCompliance pasa `onSetAuto: null` cuando el tenant no
-  // tiene derecho; aquí se fija que la fila lo respeta aunque SÍ haya
-  // capacidades que técnicamente podrían subir a auto.
-  const bridgeBase = {
-    modeForCategory: () => ({
-      mode: "report-only",
-      capabilities: [{ key: "firewall", label: "firewall" }],
-      autoUpgradable: [{ key: "firewall", label: "firewall" }],
-    }),
-    onConfigure: vi.fn(),
-  };
-
-  it("con derecho: se ofrece el botón", async () => {
-    getCategorySummary.mockResolvedValue(ITEMS);
-    render(<ComplianceCategoryBreakdown baselineBridge={{ ...bridgeBase, onSetAuto: vi.fn() }} />);
-    await screen.findByText("Firewall");
-    expect(screen.queryAllByLabelText(/^Enable auto-remediation for /i).length).toBeGreaterThan(0);
-  });
-
-  it("sin derecho (onSetAuto null): NO se ofrece, pero el chip de modo se queda", async () => {
-    // Ver el estado del baseline es compliance; cambiarlo a auto es remediación.
-    getCategorySummary.mockResolvedValue(ITEMS);
-    render(<ComplianceCategoryBreakdown baselineBridge={{ ...bridgeBase, onSetAuto: null }} />);
-    await screen.findByText("Firewall");
-    expect(screen.queryAllByLabelText(/^Enable auto-remediation for /i)).toHaveLength(0);
-    // …y el tooltip del chip deja de invitar a una llave inglesa que ya no está.
-    expect(screen.queryAllByLabelText(/Click the wrench/i)).toHaveLength(0);
-    expect(screen.getAllByText("report-only").length).toBeGreaterThan(0);
-  });
-});
-
 describe("ComplianceCategoryBreakdown — the page's filters (walkthrough 25-sep #7)", () => {
   it("asks for the group and framework, and asks again when either changes", async () => {
     getCategorySummary.mockResolvedValue(ITEMS);
