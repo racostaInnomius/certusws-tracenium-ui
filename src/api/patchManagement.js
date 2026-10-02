@@ -307,6 +307,31 @@ export async function deleteMaintenanceWindow(id) {
   return httpDeleteJson(`${BASE}/maintenance-windows/${encodeURIComponent(id)}`);
 }
 
+// ── Post-patch checks (ADR-0038 F1) ───────────────────────────────────────
+// What has to still be alive after a patch, per asset group (null = every
+// device). The agent measures them right before installing and again after
+// the restart; something that passed before and fails after is a regression.
+
+export async function listVerificationChecks() {
+  return httpGetJson(`${BASE}/verification-checks`);
+}
+
+export async function listVerificationTemplates() {
+  return httpGetJson(`${BASE}/verification-checks/templates`);
+}
+
+export async function createVerificationCheck(payload) {
+  return httpPostJson(`${BASE}/verification-checks`, payload);
+}
+
+export async function updateVerificationCheck(id, payload) {
+  return httpPatchJson(`${BASE}/verification-checks/${encodeURIComponent(id)}`, payload);
+}
+
+export async function deleteVerificationCheck(id) {
+  return httpDeleteJson(`${BASE}/verification-checks/${encodeURIComponent(id)}`);
+}
+
 // ── Infrastructure Gateway (ADR-0001) ────────────────────────────────────────
 // The vCenter snapshot broker. Note what is NOT here: no endpoint ever carries
 // a plaintext vCenter credential. The browser seals it against the gateway's

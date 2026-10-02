@@ -18,6 +18,9 @@ export const MOVED_TO_SETTINGS = {
   gateway: "gateway",
   "third-party-catalog": "third-party-catalog",
   "cve-catalog": "cve-catalog",
+  // Never a tab: the link from a "did not come back healthy after a patch"
+  // alert to the checks that decided it (ADR-0038 F1).
+  "post-patch-checks": "post-patch-checks",
 };
 
 export const SETTINGS_TAB = "settings";

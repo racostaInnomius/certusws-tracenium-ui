@@ -23,6 +23,7 @@ import GatewayPanel from "./gateway/GatewayPanel";
 import ThirdPartyCatalogManager from "./ThirdPartyCatalogManager";
 import CveCatalogManager from "./CveCatalogManager";
 import RemediationMatrixPanel from "./RemediationMatrixPanel";
+import VerificationChecksPanel from "./VerificationChecksPanel";
 
 /**
  * Ordered by how often an operator actually opens them: the two that change
@@ -38,6 +39,11 @@ export const CONFIG_SECTIONS = [
     key: "gateway",
     label: "Virtual infrastructure",
     blurb: "The host that snapshots vCenter VMs before they are patched.",
+  },
+  {
+    key: "post-patch-checks",
+    label: "Post-patch checks",
+    blurb: "What has to still work after a patch and its restart.",
   },
   {
     key: "third-party-catalog",
@@ -83,6 +89,8 @@ export default function ConfigurePanel({
         <MaintenanceWindowsPanel canManage={canManage} notify={notify} />
       ) : active === "gateway" ? (
         <GatewayPanel canManage={canManage} devices={devices} notify={notify} />
+      ) : active === "post-patch-checks" ? (
+        <VerificationChecksPanel canManage={canManage} notify={notify} />
       ) : active === "third-party-catalog" ? (
         <ThirdPartyCatalogManager canManage={canManage} notify={notify} />
       ) : active === "cve-catalog" ? (
