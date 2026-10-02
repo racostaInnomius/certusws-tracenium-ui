@@ -18,11 +18,12 @@ const api = vi.hoisted(() => ({
   deleteBaseline: vi.fn(),
   addBaselineEntries: vi.fn(),
   removeBaselineEntry: vi.fn(),
+  getComplianceCatalog: vi.fn(),
 }));
 vi.mock("../../api/compliance", () => api);
 vi.mock("../../api/assetGroups", () => ({ listAssetGroups: vi.fn(async () => ({ items: [{ id: 4, name: "PCI scope" }] })) }));
 
-import BaselinesPanel, { scopeLabel } from "./BaselinesPanel";
+import BaselinesPanel, { scopeLabel, pickableChecks } from "./BaselinesPanel";
 
 const WIN = { id: "b1", name: "Windows workstations", scopeKind: "platform", platform: "windows", assetGroupId: null, assetGroupName: null, mode: "report", entryCount: 2 };
 const ALIGN = {
@@ -94,6 +95,38 @@ describe("BaselinesPanel", () => {
     expect(within(dialog).getByText("29 of 30")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Add 1 check" }));
     await waitFor(() => expect(api.addBaselineEntries).toHaveBeenCalledWith("b1", ["c.cortana"], "fleet"));
+  });
+
+  it("⭐ añadir a mano: busca en el catálogo, sólo de su plataforma y sin lo que ya está, y lo añade como `manual`", async () => {
+    api.getComplianceCatalog.mockResolvedValue({
+      ok: true,
+      checks: [
+        { checkId: "c.smb", title: "SMB signing required", platform: "windows", severity: "high" }, // ya en el baseline
+        { checkId: "w.lsa", title: "LSA protection enabled", platform: "windows", severity: "high" },
+        { checkId: "x.browser", title: "Browser updates enabled", platform: "cross", severity: "medium" },
+        { checkId: "m.fv", title: "FileVault enabled", platform: "macos", severity: "critical" },
+      ],
+    });
+    api.addBaselineEntries.mockResolvedValue({ added: ["w.lsa"], alreadyIn: [], unknown: [] });
+    mount();
+    fireEvent.click(await screen.findByText("Windows workstations"));
+    fireEvent.click(await screen.findByRole("button", { name: /Add checks/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("LSA protection enabled")).toBeInTheDocument();
+    expect(within(dialog).getByText("Browser updates enabled")).toBeInTheDocument();
+    expect(within(dialog).queryByText("FileVault enabled")).toBeNull(); // otra plataforma
+    expect(within(dialog).queryByText("SMB signing required")).toBeNull(); // ya está
+    fireEvent.change(within(dialog).getByLabelText("Search checks"), { target: { value: "lsa" } });
+    expect(within(dialog).queryByText("Browser updates enabled")).toBeNull();
+    fireEvent.click(within(dialog).getByText("LSA protection enabled"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add 1 check" }));
+    await waitFor(() => expect(api.addBaselineEntries).toHaveBeenCalledWith("b1", ["w.lsa"], "manual"));
+  });
+
+  it("pickableChecks: un baseline de grupo ofrece todas las plataformas", () => {
+    const cat = [{ checkId: "a", platform: "windows" }, { checkId: "b", platform: "macos" }, { checkId: "c", platform: "cross" }];
+    expect(pickableChecks(cat, { platform: null }).map((c) => c.checkId)).toEqual(["a", "b", "c"]);
+    expect(pickableChecks(cat, { platform: "macos", existing: new Set(["c"]) }).map((c) => c.checkId)).toEqual(["b"]);
   });
 
   it("sin nada que proponer lo dice, con el umbral", async () => {

@@ -44,6 +44,7 @@ import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
 import { useConfirm } from "../common/ConfirmDialog";
@@ -55,6 +56,7 @@ import {
   getBaselineAlignment,
   getBaselineDetail,
   getBaselineProposals,
+  getComplianceCatalog,
   listBaselines,
   removeBaselineEntry,
 } from "../../api/compliance";
@@ -277,6 +279,135 @@ function ProposeDialog({ baseline, open, onClose, onAdded, onToast }) {
   );
 }
 
+const PICK_LIMIT = 50;
+
+/**
+ * Añadir checks a mano: buscar en el catálogo y marcar. Para lo que la flota
+ * aún no tiene arreglado (un estándar que se quiere imponer, no sólo
+ * recoger). Un baseline de plataforma sólo ofrece checks de su plataforma y
+ * los multiplataforma; uno de grupo, todos. Lo que ya está no se ofrece.
+ */
+export function pickableChecks(catalog, { platform = null, existing = new Set(), query = "" } = {}) {
+  const q = query.trim().toLowerCase();
+  return (catalog || []).filter(
+    (c) =>
+      !existing.has(c.checkId) &&
+      (!platform || c.platform === platform || c.platform === "cross") &&
+      (!q || String(c.title || "").toLowerCase().includes(q) || String(c.checkId).toLowerCase().includes(q))
+  );
+}
+
+function AddChecksDialog({ baseline, open, existing, onClose, onAdded, onToast }) {
+  const [catalog, setCatalog] = React.useState(null);
+  const [error, setError] = React.useState(null);
+  const [query, setQuery] = React.useState("");
+  const [picked, setPicked] = React.useState(() => new Set());
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    setQuery("");
+    setPicked(new Set());
+    setError(null);
+    getComplianceCatalog()
+      .then((res) => alive && setCatalog(Array.isArray(res?.checks) ? res.checks : []))
+      .catch((e) => alive && setError(errorText(e, "Could not load the catalog.")));
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  const matches = React.useMemo(
+    () => pickableChecks(catalog, { platform: baseline?.scopeKind === "platform" ? baseline.platform : null, existing, query }),
+    [catalog, baseline, existing, query]
+  );
+  const toggle = (id) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const add = async () => {
+    setSaving(true);
+    try {
+      const res = await addBaselineEntries(baseline.id, [...picked], "manual");
+      const n = res?.added?.length ?? 0;
+      const skipped = (res?.unknown?.length ?? 0) + (res?.alreadyIn?.length ?? 0);
+      onToast?.({
+        severity: "success",
+        message: `Added ${n} check${n === 1 ? "" : "s"} to "${baseline.name}".${skipped ? ` ${skipped} skipped (already in, or not for this platform).` : ""}`,
+      });
+      onAdded?.();
+      onClose();
+    } catch (e) {
+      onToast?.({ severity: "error", message: errorText(e, "Could not add the checks.") });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>Add checks</DialogTitle>
+      <DialogContent>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
+          {baseline?.scopeKind === "platform"
+            ? `Checks for ${PLATFORM_LABEL[baseline.platform] ?? baseline.platform} and cross-platform checks.`
+            : "Any check in the catalog."}{" "}
+          Each one is added with the value the catalog expects today.
+        </Typography>
+        <TextField
+          size="small"
+          fullWidth
+          autoFocus
+          placeholder="Search by title or check id"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          inputProps={{ "aria-label": "Search checks" }}
+          sx={{ mb: 1 }}
+        />
+        {error ? <Alert severity="error">{error}</Alert> : null}
+        {!catalog && !error ? <LinearProgress /> : null}
+        {catalog ? (
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 0.5 }}>
+            {matches.length > PICK_LIMIT
+              ? `${matches.length} matches — showing the first ${PICK_LIMIT}. Narrow the search to see the rest.`
+              : `${matches.length} match${matches.length === 1 ? "" : "es"}`}
+            {picked.size ? ` · ${picked.size} selected` : ""}
+          </Typography>
+        ) : null}
+        {catalog && matches.length > 0 ? (
+          <Table size="small">
+            <TableBody>
+              {matches.slice(0, PICK_LIMIT).map((c) => (
+                <TableRow key={c.checkId} hover onClick={() => toggle(c.checkId)} sx={{ cursor: "pointer" }}>
+                  <TableCell padding="checkbox">
+                    <Checkbox size="small" checked={picked.has(c.checkId)} inputProps={{ "aria-label": `Select ${c.title || c.checkId}` }} />
+                  </TableCell>
+                  <TableCell>
+                    <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600 }}>{c.title || c.checkId}</Typography>
+                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>{c.checkId}</Typography>
+                  </TableCell>
+                  <TableCell sx={{ width: 110 }}>{c.severity ? <SeverityChip severity={c.severity} /> : null}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : null}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} sx={{ textTransform: "none" }}>Cancel</Button>
+        <Button variant="contained" disableElevation disabled={picked.size === 0 || saving} onClick={add} sx={{ textTransform: "none" }}>
+          {`Add ${picked.size} check${picked.size === 1 ? "" : "s"}`}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 /** Lo que dice una entrada además de su nombre. */
 function EntryFlags({ entry }) {
   const flags = [];
@@ -301,6 +432,7 @@ function BaselineDetail({ baseline, alignment, canManage, onChanged, onToast }) 
   const confirm = useConfirm();
   const [detail, setDetail] = React.useState(null);
   const [proposeOpen, setProposeOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
 
   const load = React.useCallback(async () => {
     try {
@@ -313,7 +445,8 @@ function BaselineDetail({ baseline, alignment, canManage, onChanged, onToast }) 
     load();
   }, [load]);
 
-  const entries = detail?.entries ?? [];
+  const entries = React.useMemo(() => detail?.entries ?? [], [detail]);
+  const existingIds = React.useMemo(() => new Set(entries.map((e) => e.checkId)), [entries]);
   const byCheck = new Map((alignment?.byCheck ?? []).map((c) => [c.checkId, c]));
   const titleOf = new Map(entries.map((e) => [e.checkId, e.title || e.checkId]));
   const outOfLine = (alignment?.devices ?? []).filter((d) => d.counts.deviation > 0);
@@ -351,6 +484,9 @@ function BaselineDetail({ baseline, alignment, canManage, onChanged, onToast }) 
           <Button size="small" variant="outlined" startIcon={<AutoFixHighOutlinedIcon />} onClick={() => setProposeOpen(true)} sx={{ textTransform: "none" }}>
             Propose from fleet
           </Button>
+          <Button size="small" variant="outlined" startIcon={<AddOutlinedIcon />} onClick={() => setAddOpen(true)} sx={{ textTransform: "none" }}>
+            Add checks
+          </Button>
           <Box sx={{ flex: 1 }} />
           <Button size="small" color="error" onClick={destroy} sx={{ textTransform: "none" }}>
             Delete baseline
@@ -361,7 +497,7 @@ function BaselineDetail({ baseline, alignment, canManage, onChanged, onToast }) 
       {!detail ? <LinearProgress /> : null}
       {detail && entries.length === 0 ? (
         <Alert severity="info">
-          No checks yet. Use «Propose from fleet» to start from what your devices already have fixed.
+          No checks yet. Use «Propose from fleet» to start from what your devices already have fixed, or «Add checks» to pick them from the catalog.
         </Alert>
       ) : null}
 
@@ -436,6 +572,17 @@ function BaselineDetail({ baseline, alignment, canManage, onChanged, onToast }) 
         </>
       ) : null}
 
+      <AddChecksDialog
+        baseline={baseline}
+        open={addOpen}
+        existing={existingIds}
+        onClose={() => setAddOpen(false)}
+        onAdded={async () => {
+          await load();
+          onChanged?.();
+        }}
+        onToast={onToast}
+      />
       <ProposeDialog
         baseline={baseline}
         open={proposeOpen}
