@@ -47,6 +47,15 @@ describe("describeBlockedError", () => {
     ).toBe("Not dispatched — snapshot required but unavailable");
   });
 
+  it("🔴 un patch_install ya en curso en el equipo se explica, sin el uuid crudo (1-oct-2026)", () => {
+    expect(
+      describeBlockedError({
+        status: 409,
+        body: { error: "patch_install_blocked", reason: "patch_install_in_flight:8d9ab682-0c40-45f1-8318-a12b1218f8d6" },
+      })
+    ).toBe("Not dispatched — this device already has a patch install queued, held or running — cancel it from Jobs first");
+  });
+
   it("otros errores no se disfrazan de bloqueo", () => {
     expect(describeBlockedError({ status: 409, body: { error: "otra_cosa" } })).toBeNull();
     expect(describeBlockedError({ status: 500 })).toBeNull();

@@ -64,11 +64,31 @@ export function describeGateOutcome(res) {
   return { severity: "success", held: false, message: "Queued — installing now" };
 }
 
+/**
+ * Motivos de bloqueo que el backend devuelve como código. Los que no estén aquí
+ * se leen cambiando `_` por espacios, como antes.
+ *
+ * `patch_install_in_flight:<jobId>` (1-oct-2026): el equipo ya tiene un
+ * patch_install sin terminar — en cola, retenido o en el agente. Antes nada lo
+ * impedía y un doble clic daba dos jobs, dos snapshots y un falso «failed».
+ */
+const BLOCK_REASON_TEXT = {
+  patch_install_in_flight: "this device already has a patch install queued, held or running — cancel it from Jobs first",
+  invalid_patch_id: "an update id has an unexpected format",
+  no_patches_selected: "no updates were selected",
+  owner_authorization_required: "macOS updates on Apple silicon must be installed on the Mac itself",
+};
+
+export function blockReasonText(reason) {
+  if (!reason) return "blocked by the patch gate";
+  const code = String(reason).split(":")[0];
+  return BLOCK_REASON_TEXT[code] || String(reason).replace(/_/g, " ");
+}
+
 /** Un 409 de la puerta → motivo legible. `null` si el error es otro. */
 export function describeBlockedError(err) {
   if (err?.status !== 409) return null;
   // Mismo contrato para el reinicio bajo demanda (`device_reboot_blocked`).
   if (err?.body?.error !== "patch_install_blocked" && err?.body?.error !== "device_reboot_blocked") return null;
-  const reason = err?.body?.reason ? String(err.body.reason).replace(/_/g, " ") : "blocked by the patch gate";
-  return `Not dispatched — ${reason}`;
+  return `Not dispatched — ${blockReasonText(err?.body?.reason)}`;
 }

@@ -490,6 +490,13 @@ function JobsByTypeCard({ windowDays, data, loading, typeLabels, onSelectType, s
  * "Timeout 5/5" reads as one fact instead of forcing a glance at a separate
  * column that is blank for most rows.
  */
+/**
+ * Lo que el backend deja cancelar (job-dispatcher.cancelJob). Los retenidos por
+ * la ventana o el snapshot también: hasta el 1-oct-2026 la UI no los dejaba, y
+ * un patch_install lanzado por error para esta noche no tenía freno.
+ */
+const CANCELLABLE_STATUSES = ["pending", "retrying", "sent", "running", "awaiting_window", "awaiting_snapshot"];
+
 const STATUS_DOT = {
   completed: { label: "Completed", color: BRAND.teal },
   running: { label: "Running", color: BRAND.cyanText },
@@ -500,6 +507,9 @@ const STATUS_DOT = {
   timeout: { label: "Timeout", color: BRAND.alert.error },
   cancelled: { label: "Cancelled", color: BRAND.gray },
   expired: { label: "Expired", color: BRAND.gray },
+  // Retenidos por la puerta de PMP (1-oct-2026): salían como el código crudo.
+  awaiting_window: { label: "Held · window", color: BRAND.alert.warning },
+  awaiting_snapshot: { label: "Held · snapshot", color: BRAND.alert.warning },
 };
 
 function renderStatusChip(status, attempts) {
@@ -725,7 +735,10 @@ export default function Jobs({ onNavigate }) {
       completed: "completed",
       failed: "failed",
       timeout: "timeout",
-      cancelled: "cancelled"
+      cancelled: "cancelled",
+      awaiting_window: "awaiting_window",
+      awaiting_snapshot: "awaiting_snapshot",
+      expired: "expired"
     };
     // `since=7d`: ventana en días (1-90), mismo formato que el backend. Un
     // enlace desde una métrica "de los últimos N días" tiene que traer su
@@ -1597,7 +1610,7 @@ export default function Jobs({ onNavigate }) {
   const jobCountSummary = React.useMemo(() => {
     const total = tenantJobs.length;
     const live = tenantJobs.filter((j) =>
-      ["pending", "sent", "running", "retrying"].includes(String(j.status || "").toLowerCase())
+      CANCELLABLE_STATUSES.includes(String(j.status || "").toLowerCase())
     ).length;
     if (!total) return "No jobs yet";
     const totalText = `${total}${historyTruncated ? "+" : ""} total`;
@@ -1704,7 +1717,7 @@ export default function Jobs({ onNavigate }) {
 
   const selectedJobStatus = String(selectedJob?.status || "").toLowerCase();
   const canRetrySelectedJob = ["failed", "timeout", "cancelled"].includes(selectedJobStatus);
-  const canCancelSelectedJob = ["pending", "retrying", "sent", "running"].includes(selectedJobStatus);
+  const canCancelSelectedJob = CANCELLABLE_STATUSES.includes(selectedJobStatus);
 
   const refreshAll = React.useCallback(async () => {
     try {
@@ -2735,6 +2748,9 @@ export default function Jobs({ onNavigate }) {
                 <MenuItem value="timeout">Timeout</MenuItem>
                 <MenuItem value="failed,timeout">Failed or timed out</MenuItem>
                 <MenuItem value="cancelled">Cancelled</MenuItem>
+                <MenuItem value="awaiting_window">Held for the maintenance window</MenuItem>
+                <MenuItem value="awaiting_snapshot">Held for a snapshot</MenuItem>
+                <MenuItem value="expired">Expired</MenuItem>
               </TextField>
               <TextField
                 select
