@@ -81,7 +81,7 @@ describe("BaselinesPanel", () => {
   it("⭐ proponer desde la flota: lista lo propuesto, todo marcado, y lo añade como `fleet`", async () => {
     api.getBaselineProposals.mockResolvedValue({
       scopeDevices: 55, minCoverage: 0.8, days: 90,
-      proposals: [{ checkId: "c.cortana", title: "Cortana above lock disabled", severity: "medium", fixedDevices: 50, scopeDevices: 55, holdingDevices: 49 }],
+      proposals: [{ checkId: "c.cortana", title: "Cortana above lock disabled", severity: "medium", fixedDevices: 50, scopeDevices: 55, measuredDevices: 30, holdingDevices: 29 }],
     });
     api.addBaselineEntries.mockResolvedValue({ added: ["c.cortana"], alreadyIn: [], unknown: [] });
     mount();
@@ -90,6 +90,8 @@ describe("BaselinesPanel", () => {
     const dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByText("Cortana above lock disabled")).toBeInTheDocument();
     expect(within(dialog).getByText("50 of 55")).toBeInTheDocument();
+    // «Still passing» entre los re-medidos, no entre todos los arreglados.
+    expect(within(dialog).getByText("29 of 30")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Add 1 check" }));
     await waitFor(() => expect(api.addBaselineEntries).toHaveBeenCalledWith("b1", ["c.cortana"], "fleet"));
   });

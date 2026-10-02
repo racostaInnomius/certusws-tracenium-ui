@@ -222,8 +222,8 @@ function ProposeDialog({ baseline, open, onClose, onAdded, onToast }) {
       <DialogTitle>Propose from your fleet</DialogTitle>
       <DialogContent>
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
-          Fixes already applied on at least {pct}% of the devices this baseline covers in the last {data?.days ?? 90} days, that still
-          pass today. A fix that did not hold is not proposed.
+          Fixes already applied on at least {pct}% of the devices this baseline covers (where the check applies) in the last{" "}
+          {data?.days ?? 90} days, that still pass on the devices checked again since. A fix that did not hold is not proposed.
         </Typography>
         {error ? <Alert severity="error">{error}</Alert> : null}
         {!data && !error ? <LinearProgress /> : null}
@@ -256,7 +256,11 @@ function ProposeDialog({ baseline, open, onClose, onAdded, onToast }) {
                   <TableCell align="right" sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                     {p.fixedDevices} of {p.scopeDevices}
                   </TableCell>
-                  <TableCell align="right" sx={{ fontVariantNumeric: "tabular-nums" }}>{p.holdingDevices}</TableCell>
+                  <TableCell align="right" sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                    <Tooltip title="Of the fixed devices scanned again since the fix. Devices not scanned yet are left out, not counted as failures." arrow>
+                      <span>{p.measuredDevices != null ? `${p.holdingDevices} of ${p.measuredDevices}` : p.holdingDevices}</span>
+                    </Tooltip>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
