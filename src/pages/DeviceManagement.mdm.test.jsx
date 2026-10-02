@@ -64,6 +64,13 @@ beforeEach(() => {
     posts: [],
     deletes: [],
     wakes: [],
+    actionPosts: [],
+    cancels: [],
+    actions: {
+      platform: "macos", ownership: "corporate", supervised: true,
+      actions: ["refresh_inventory", "installed_apps", "lock", "restart", "erase"].map((action) => ({ action, available: true, reason: null })),
+      commands: [], information: null, apps: null,
+    },
     wakeReply: { requested: true, canDeliver: true, blocker: null },
     mdmCalls: 0,
     setup: {
@@ -120,6 +127,19 @@ function mount(search = "", extra = []) {
     http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/os-update$/, () => HttpResponse.json(state.osUpdate)),
     http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/organization-profile$/, () => HttpResponse.json(state.orgProfile)),
     http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/ddm$/, () => HttpResponse.json(state.ddm)),
+    http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/actions$/, () => HttpResponse.json(state.actions)),
+    http.post(/\/api\/v1\/mdm\/devices\/[^/]+\/actions\/[^/]+$/, async ({ request }) => {
+      const action = new URL(request.url).pathname.split("/").pop();
+      state.actionPosts.push({ action, body: await request.json() });
+      state.actions = { ...state.actions, commands: [{ commandUuid: `cmd-${state.actionPosts.length}`, requestType: "DeviceLock", status: "pending", issuedBy: "admin-1", issuedAt: new Date().toISOString() }, ...state.actions.commands] };
+      return HttpResponse.json({ requested: true, commandUuid: `cmd-${state.actionPosts.length}`, requestType: "DeviceLock" });
+    }),
+    http.delete(/\/api\/v1\/mdm\/devices\/[^/]+\/commands\/[^/]+$/, ({ request }) => {
+      const uuid = new URL(request.url).pathname.split("/").pop();
+      state.cancels.push(uuid);
+      state.actions = { ...state.actions, commands: state.actions.commands.map((c) => (c.commandUuid === uuid ? { ...c, status: "expired" } : c)) };
+      return HttpResponse.json({ cancelled: true, requestType: "DeviceLock" });
+    }),
     http.post(/\/api\/v1\/mdm\/devices\/[^/]+\/wake$/, ({ request }) => {
       state.wakes.push(new URL(request.url).pathname);
       return HttpResponse.json(state.wakeReply);
@@ -771,5 +791,78 @@ describe("MDM / MAM — un iPhone en el cajón (2-oct-2026)", () => {
     const profile = await screen.findByLabelText("Organization profile");
     expect(await within(profile).findByText(/The device installs it on its next check-in/)).toBeTruthy();
     expect(screen.queryByLabelText("OS update")).toBeNull();
+  });
+});
+
+describe("MDM / MAM — acciones sobre el equipo (2-oct-2026)", () => {
+  async function openMacActions() {
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    return screen.findByLabelText("Device actions");
+  }
+
+  it("⭐ bloquear un Mac pide un PIN de 6 dígitos y lo manda; queda en el historial y se puede cancelar", async () => {
+    const user = userEvent.setup();
+    const panel = await openMacActions();
+    await user.click(await within(panel).findByRole("button", { name: "Lock…" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Tracenium doesn't keep it/)).toBeTruthy();
+    const send = within(dialog).getByRole("button", { name: "Lock device" });
+    expect(send).toBeDisabled();
+    await user.type(within(dialog).getByLabelText("PIN"), "135790");
+    await user.type(within(dialog).getByLabelText("Message on the Lock Screen (optional)"), "Llama a TI");
+    expect(send).toBeEnabled();
+    await user.click(send);
+    await waitFor(() => expect(state.actionPosts).toEqual([{ action: "lock", body: { pin: "135790", message: "Llama a TI" } }]));
+    expect(await screen.findByText(/Lock sent to JPR-MacBookPro/)).toBeTruthy();
+
+    const history = await screen.findByLabelText("Recent actions");
+    expect(within(history).getByText("Waiting for the device")).toBeTruthy();
+    await user.click(await within(history).findByRole("button", { name: "Cancel" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel it" }));
+    await waitFor(() => expect(state.cancels).toEqual(["cmd-1"]));
+  });
+
+  it("❗ borrar exige escribir el número de serie y un motivo", async () => {
+    const user = userEvent.setup();
+    const panel = await openMacActions();
+    await user.click(await within(panel).findByRole("button", { name: "Erase…" }));
+    const dialog = await screen.findByRole("dialog");
+    const erase = within(dialog).getByRole("button", { name: "Erase device" });
+    await user.type(within(dialog).getByLabelText("Serial number confirmation"), "OTRO");
+    await user.type(within(dialog).getByLabelText(/Why \(goes in the audit log\)/), "Robado");
+    await user.type(within(dialog).getByLabelText("PIN"), "246810");
+    expect(erase).toBeDisabled();
+    await user.clear(within(dialog).getByLabelText("Serial number confirmation"));
+    await user.type(within(dialog).getByLabelText("Serial number confirmation"), "cwy6t7fn0f");
+    expect(erase).toBeEnabled();
+    await user.click(erase);
+    await waitFor(() => expect(state.actionPosts).toEqual([{ action: "erase", body: { confirmSerial: "cwy6t7fn0f", reason: "Robado", pin: "246810" } }]));
+  });
+
+  it("❗ un equipo personal: sólo mirar, y dice por qué", async () => {
+    state.actions = {
+      ...state.actions,
+      ownership: "byod",
+      actions: [
+        { action: "refresh_inventory", available: true, reason: null },
+        { action: "installed_apps", available: true, reason: null },
+        ...["lock", "restart", "erase"].map((action) => ({ action, available: false, reason: "personal_device" })),
+      ],
+      information: { at: new Date().toISOString(), values: { DeviceCapacity: 994.66, AvailableDeviceCapacity: 512.4, IsSupervised: true } },
+    };
+    const panel = await openMacActions();
+    expect(await within(panel).findByText(/enrolled as personal/)).toBeTruthy();
+    expect(within(panel).getByRole("button", { name: "Lock…" })).toBeDisabled();
+    expect(within(panel).getByRole("button", { name: "Erase…" })).toBeDisabled();
+    expect(within(panel).getByRole("button", { name: "Refresh inventory" })).toBeEnabled();
+    expect(within(panel).getByText("512 GB free of 995 GB")).toBeTruthy();
+  });
+
+  it("sin ser ADMIN/OWNER: el historial sí, los botones no", async () => {
+    capabilities = { role: "Mobile Operator", permissions: ["device_management", "enrollment"] };
+    const panel = await openMacActions();
+    expect(await within(panel).findByText(/Only tenant admins and owners/)).toBeTruthy();
+    expect(within(panel).queryByRole("button", { name: "Lock…" })).toBeNull();
   });
 });

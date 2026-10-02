@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACTION_UNAVAILABLE,
+  describeDeviceCommand,
+  describeDeviceInformation,
   describeCommandsDelivery,
   describeDevicePush,
   describeWakeResult,
@@ -332,5 +335,40 @@ describe("iPhone/iPad en el cajón (2-oct-2026)", () => {
     expect(describeDdmInventory({ passcodePresent: true, passcodeCompliant: false }).passcode).toEqual({ label: "Doesn't comply with the policy", tone: "critical" });
     expect(describeDdmInventory({ passcodePresent: true, passcodeCompliant: null }).passcode).toEqual({ label: "Set", tone: "info" });
     expect(describeDdmInventory({ fileVault: true }).passcode).toBeNull();
+  });
+});
+
+describe("acciones sobre el equipo (2-oct-2026)", () => {
+  const rel = (d) => `@${d}`;
+
+  it("una orden del historial: nombre, estado, quién y si se puede cancelar", () => {
+    expect(describeDeviceCommand({ requestType: "DeviceLock", status: "pending", issuedBy: "auth0|abc", issuedAt: "T1" }, rel)).toEqual({
+      label: "Lock", chip: { label: "Waiting for the device", tone: "info" }, detail: "By an admin · @T1", error: null, cancellable: true,
+    });
+    // Las del sistema (el perfil, DDM) no se cancelan desde el cajón.
+    expect(describeDeviceCommand({ requestType: "InstallProfile", status: "pending", issuedBy: "system:mdm-profile", issuedAt: "T" }, rel)).toMatchObject({
+      label: "Organization profile", detail: "By Tracenium · @T", cancellable: false,
+    });
+    expect(describeDeviceCommand({ requestType: "EraseDevice", status: "error", error: "Erase failed", completedAt: "T2" }, rel)).toMatchObject({
+      chip: { label: "Failed", tone: "critical" }, error: "Erase failed", cancellable: false,
+    });
+    expect(describeDeviceCommand({ requestType: "RestartDevice", status: "error" }).error).toBe("The device didn't say why.");
+  });
+
+  it("lo que contó el equipo: sólo lo que contó, en palabras", () => {
+    expect(describeDeviceInformation({ DeviceName: "Mac", DeviceCapacity: 994.66, AvailableDeviceCapacity: 512.4, BatteryLevel: 0.87, IsSupervised: true, IsDeviceLocatorServiceEnabled: false })).toEqual([
+      { label: "Name", value: "Mac" },
+      { label: "Storage", value: "512 GB free of 995 GB" },
+      { label: "Battery", value: "87%" },
+      { label: "Supervised", value: "Yes" },
+      { label: "Find My", value: "Off" },
+    ]);
+    expect(describeDeviceInformation({ BatteryLevel: -1 })).toEqual([]); // un Mac sin batería informa -1
+    expect(describeDeviceInformation(null)).toEqual([]);
+  });
+
+  it("❗ un equipo personal dice POR QUÉ no se puede bloquear ni borrar", () => {
+    expect(ACTION_UNAVAILABLE.personal_device).toMatch(/enrolled as personal/);
+    expect(ACTION_UNAVAILABLE.needs_supervision).toMatch(/supervised/);
   });
 });

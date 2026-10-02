@@ -50,6 +50,7 @@ import { Field, FieldGrid, StatusChip } from "./mdmAtoms";
 import MdmOsUpdatePanel from "./MdmOsUpdatePanel";
 import MdmOrgProfilePanel from "./MdmOrgProfilePanel";
 import MdmDeclarativePanel from "./MdmDeclarativePanel";
+import MdmDeviceActionsPanel from "./MdmDeviceActionsPanel";
 
 function rowsFrom(mdmDevices, appDevices) {
   const mdm = mdmDevices.map((d) => ({
@@ -310,6 +311,16 @@ function DeviceDetail({ row, commands, onClose, onNavigate, onOpenTab, canConfig
               </Button>
             ) : null}
           </Box>
+          {d.enrollmentState === "enrolled" ? (
+            <MdmDeviceActionsPanel
+              udid={d.udid}
+              name={row.name}
+              serialNumber={d.serialNumber}
+              platform={row.platform}
+              canConfigure={canConfigure}
+              notify={notify}
+            />
+          ) : null}
           {d.enrollmentState === "enrolled" ? <MdmDeclarativePanel udid={d.udid} platform={row.platform} /> : null}
           {d.enrollmentState === "enrolled" ? (
             <MdmOrgProfilePanel udid={d.udid} canConfigure={canConfigure} notify={notify} platform={row.platform} />

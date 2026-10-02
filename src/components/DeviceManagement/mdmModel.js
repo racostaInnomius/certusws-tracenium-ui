@@ -561,3 +561,77 @@ export function describeWakeResult(result, name) {
       return { text: `Asked ${name} to check in.`, severity: "info" };
   }
 }
+
+// ── Acciones sobre el equipo (backend device-actions, 2-oct-2026) ───────────
+
+/** Por qué no se ofrece una acción, en una frase para quien administra. */
+export const ACTION_UNAVAILABLE = {
+  personal_device:
+    "Lock, restart and erase need an organization-owned enrollment. This device was enrolled as personal, so its profile doesn't allow them.",
+  ownership_unknown: "Tracenium can't tell how this device was enrolled, so lock, restart and erase aren't offered.",
+  needs_supervision: "Restarting an iPhone or iPad needs a supervised device (Apple Business Manager).",
+  not_enrolled: "The device isn't enrolled.",
+  unsupported_device: "Only Macs, iPhones and iPads.",
+};
+
+const COMMAND_LABELS = {
+  DeviceInformation: "Inventory refresh",
+  InstalledApplicationList: "Installed apps list",
+  DeviceLock: "Lock",
+  RestartDevice: "Restart",
+  EraseDevice: "Erase",
+  InstallProfile: "Organization profile",
+  RemoveProfile: "Organization profile removal",
+  DeclarativeManagement: "Declarations sync",
+  InstallApplication: "Tracenium app management",
+};
+
+const COMMAND_STATES = {
+  pending: { label: "Waiting for the device", tone: "info" },
+  sent: { label: "Sent", tone: "info" },
+  not_now: { label: "Device busy — will retry", tone: "caution" },
+  acknowledged: { label: "Done", tone: "positive" },
+  error: { label: "Failed", tone: "critical" },
+  expired: { label: "Cancelled or expired", tone: "muted" },
+};
+
+/** Las que se lanzan desde el cajón: las únicas que se pueden cancelar. */
+const DRAWER_ACTIONS = new Set(["DeviceInformation", "InstalledApplicationList", "DeviceLock", "RestartDevice", "EraseDevice"]);
+
+/** Una orden del historial del equipo, para el cajón. PURO. */
+export function describeDeviceCommand(c, relative = (d) => String(d)) {
+  const by = !c?.issuedBy ? "Tracenium" : String(c.issuedBy).startsWith("system:") ? "Tracenium" : "an admin";
+  const when = c?.completedAt || c?.sentAt || c?.issuedAt;
+  return {
+    label: COMMAND_LABELS[c?.requestType] || c?.requestType || "—",
+    chip: COMMAND_STATES[c?.status] || { label: c?.status || "Unknown", tone: "muted" },
+    detail: `By ${by} · ${relative(when)}`,
+    error: c?.status === "error" ? c?.error || "The device didn't say why." : null,
+    cancellable: c?.status === "pending" && DRAWER_ACTIONS.has(c?.requestType),
+  };
+}
+
+const gb = (v) => (typeof v === "number" && Number.isFinite(v) ? `${v >= 100 ? Math.round(v) : v.toFixed(1)} GB` : null);
+const yesNo = (v) => (v === true ? "Yes" : v === false ? "No" : null);
+
+/** Lo que contó el equipo en su último DeviceInformation, en filas. PURO. */
+export function describeDeviceInformation(values) {
+  if (!values || typeof values !== "object") return [];
+  const v = values;
+  const battery = typeof v.BatteryLevel === "number" && v.BatteryLevel >= 0 ? `${Math.round(v.BatteryLevel * 100)}%` : null;
+  const storage =
+    gb(v.DeviceCapacity) && gb(v.AvailableDeviceCapacity) ? `${gb(v.AvailableDeviceCapacity)} free of ${gb(v.DeviceCapacity)}` : gb(v.DeviceCapacity);
+  return [
+    ["Name", typeof v.DeviceName === "string" ? v.DeviceName : null],
+    ["Model", typeof v.ModelName === "string" ? v.ModelName : null],
+    ["Storage", storage],
+    ["Battery", battery],
+    ["Supervised", yesNo(v.IsSupervised)],
+    ["Find My", v.IsDeviceLocatorServiceEnabled === true ? "On" : v.IsDeviceLocatorServiceEnabled === false ? "Off" : null],
+    ["Activation Lock", v.IsActivationLockEnabled === true ? "On" : v.IsActivationLockEnabled === false ? "Off" : null],
+    ["iCloud Backup", v.IsCloudBackupEnabled === true ? "On" : v.IsCloudBackupEnabled === false ? "Off" : null],
+    ["System Integrity Protection", v.SystemIntegrityProtectionEnabled === true ? "On" : v.SystemIntegrityProtectionEnabled === false ? "Off" : null],
+  ]
+    .filter(([, value]) => value !== null)
+    .map(([label, value]) => ({ label, value }));
+}

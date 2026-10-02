@@ -83,6 +83,23 @@ export function resendMdmOrganizationProfile(udid) {
   return httpPostJson(`${orgProfilePath(udid)}/resend`, {});
 }
 
+// ── Acciones sobre el equipo (2-oct, device-actions) ──────────────────────
+
+/** → { platform, ownership, supervised, actions: [{action, available, reason}], commands: [...], information, apps } */
+export function getMdmDeviceActions(udid, { fresh = false } = {}) {
+  return httpGetJson(`/api/v1/mdm/devices/${encodeURIComponent(udid)}/actions`, opts(fresh));
+}
+
+/** action: refresh_inventory | installed_apps | lock | restart | erase. → { requested, commandUuid, requestType } */
+export function requestMdmDeviceAction(udid, action, body = {}) {
+  return httpPostJson(`/api/v1/mdm/devices/${encodeURIComponent(udid)}/actions/${encodeURIComponent(action)}`, body);
+}
+
+/** Sólo lo que aún no ha salido hacia el equipo. → { cancelled, requestType } */
+export function cancelMdmDeviceCommand(udid, commandUuid) {
+  return httpDeleteJson(`/api/v1/mdm/devices/${encodeURIComponent(udid)}/commands/${encodeURIComponent(commandUuid)}`);
+}
+
 /**
  * «Ask to check in» (2-oct): pide el aviso de Apple push para este equipo.
  * → { requested, canDeliver, blocker: null | "certificate_missing" | "topic_mismatch" | "no_push_token" }
