@@ -72,7 +72,7 @@ import {
   StatusChip,
 } from "../components/Compliance/complianceChips";
 import { getSearchParam, updateSearchParams, searchForPage } from "../utils/browserState";
-import { parseUrlFilters, parseUrlScope, scopeUrlParams, filterDevices } from "./complianceFilters";
+import { parseUrlFilters, parseUrlScope, scopeUrlParams, filterDevices, scopeStorageKey, parseSavedScope, pickInitialScope } from "./complianceFilters";
 
 import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
@@ -419,10 +419,20 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
 
   // Grupo y framework viven en la URL (?group= / ?framework=): ir a un equipo
   // y volver, recargar o compartir el enlace los perdía (walkthrough 25-sep #9).
-  const initialScope = React.useMemo(
-    () => (typeof window === "undefined" ? { assetGroupId: "", framework: null } : parseUrlScope(window.location.search)),
-    []
-  );
+  // Sin ámbito en la URL, el último de esta sesión para este cliente (salir
+  // por el menú y volver lo perdía). Ver pickInitialScope.
+  const initialScope = React.useMemo(() => {
+    if (typeof window === "undefined") return { assetGroupId: "", framework: null };
+    let saved = null;
+    try {
+      saved = parseSavedScope(window.sessionStorage.getItem(scopeStorageKey(tenantId)));
+    } catch {
+      saved = null;
+    }
+    return pickInitialScope(parseUrlScope(window.location.search), saved);
+    // Una vez, al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [selectedFramework, setSelectedFramework] = React.useState(initialScope.framework ?? ""); // "" = overall
 
   // ── El default sale del pack del tenant, no de una constante ───────
@@ -560,7 +570,18 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
 
   React.useEffect(() => {
     updateSearchParams(scopeUrlParams({ assetGroupId, framework: selectedFramework, frameworkChosen: frameworkTouched }));
-  }, [assetGroupId, selectedFramework, frameworkTouched]);
+    // Lo mismo, para volver por el menú. Sólo lo ya validado: antes de
+    // scopeReady se guardaría un grupo que puede no existir.
+    if (!scopeReady) return;
+    try {
+      window.sessionStorage.setItem(
+        scopeStorageKey(tenantId),
+        JSON.stringify({ assetGroupId, framework: selectedFramework, chosen: frameworkTouched })
+      );
+    } catch {
+      /* sin sessionStorage (modo privado estricto): sólo la URL */
+    }
+  }, [assetGroupId, selectedFramework, frameworkTouched, scopeReady, tenantId]);
 
   const [drawerAgentId, setDrawerAgentId] = React.useState(null);
   const [drawerData, setDrawerData] = React.useState(null);

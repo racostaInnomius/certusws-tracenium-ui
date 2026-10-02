@@ -101,6 +101,41 @@ export function parseUrlScope(search) {
   };
 }
 
+// ── El ámbito sobrevive a salir por el menú y volver (2-oct) ──────────
+//
+// La navegación de la app no arrastra la URL de una página a otra: salir de
+// Security Compliance por el menú y volver la abría sin grupo ni framework.
+// Se recuerda el último ámbito POR CLIENTE durante la sesión (sessionStorage:
+// cerrar la pestaña lo olvida) y se usa sólo cuando la URL no trae ninguno —
+// un enlace compartido manda. Lo restaurado pasa por la misma validación que
+// lo de la URL (un grupo borrado vuelve a «All»).
+export function scopeStorageKey(tenantId) {
+  return `scp:scope:${tenantId || "-"}`;
+}
+
+/** Lo guardado, sólo si tiene la forma esperada; si no, null. */
+export function parseSavedScope(raw) {
+  try {
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== "object") return null;
+    const group = String(v.assetGroupId ?? "");
+    const framework = v.framework == null ? null : String(v.framework);
+    return {
+      assetGroupId: /^[1-9]\d{0,9}$/.test(group) ? group : "",
+      framework: framework === null || framework === "" ? (v.chosen ? "" : null) : FRAMEWORK_PARAM.test(framework) ? framework : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** La URL manda; sin ámbito en la URL, lo guardado de la sesión. */
+export function pickInitialScope(urlScope, savedScope) {
+  const urlHasScope = Boolean(urlScope.assetGroupId) || urlScope.framework !== null;
+  if (urlHasScope || !savedScope) return urlScope;
+  return savedScope;
+}
+
 // What to write back: "" removes the param (see updateSearchParams).
 export function scopeUrlParams({ assetGroupId, framework, frameworkChosen }) {
   return {

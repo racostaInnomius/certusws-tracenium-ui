@@ -181,3 +181,26 @@ describe("parseUrlScope / scopeUrlParams — the group and framework survive nav
   });
 });
 
+
+describe("el ámbito sobrevive a salir por el menú y volver (2-oct)", () => {
+  it("⭐ sin ámbito en la URL se usa lo guardado; con ámbito en la URL, manda la URL", async () => {
+    const { pickInitialScope, parseUrlScope } = await import("./complianceFilters");
+    const saved = { assetGroupId: "4", framework: "family:cis" };
+    expect(pickInitialScope(parseUrlScope("?page=ad"), saved)).toEqual(saved);
+    expect(pickInitialScope(parseUrlScope("?page=ad&group=9"), saved)).toEqual({ assetGroupId: "9", framework: null });
+    expect(pickInitialScope(parseUrlScope("?page=ad&framework=all"), saved)).toEqual({ assetGroupId: "", framework: "" });
+    expect(pickInitialScope(parseUrlScope("?page=ad"), null)).toEqual({ assetGroupId: "", framework: null });
+  });
+
+  it("lo guardado se lee con la misma forma que la URL; basura = nada", async () => {
+    const { parseSavedScope, scopeStorageKey } = await import("./complianceFilters");
+    expect(parseSavedScope(JSON.stringify({ assetGroupId: "4", framework: "family:cis", chosen: true }))).toEqual({ assetGroupId: "4", framework: "family:cis" });
+    // «All frameworks» elegido a mano se recuerda como elección (""), no como «sin elegir» (null).
+    expect(parseSavedScope(JSON.stringify({ assetGroupId: "", framework: "", chosen: true }))).toEqual({ assetGroupId: "", framework: "" });
+    expect(parseSavedScope(JSON.stringify({ assetGroupId: "", framework: "", chosen: false }))).toEqual({ assetGroupId: "", framework: null });
+    expect(parseSavedScope(JSON.stringify({ assetGroupId: "1; DROP", framework: "<script>" }))).toEqual({ assetGroupId: "", framework: null });
+    expect(parseSavedScope("not json")).toBeNull();
+    expect(parseSavedScope(null)).toBeNull();
+    expect(scopeStorageKey("111")).not.toBe(scopeStorageKey("1"));
+  });
+});

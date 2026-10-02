@@ -47,6 +47,9 @@ afterEach(() => {
   // The active tab is deep-linked as ?scpTab=, so it outlives cleanup()
   // and the next test starts on whatever tab the last one clicked.
   window.history.replaceState({}, "", "/");
+  // La página recuerda el ámbito por cliente en sessionStorage: sin esto un
+  // test heredaría el grupo que eligió el anterior.
+  window.sessionStorage.clear();
   server.resetHandlers();
   // useCachedFetch keeps `securityCompliance:all` in module memory — without
   // this the failure test would render test 1's cached data.
@@ -169,6 +172,36 @@ describe("SecurityCompliance — ámbito de la URL que ya no vale", () => {
       expect(urls.some((u) => /\/security\/compliance\/summary/.test(u))).toBe(true);
     } finally {
       server.events.removeListener("request:start", onStart);
+    }
+  });
+
+  it("⭐ salir por el menú y volver: sin ámbito en la URL, vuelve el de la sesión (y se valida igual)", async () => {
+    window.sessionStorage.setItem("scp:scope:1", JSON.stringify({ assetGroupId: "4", framework: "", chosen: true }));
+    window.history.replaceState({}, "", "/?page=ad");
+    try {
+      mountPage();
+      expect(await screen.findByText("WS-ALPHA")).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole("combobox", { name: "Filter by asset group" })).toHaveTextContent("PCI scope"));
+      expect(window.location.search).toMatch(/group=4/);
+    } finally {
+      window.sessionStorage.clear();
+    }
+  });
+
+  it("lo guardado de un grupo que ya no existe vuelve a «All» sin pedir con él", async () => {
+    window.sessionStorage.setItem("scp:scope:1", JSON.stringify({ assetGroupId: "77", framework: "", chosen: true }));
+    window.history.replaceState({}, "", "/?page=ad");
+    const urls = [];
+    const onStart = ({ request }) => urls.push(request.url);
+    server.events.on("request:start", onStart);
+    try {
+      mountPage();
+      expect(await screen.findByText("WS-ALPHA")).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Filter by asset group" })).toHaveTextContent("All devices");
+      expect(urls.filter((u) => /assetGroupId=77/.test(u))).toEqual([]);
+    } finally {
+      server.events.removeListener("request:start", onStart);
+      window.sessionStorage.clear();
     }
   });
 
