@@ -63,6 +63,8 @@ beforeEach(() => {
     ],
     posts: [],
     deletes: [],
+    wakes: [],
+    wakeReply: { requested: true, canDeliver: true, blocker: null },
     mdmCalls: 0,
     setup: {
       pushCertificate: { configured: false, state: "missing", pendingRequestAt: null, appleAccount: null },
@@ -118,6 +120,10 @@ function mount(search = "", extra = []) {
     http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/os-update$/, () => HttpResponse.json(state.osUpdate)),
     http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/organization-profile$/, () => HttpResponse.json(state.orgProfile)),
     http.get(/\/api\/v1\/mdm\/devices\/[^/]+\/ddm$/, () => HttpResponse.json(state.ddm)),
+    http.post(/\/api\/v1\/mdm\/devices\/[^/]+\/wake$/, ({ request }) => {
+      state.wakes.push(new URL(request.url).pathname);
+      return HttpResponse.json(state.wakeReply);
+    }),
     http.post(/\/api\/v1\/mdm\/devices\/[^/]+\/organization-profile\/resend$/, () => {
       state.orgResends += 1;
       state.orgProfile = { delivery: null };
@@ -487,7 +493,7 @@ describe("MDM / MAM — forzar una actualización del sistema (DDM)", () => {
   it("❗ el cajón no dice que no se le pueden mandar comandos: llegan en su conexión automática", async () => {
     mount("&mdmTab=devices");
     await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
-    expect(await screen.findByText(/they arrive on its automatic check-in, about every 4 hours; with the apple push certificate set up, within seconds/i)).toBeTruthy();
+    expect(await screen.findByText(/it picks commands up on its automatic check-in, about every 4 hours\. With the Apple push certificate set up, Tracenium wakes it/i)).toBeTruthy();
     expect(screen.queryByText(/once the Apple push certificate is set up/i)).toBeNull();
   });
 
@@ -684,5 +690,58 @@ describe("MDM / MAM — DDM del Mac (1-oct)", () => {
     expect(await within(panel).findByText(/is the macOS policy's minimum, required by/)).toBeTruthy();
     expect(within(panel).getByText(/Change it in Policies › macOS › Software updates/)).toBeTruthy();
     expect(within(panel).queryByRole("button", { name: "Cancel update" })).toBeNull();
+  });
+});
+
+describe("MDM / MAM — Apple push (aviso de MDM, 2-oct-2026)", () => {
+  const PUSHABLE = { ...MAC, topic: "com.apple.mgmt.External.x", push: { requestedAt: null, sentAt: new Date(Date.now() - 5 * 60_000).toISOString(), error: null, failures: 0 } };
+  async function openDrawer() {
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    return screen.findByLabelText("Device detail");
+  }
+
+  it("⭐ con el certificado y el emisor funcionando: «Within seconds», y el cajón dice cuándo lo despertó", async () => {
+    state.status = { ...state.status, pushCertificate: { configured: true, state: "valid", daysLeft: 300 }, commands: { deliverable: true, reason: null } };
+    state.devices = [PUSHABLE];
+    mount();
+    expect(await screen.findByText("Within seconds")).toBeTruthy();
+    expect(screen.getByText(/Tracenium wakes Macs, iPhones and iPads through Apple push/i)).toBeTruthy();
+    cleanup();
+    const drawer = await openDrawer();
+    expect(within(drawer).getByText(/Tracenium wakes it through Apple push: commands arrive within seconds\. Last woken 5m ago\./)).toBeTruthy();
+  });
+
+  it("❗ «Ask to check in» pide el aviso y dice si saldrá; sin certificado, lo avisa", async () => {
+    state.devices = [PUSHABLE];
+    const drawer = await openDrawer();
+    await userEvent.click(within(drawer).getByRole("button", { name: "Ask to check in" }));
+    expect(await screen.findByText(/Asked JPR-MacBookPro to check in\. It should connect within a minute\./)).toBeTruthy();
+    expect(state.wakes).toEqual([`/api/v1/mdm/devices/${MAC.udid}/wake`]);
+
+    state.wakeReply = { requested: true, canDeliver: false, blocker: "certificate_missing" };
+    await userEvent.click(within(drawer).getByRole("button", { name: "Ask to check in" }));
+    expect(await screen.findByText(/There's no Apple push certificate yet, so Tracenium can't wake JPR-MacBookPro/)).toBeTruthy();
+  });
+
+  it("sin permiso de configurar, no hay botón", async () => {
+    capabilities = { role: "Mobile Operator", permissions: ["device_management", "enrollment"] };
+    state.devices = [PUSHABLE];
+    const drawer = await openDrawer();
+    expect(within(drawer).queryByRole("button", { name: "Ask to check in" })).toBeNull();
+  });
+
+  it("❗ Apple dio el token por muerto: el cajón lo dice en rojo", async () => {
+    state.status = { ...state.status, pushCertificate: { configured: true, state: "valid", daysLeft: 300 }, commands: { deliverable: true, reason: null } };
+    state.devices = [{ ...PUSHABLE, push: { ...PUSHABLE.push, error: "Unregistered" } }];
+    const drawer = await openDrawer();
+    expect(within(drawer).getByText(/Apple says this device's push registration is no longer valid/)).toBeTruthy();
+  });
+
+  it("❗ certificado caducado: «Not waking devices» y se renueva desde Overview", async () => {
+    state.status = { ...state.status, pushCertificate: { configured: true, state: "expired", daysLeft: -2 }, commands: { deliverable: false, reason: "push_certificate_expired" } };
+    mount();
+    expect(await screen.findByText("Not waking devices")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Renew in Apple setup" })).toBeTruthy();
   });
 });

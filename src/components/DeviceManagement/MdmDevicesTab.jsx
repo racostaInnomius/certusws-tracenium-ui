@@ -33,6 +33,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 
 import SectionPaper from "../common/SectionPaper";
+import { wakeMdmDevice } from "../../api/mdm";
 import PlatformChip from "../common/PlatformChip";
 import { BRAND, TEXT } from "../../theme/brand";
 import { formatDate, formatRelative } from "../../utils/format";
@@ -42,6 +43,8 @@ import {
   mdmDeviceStatus,
   mdmPlatform,
   ownershipLabel,
+  describeDevicePush,
+  describeWakeResult,
 } from "./mdmModel";
 import { Field, FieldGrid, StatusChip } from "./mdmAtoms";
 import MdmOsUpdatePanel from "./MdmOsUpdatePanel";
@@ -209,8 +212,7 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, 
         {selected ? (
           <DeviceDetail
             row={selected}
-            commandsReason={mdm.status?.commands?.reason ?? null}
-            commandsDeliverable={mdm.status?.commands?.deliverable === true}
+            commands={mdm.status?.commands ?? null}
             onClose={() => setSelected(null)}
             onNavigate={onNavigate}
             onOpenTab={onOpenTab}
@@ -223,26 +225,24 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, 
   );
 }
 
-/**
- * Cómo le llegan los comandos a un equipo MDM. Llegan SIEMPRE —la cola se
- * entrega cuando el equipo se conecta—; Apple push sólo cambia CUÁNDO: en
- * segundos, o en su conexión automática, cada unas 4 h (30-sep: el texto
- * anterior decía que no se le podían mandar, y el DDM de macOS ya salía así).
- */
-function commandsText(device, commandsReason, deliverable) {
-  if (device.needsReEnrollment === true) {
-    return "Commands reach this device on its automatic check-in, about every 4 hours. It enrolled with a different push topic than your organization's Apple push certificate, so Tracenium can't wake it to deliver them within seconds — enroll it again with a new link for that.";
-  }
-  if (!device.pushReady) return "The device hasn't registered for push yet.";
-  if (deliverable) return "Tracenium sends commands to this device through Apple push: they arrive within seconds.";
-  if (commandsReason === "sender_not_available") {
-    return "Tracenium sends commands to this device. They arrive on its automatic check-in, about every 4 hours: delivery within seconds through Apple push isn't switched on yet.";
-  }
-  return "Tracenium sends commands to this device. They arrive on its automatic check-in, about every 4 hours; with the Apple push certificate set up, within seconds.";
-}
-
-function DeviceDetail({ row, commandsReason, commandsDeliverable, onClose, onNavigate, onOpenTab, canConfigure, notify }) {
+function DeviceDetail({ row, commands, onClose, onNavigate, onOpenTab, canConfigure, notify }) {
   const d = row.device;
+  const [waking, setWaking] = React.useState(false);
+  // Cómo le llegan las órdenes: con Apple push en segundos; sin él, un Mac en
+  // su conexión automática (~4 h) y un iPhone/iPad nunca por su cuenta.
+  const push = row.channel === "mdm" ? describeDevicePush(d, row.platform, commands, formatRelative) : null;
+
+  async function askToCheckIn() {
+    setWaking(true);
+    try {
+      const r = describeWakeResult(await wakeMdmDevice(d.udid), row.name);
+      notify?.(r.text, r.severity);
+    } catch (err) {
+      notify?.(err?.body?.message || err?.message || "Could not ask the device to check in.", "error");
+    } finally {
+      setWaking(false);
+    }
+  }
   return (
     <Box sx={{ display: "grid", gap: 2 }} aria-label="Device detail">
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
@@ -284,9 +284,22 @@ function DeviceDetail({ row, commandsReason, commandsDeliverable, onClose, onNav
             <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 700 }}>
               Commands
             </Typography>
-            <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-              {commandsText(d, commandsReason, commandsDeliverable)}
+            <Typography
+              variant="body2"
+              sx={{ color: push.error ? BRAND.alert.errorText : "text.secondary", fontWeight: push.error ? 600 : 400, mt: 0.5 }}
+            >
+              {push.text}
             </Typography>
+            {canConfigure && d.enrollmentState === "enrolled" && d.pushReady && d.needsReEnrollment !== true ? (
+              <Button
+                variant="outlined"
+                onClick={askToCheckIn}
+                disabled={waking}
+                sx={{ mt: 1, mr: 1, textTransform: "none", fontWeight: 700 }}
+              >
+                {waking ? "Asking…" : "Ask to check in"}
+              </Button>
+            ) : null}
             {d.needsReEnrollment === true ? (
               <Button
                 variant="outlined"

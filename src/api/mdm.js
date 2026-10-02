@@ -83,6 +83,14 @@ export function resendMdmOrganizationProfile(udid) {
   return httpPostJson(`${orgProfilePath(udid)}/resend`, {});
 }
 
+/**
+ * «Ask to check in» (2-oct): pide el aviso de Apple push para este equipo.
+ * → { requested, canDeliver, blocker: null | "certificate_missing" | "topic_mismatch" | "no_push_token" }
+ */
+export function wakeMdmDevice(udid) {
+  return httpPostJson(`/api/v1/mdm/devices/${encodeURIComponent(udid)}/wake`, {});
+}
+
 // ── DDM de un equipo (1-oct): sus declaraciones —y si el Mac las tiene
 // aplicadas— y el inventario que informa sin agente. Sólo lectura.
 

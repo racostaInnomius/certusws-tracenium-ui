@@ -17,13 +17,15 @@ import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import SectionPaper from "../common/SectionPaper";
 import SummaryCard from "../common/SummaryCard";
 import { BRAND } from "../../theme/brand";
-import { describeMissing, mdmOverview, pushCertificateStatus } from "./mdmModel";
+import { describeCommandsDelivery, describeMissing, mdmOverview, pushCertificateStatus } from "./mdmModel";
 import { Field, StatusChip } from "./mdmAtoms";
 
 export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
   const counts = mdmOverview({ devices: mdm.devices, enrollments: mdm.enrollments, appDevices });
   const enrollment = mdm.status?.enrollment;
   const commands = mdm.status?.commands;
+  // Cómo llegan las órdenes y por qué no en segundos (backend mdm-push).
+  const delivery = describeCommandsDelivery(commands);
   // Un backend anterior al Apple setup no manda `pushCertificate`: sin él no
   // se pinta la casilla, en vez de decir «Not set up» de algo que no sabe.
   const pushCertificate = mdm.status?.pushCertificate ?? null;
@@ -61,13 +63,7 @@ export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
             ) : null}
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Field label="Commands to devices">
-                {commands ? (
-                  <StatusChip
-                    status={commands.deliverable
-                      ? { label: "Within seconds", tone: "positive" }
-                      : { label: "On check-in, ~4 h", tone: "info" }}
-                  />
-                ) : "—"}
+                {delivery ? <StatusChip status={delivery.chip} /> : "—"}
               </Field>
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -82,27 +78,18 @@ export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
               {describeMissing(enrollment.missing)}.
             </Typography>
           ) : null}
-          {commands && !commands.deliverable && commands.reason === "sender_not_available" ? (
-            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1.5 }}>
-              The Apple push certificate is installed. Commands reach Macs, iPhones and iPads on their
-              automatic check-in, about every 4 hours: delivery within seconds through Apple push
-              isn&apos;t switched on yet.
-            </Typography>
-          ) : null}
-          {commands && !commands.deliverable && commands.reason !== "sender_not_available" ? (
+          {delivery ? (
             <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, mt: 1.5 }}>
               <Typography variant="body2" sx={{ color: "text.secondary", flex: "1 1 320px" }}>
-                Commands reach Macs, iPhones and iPads on their automatic check-in, about every 4
-                hours. With the Apple push certificate set up, Tracenium wakes them and commands
-                arrive within seconds.
+                {delivery.text}
               </Typography>
-              {pushCertificate ? (
+              {delivery.action && pushCertificate ? (
                 <Button
                   variant="outlined"
                   onClick={() => onOpenTab("apple-setup")}
                   sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.tealText }}
                 >
-                  Set up Apple push
+                  {delivery.action === "renew" ? "Renew in Apple setup" : "Set up Apple push"}
                 </Button>
               ) : null}
             </Box>

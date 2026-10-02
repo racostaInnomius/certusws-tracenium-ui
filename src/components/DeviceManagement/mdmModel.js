@@ -416,3 +416,119 @@ export function describeDdmInventory(inv) {
     certificates: (inv.certificates || []).map((c) => ({ subject: c.subject || c.identifier || "—", identity: Boolean(c.isIdentity) })),
   };
 }
+
+// ── El aviso de Apple push (backend mdm-push, 2-oct-2026) ─────────────────
+//
+// Con el certificado de la organización vigente y el servidor capaz de
+// abrirlo, Tracenium despierta a los equipos y las órdenes llegan en
+// segundos. Sin aviso, un Mac viene en su conexión automática (~4 h) y un
+// iPhone o iPad NO viene nunca por su cuenta (medido 1-oct con iOS 27): los
+// textos lo dicen por plataforma en vez de prometer las 4 h a todos.
+
+const WITHOUT_PUSH = "Macs pick commands up on their automatic check-in, about every 4 hours; iPhones and iPads don't check in on their own.";
+
+/** El chip y la frase de «Commands to devices» en Overview. PURO. */
+export function describeCommandsDelivery(commands) {
+  if (!commands) return null;
+  if (commands.deliverable) {
+    return {
+      chip: { label: "Within seconds", tone: "positive" },
+      text: "Tracenium wakes Macs, iPhones and iPads through Apple push: commands arrive within seconds.",
+      action: null,
+    };
+  }
+  switch (commands.reason) {
+    case "push_certificate_expired":
+      return {
+        chip: { label: "Not waking devices", tone: "caution" },
+        text: `The organization's Apple push certificate has expired, so Tracenium can't wake devices. ${WITHOUT_PUSH} Renew it in Apple setup.`,
+        action: "renew",
+      };
+    case "sender_cannot_read_certificate":
+      return {
+        chip: { label: "Not waking devices", tone: "caution" },
+        text: `The Apple push certificate is installed, but the MDM server can't open it, so Tracenium isn't waking devices. ${WITHOUT_PUSH} Contact Tracenium support.`,
+        action: null,
+      };
+    case "sender_not_available":
+      // Un backend anterior al emisor (hasta 2-oct-2026).
+      return {
+        chip: { label: "On check-in, ~4 h", tone: "info" },
+        text: "The Apple push certificate is installed. Commands reach Macs, iPhones and iPads on their automatic check-in, about every 4 hours: delivery within seconds through Apple push isn't switched on yet.",
+        action: null,
+      };
+    default:
+      return {
+        chip: { label: "On check-in, ~4 h", tone: "info" },
+        text: `${WITHOUT_PUSH} With the Apple push certificate set up, Tracenium wakes them and commands arrive within seconds.`,
+        action: "setup",
+      };
+  }
+}
+
+/** Errores de Apple (o nuestros) que dicen que el token de ESE equipo ya no sirve. */
+const DEAD_TOKEN = new Set(["Unregistered", "BadDeviceToken", "ExpiredToken", "DeviceTokenNotForTopic", "invalid_token"]);
+
+/** Por qué no se le puede avisar, cuando el motivo es de la organización. */
+const CANNOT_WAKE = {
+  push_certificate_expired: "The organization's Apple push certificate has expired, so Tracenium can't wake it.",
+  sender_cannot_read_certificate: "The MDM server can't open the organization's Apple push certificate, so Tracenium can't wake it right now.",
+  sender_not_available: "Delivery within seconds through Apple push isn't switched on yet.",
+};
+
+/**
+ * Lo que dice el cajón de un equipo MDM sobre cómo le llegan las órdenes:
+ * `{text, error}`. `relative` formatea fechas; se pasa para probarlo sin reloj.
+ * PURO.
+ */
+export function describeDevicePush(device, platform, commands, relative = (d) => String(d)) {
+  const own = platform === "ios"
+    ? "An iPhone or iPad doesn't check in on its own"
+    : "It picks commands up on its automatic check-in, about every 4 hours";
+  const push = device?.push || {};
+  if (device?.needsReEnrollment === true || push.error === "topic_mismatch") {
+    return {
+      text: `${own}. It enrolled with a different push topic than your organization's Apple push certificate, so Tracenium can't wake it — enroll it again with a new link for that.`,
+      error: true,
+    };
+  }
+  if (!device?.pushReady) return { text: "The device hasn't registered for push yet.", error: false };
+  if (DEAD_TOKEN.has(push.error)) {
+    return {
+      text: `Apple says this device's push registration is no longer valid — it was probably erased or removed from management. ${own}; Tracenium can wake it again once it checks in and registers.`,
+      error: true,
+    };
+  }
+  if (!commands?.deliverable) {
+    const why = CANNOT_WAKE[commands?.reason] ?? "With the Apple push certificate set up, Tracenium wakes it and commands arrive within seconds.";
+    return { text: `${own}. ${why}`, error: false };
+  }
+  if (push.error) {
+    return {
+      // `relative` da la fecha absoluta para una hora futura («after Oct 2, 4:05 PM»).
+      text: `The last wake-up didn't go through (${push.error}). Tracenium tries again${push.retryAt && new Date(push.retryAt).getTime() > Date.now() ? ` after ${relative(push.retryAt)}` : " shortly"}.`,
+      error: false,
+    };
+  }
+  const waiting = push.requestedAt && (!push.sentAt || new Date(push.sentAt) < new Date(push.requestedAt));
+  if (waiting) return { text: "Tracenium is waking it through Apple push: commands arrive within seconds.", error: false };
+  return {
+    text: `Tracenium wakes it through Apple push: commands arrive within seconds.${push.sentAt ? ` Last woken ${relative(push.sentAt)}.` : ""}`,
+    error: false,
+  };
+}
+
+/** El aviso tras «Ask to check in», según lo que dice el servidor. PURO. */
+export function describeWakeResult(result, name) {
+  if (result?.canDeliver) return { text: `Asked ${name} to check in. It should connect within a minute.`, severity: "success" };
+  switch (result?.blocker) {
+    case "certificate_missing":
+      return { text: `There's no Apple push certificate yet, so Tracenium can't wake ${name}. Set it up in Apple setup.`, severity: "warning" };
+    case "topic_mismatch":
+      return { text: `${name} enrolled with a different push topic, so Tracenium can't wake it. Enroll it again with a new link.`, severity: "warning" };
+    case "no_push_token":
+      return { text: `${name} hasn't registered for push yet, so Tracenium can't wake it.`, severity: "warning" };
+    default:
+      return { text: `Asked ${name} to check in.`, severity: "info" };
+  }
+}

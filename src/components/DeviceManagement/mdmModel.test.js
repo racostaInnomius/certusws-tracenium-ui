@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeCommandsDelivery,
+  describeDevicePush,
+  describeWakeResult,
   appDeviceView,
   canRevokeEnrollment,
   describeMissing,
@@ -254,5 +257,50 @@ describe("DDM del Mac", () => {
       battery: { label: "Non-genuine battery", tone: "caution" },
       enrollment: "User enrollment",
     });
+  });
+});
+
+describe("Apple push — cómo llegan las órdenes (2-oct-2026)", () => {
+  const rel = (d) => `@${d}`;
+  const MAC = { pushReady: true, push: {} };
+
+  it("⭐ Overview: en segundos con el emisor; si no, el motivo y qué hacer", () => {
+    expect(describeCommandsDelivery({ deliverable: true, reason: null })).toMatchObject({ chip: { label: "Within seconds", tone: "positive" }, action: null });
+    expect(describeCommandsDelivery({ deliverable: false, reason: "no_push_certificate" })).toMatchObject({ chip: { label: "On check-in, ~4 h" }, action: "setup" });
+    expect(describeCommandsDelivery({ deliverable: false, reason: "push_certificate_expired" })).toMatchObject({ chip: { label: "Not waking devices" }, action: "renew" });
+    expect(describeCommandsDelivery({ deliverable: false, reason: "sender_cannot_read_certificate" }).text).toMatch(/can't open it/);
+    expect(describeCommandsDelivery(null)).toBeNull();
+  });
+
+  it("❗ sin aviso, un iPhone NO viene solo: no se le prometen las 4 h", () => {
+    const off = { deliverable: false, reason: "no_push_certificate" };
+    expect(describeDevicePush(MAC, "macos", off).text).toMatch(/^It picks commands up on its automatic check-in, about every 4 hours\./);
+    expect(describeDevicePush(MAC, "ios", off).text).toMatch(/^An iPhone or iPad doesn't check in on its own\./);
+    expect(describeDevicePush(MAC, "ios", off).text).not.toMatch(/4 hours/);
+    expect(describeDevicePush(MAC, "macos", { deliverable: false, reason: "push_certificate_expired" }).text).toMatch(/has expired, so Tracenium can't wake it/);
+  });
+
+  it("⭐ con aviso: enviado, esperando, o el último no salió y cuándo reintenta", () => {
+    const on = { deliverable: true, reason: null };
+    expect(describeDevicePush({ ...MAC, push: { sentAt: "T1" } }, "macos", on, rel).text).toBe("Tracenium wakes it through Apple push: commands arrive within seconds. Last woken @T1.");
+    expect(describeDevicePush({ ...MAC, push: { requestedAt: "2026-10-02T16:00:00Z", sentAt: "2026-10-02T15:00:00Z" } }, "macos", on).text).toMatch(/is waking it/);
+    const future = new Date(Date.now() + 3600e3).toISOString();
+    expect(describeDevicePush({ ...MAC, push: { error: "TooManyRequests", retryAt: future } }, "macos", on, rel).text).toBe(`The last wake-up didn't go through (TooManyRequests). Tracenium tries again after @${future}.`);
+    expect(describeDevicePush({ ...MAC, push: { error: "Timeout", retryAt: "2020-01-01T00:00:00Z" } }, "macos", on, rel).text).toMatch(/tries again shortly\.$/);
+  });
+
+  it("❗ token muerto o Topic de otro certificado: en rojo, y qué hacer", () => {
+    const on = { deliverable: true, reason: null };
+    expect(describeDevicePush({ ...MAC, push: { error: "Unregistered" } }, "ios", on)).toMatchObject({ error: true, text: expect.stringMatching(/no longer valid/) });
+    expect(describeDevicePush({ ...MAC, push: { error: "topic_mismatch" } }, "macos", on)).toMatchObject({ error: true, text: expect.stringMatching(/enroll it again/) });
+    expect(describeDevicePush({ ...MAC, needsReEnrollment: true }, "macos", on).error).toBe(true);
+    expect(describeDevicePush({ pushReady: false }, "macos", on)).toEqual({ text: "The device hasn't registered for push yet.", error: false });
+  });
+
+  it("el aviso tras «Ask to check in»", () => {
+    expect(describeWakeResult({ canDeliver: true }, "Mac")).toEqual({ text: "Asked Mac to check in. It should connect within a minute.", severity: "success" });
+    for (const blocker of ["certificate_missing", "topic_mismatch", "no_push_token"]) {
+      expect(describeWakeResult({ canDeliver: false, blocker }, "Mac").severity).toBe("warning");
+    }
   });
 });
