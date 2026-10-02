@@ -285,6 +285,19 @@ const FIELDS = {
       default: 3,
     },
   ],
+  // ADR-0038 F0: parseado en handlePatchRebootNotReturned (snake_case).
+  patch_reboot_not_returned: [
+    {
+      key: "grace_minutes",
+      type: "number",
+      unit: "minutes",
+      label: "Minutes to wait for the device to come back",
+      help: "A cumulative update can restart twice; the default leaves room for that before alerting.",
+      min: 5,
+      max: 240,
+      default: 20,
+    },
+  ],
   compliance_fix_not_held: [
     {
       key: "min_severity",
