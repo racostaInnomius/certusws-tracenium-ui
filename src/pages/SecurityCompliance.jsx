@@ -1283,6 +1283,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             sx={{ height: "72vh" }}
             focusCheckId={focusCheckId}
             focusControl={focusControl}
+            canAddToBaseline={canManage}
             onClearFocus={() => {
               setFocusCheckId(null);
               setFocusControl(null);

@@ -733,6 +733,7 @@ export default function DeviceDrawerContent({
                         onShowHistory={(finding) => setHistoryDialog({ finding })}
                         pendingAction={pendingAction}
                         readOnly={!canManage}
+                        onToast={onToast}
                         onRemediate={canManage && onRemediateFinding ? onRemediateFinding : null}
                         onOpenVulnerabilities={onOpenVulnerabilities}
                         deviceVulnerability={device?.vulnerability ?? null}

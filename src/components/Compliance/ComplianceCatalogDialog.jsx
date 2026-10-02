@@ -40,6 +40,7 @@ import { categoryLabel, categoryDescription } from "./categoryMeta";
 import { frameworkShortLabel } from "./frameworkRefs";
 import { FrameworkDetail, FrameworkSummary } from "./FrameworkMappings";
 import { platformLabel } from "../../utils/platform";
+import AddToBaselineButton from "./AddToBaselineButton";
 
 // El chip de plataforma con la misma etiqueta que el filtro de al lado
 // («macOS», «Cross-platform»), no la clave cruda («macos», «cross»).
@@ -62,7 +63,7 @@ function sevMeta(s) {
   return SEV_META[String(s || "").toLowerCase()] || SEV_META.info;
 }
 
-function CheckRow({ check, focused = false }) {
+function CheckRow({ check, focused = false, canAddToBaseline = false }) {
   // A row arrived at from "What to fix first" opens already expanded and
   // tinted: the operator clicked a specific control and should land on
   // its remediation steps, not on a list they now have to re-scan.
@@ -157,6 +158,12 @@ function CheckRow({ check, focused = false }) {
                 {check.collectorVersionMin ? ` · min agent ${check.collectorVersionMin}` : ""}
                 {check.remediationType ? ` · remediation: ${check.remediationType}` : ""}
               </Typography>
+              {/* ADR-0037 — atajo de «Add checks» del baseline. */}
+              {canAddToBaseline ? (
+                <Box sx={{ mt: 0.5 }}>
+                  <AddToBaselineButton checkId={check.checkId} checkPlatform={check.platform} />
+                </Box>
+              ) : null}
             </Box>
           </Collapse>
         </TableCell>
@@ -175,7 +182,9 @@ function CheckRow({ check, focused = false }) {
 // `reloadKey` — el Refresh de la página que aloja este navegador. Sin esto el
 // catálogo se leía UNA vez, al hacerse visible, y el botón de la cabecera no
 // llegaba hasta aquí: pulsarlo dejaba exactamente la misma lista en pantalla.
-export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId = null, focusControl = null, onClearFocus }) {
+// `canAddToBaseline` — con gestión de compliance, la fila abierta ofrece
+// «Add to baseline» (ADR-0037). El catálogo en sí sigue siendo de lectura.
+export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId = null, focusControl = null, onClearFocus, canAddToBaseline = false }) {
   const [loading, setLoading] = React.useState(false);
   const [checks, setChecks] = React.useState([]);
   const [err, setErr] = React.useState(null);
@@ -373,7 +382,7 @@ export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId 
               </TableHead>
               <TableBody>
                 {filtered.map((c) => (
-                  <CheckRow key={c.checkId} check={c} focused={c.checkId === focusCheckId} />
+                  <CheckRow key={c.checkId} check={c} focused={c.checkId === focusCheckId} canAddToBaseline={canAddToBaseline} />
                 ))}
               </TableBody>
             </Table>

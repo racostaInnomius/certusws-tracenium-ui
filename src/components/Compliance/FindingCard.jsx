@@ -31,6 +31,7 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import FindingExplanation from "./FindingExplanation";
+import AddToBaselineButton from "./AddToBaselineButton";
 import { FrameworkDetail, FrameworkSummary } from "./FrameworkMappings";
 import EvidenceView from "./EvidenceView";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
@@ -68,6 +69,9 @@ export default function FindingCard({
   // (compliance.routes.ts requireTenantAdmin) so a USER never sees
   // buttons that would 403.
   readOnly = false,
+  // ADR-0037 — «Add to baseline» (atajo de «Add checks»), con el aviso del
+  // drawer. Sin gestión (readOnly) no sale.
+  onToast = null,
   // Sprint 4 — one-click fix. Rendered only when the backend flags the
   // finding `agentRemediable` (detection↔remediation crosswalk) AND
   // it's failing AND the viewer can manage. The handler receives the
@@ -519,6 +523,11 @@ export default function FindingCard({
                 organización (el mismo que entregará el MDM). */}
             {finding.status === "fail" && inMacPolicy && finding.remediationPlan?.artifact === "mobileconfig" ? (
               <InMacPolicyChip title="Already in the organization's macOS policy. Macs enrolled in Tracenium MDM install the profile on their next check-in, and this finding is marked remediated until the next scan confirms it. Other Macs need the profile installed." />
+            ) : null}
+            {!readOnly && finding.checkId ? (
+              // La plataforma sale del prefijo del check, NO del equipo: uno
+              // multiplataforma (navegador) vale para cualquier baseline.
+              <AddToBaselineButton checkId={finding.checkId} onToast={onToast} />
             ) : null}
             {!readOnly && onAddToPolicy && !inMacPolicy && finding.status === "fail" && finding.remediationPlan?.artifact === "mobileconfig" && finding.remediationPlan?.profileIntents?.length ? (
               <Tooltip
