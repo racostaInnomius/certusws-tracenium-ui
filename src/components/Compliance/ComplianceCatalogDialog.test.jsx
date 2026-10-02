@@ -67,6 +67,11 @@ describe("ComplianceCatalogDialog", () => {
     expect(within(row).getByText("NIST")).toBeInTheDocument();
     expect(within(row).getByText("STIG")).toBeInTheDocument();
     expect(screen.queryByText("SC-13")).not.toBeInTheDocument();
+    // El chip de plataforma con la etiqueta del filtro, no la clave cruda.
+    expect(within(row).getByText("Linux")).toBeInTheDocument();
+    const macRow = screen.getByText("macos.ssh.strong_ciphers_only").closest("tr");
+    expect(within(macRow).getByText("macOS")).toBeInTheDocument();
+    expect(within(macRow).queryByText("macos")).toBeNull();
   });
 
   it("opening a row lists its controls, one line per benchmark (incl. the STIG CAT level)", async () => {

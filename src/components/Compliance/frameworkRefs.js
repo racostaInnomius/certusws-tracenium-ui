@@ -129,6 +129,21 @@ function hipaaUrl(controlId) {
  *   that control; false = the standard's page (the chip says so). null = no
  *   link at all (no stored URL and nothing derivable).
  */
+// Estándares sin enlace público por control: UNA página por estándar, la
+// misma en todos sus chips. 2-oct, validando en prod: con la URL guardada
+// en la base, PCI 8.3.1 iba a la biblioteca y 8.3.6 a un PDF que da 403 sin
+// aceptar la licencia, y CC6.1 / CC6.2 a dos páginas distintas de AICPA.
+const STANDARD_PAGES = [
+  [/^iso_?27001/, "https://www.iso.org/standard/27001"],
+  [/^pci_/, "https://www.pcisecuritystandards.org/document_library/"],
+  [/^soc2/, "https://www.aicpa-cima.com/topic/audit-assurance/audit-and-assurance-greater-than-soc-2"],
+  [/^(disa_)?stig/, "https://public.cyber.mil/stigs/downloads/"],
+];
+function standardPage(framework) {
+  const hit = STANDARD_PAGES.find(([re]) => re.test(framework));
+  return hit ? hit[1] : null;
+}
+
 export function controlReference(framework, controlId, storedUrl = null) {
   const f = String(framework || "");
   const derived = f.startsWith("nist_800_53")
@@ -139,7 +154,7 @@ export function controlReference(framework, controlId, storedUrl = null) {
     ? hipaaUrl(controlId)
     : null;
   if (derived) return { url: derived, precise: true };
-  const product = f.startsWith("cis_") ? cisProductPage(f) : null;
+  const product = f.startsWith("cis_") ? cisProductPage(f) : standardPage(f);
   const url = product || storedUrl || null;
   return url ? { url, precise: false } : null;
 }

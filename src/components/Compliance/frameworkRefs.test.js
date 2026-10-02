@@ -66,16 +66,23 @@ describe("controlReference — the standard's page where it is not", () => {
     });
   });
 
-  it("ISO / PCI / SOC 2 / STIG keep their stored page, marked not precise", () => {
-    expect(controlReference("iso_27001_2022", "A.8.8", "https://www.iso.org/standard/27001")).toEqual({
-      url: "https://www.iso.org/standard/27001",
-      precise: false,
-    });
-    expect(controlReference("stig_edge_v2r5", "EDGE-00-000001", "https://public.cyber.mil/stigs/downloads/").precise).toBe(false);
+  it("⭐ ISO / PCI / SOC 2 / STIG: UNA página por estándar, la misma en todos sus chips, sea cual sea la URL guardada", () => {
+    // 2-oct en prod: PCI 8.3.1 iba a la biblioteca y 8.3.6 a un PDF con 403;
+    // SOC 2 CC6.1 y CC6.2, a dos páginas distintas de AICPA.
+    const pci = ["https://www.pcisecuritystandards.org/document_library/", "https://docs-prv.pcisecuritystandards.org/PCI%20DSS/Standard/PCI-DSS-v4_0_1.pdf", null]
+      .map((stored) => controlReference("pci_dss_v4_0_1", "8.3.6", stored));
+    expect(new Set(pci.map((r) => r.url))).toEqual(new Set(["https://www.pcisecuritystandards.org/document_library/"]));
+    expect(pci.every((r) => r.precise === false)).toBe(true);
+    const soc2 = ["https://www.aicpa-cima.com/resources/landing/system-and-organization-controls-soc-suite-of-services", null]
+      .map((stored) => controlReference("soc2_tsc_2017", "CC6.2", stored).url);
+    expect(new Set(soc2).size).toBe(1);
+    expect(controlReference("iso_27001_2022", "A.8.8", null)).toEqual({ url: "https://www.iso.org/standard/27001", precise: false });
+    expect(controlReference("stig_edge_v2r5", "EDGE-00-000001", null).url).toBe("https://public.cyber.mil/stigs/downloads/");
   });
 
-  it("no stored URL and nothing derivable = no link", () => {
-    expect(controlReference("iso_27001_2022", "A.8.8", null)).toBeNull();
+  it("un framework sin página propia sigue con la URL guardada; sin ella, sin enlace", () => {
+    expect(controlReference("gdpr", "Art.32", "https://gdpr.example/art-32")).toEqual({ url: "https://gdpr.example/art-32", precise: false });
+    expect(controlReference("gdpr", "Art.32", null)).toBeNull();
   });
 });
 

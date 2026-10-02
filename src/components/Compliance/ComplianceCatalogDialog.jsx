@@ -39,6 +39,13 @@ import { getComplianceCatalog } from "../../api/compliance";
 import { categoryLabel, categoryDescription } from "./categoryMeta";
 import { frameworkShortLabel } from "./frameworkRefs";
 import { FrameworkDetail, FrameworkSummary } from "./FrameworkMappings";
+import { platformLabel } from "../../utils/platform";
+
+// El chip de plataforma con la misma etiqueta que el filtro de al lado
+// («macOS», «Cross-platform»), no la clave cruda («macos», «cross»).
+function catalogPlatformLabel(platform) {
+  return String(platform || "").toLowerCase() === "cross" ? "Cross-platform" : platformLabel(platform);
+}
 
 // Canonical severity scale (theme/severity.js) — removes the hardcoded hex.
 const SEV_META = {
@@ -98,7 +105,7 @@ function CheckRow({ check, focused = false }) {
         <TableCell>
           <Chip
             size="small"
-            label={check.platform}
+            label={catalogPlatformLabel(check.platform)}
             sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
           />
         </TableCell>
