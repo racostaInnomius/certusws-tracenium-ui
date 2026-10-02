@@ -332,6 +332,16 @@ export async function deleteVerificationCheck(id) {
   return httpDeleteJson(`${BASE}/verification-checks/${encodeURIComponent(id)}`);
 }
 
+// ADR-0038 F2: checks suggested from what the devices listen on, for a group
+// (null = every device), and "Ask the devices now" for the same scope.
+export async function listVerificationSuggestions(assetGroupId = null) {
+  return httpGetJson(`${BASE}/verification-checks/suggestions${buildQuery({ assetGroupId })}`);
+}
+
+export async function discoverListeners(assetGroupId = null) {
+  return httpPostJson(`${BASE}/verification-checks/discover`, { assetGroupId });
+}
+
 // ── Infrastructure Gateway (ADR-0001) ────────────────────────────────────────
 // The vCenter snapshot broker. Note what is NOT here: no endpoint ever carries
 // a plaintext vCenter credential. The browser seals it against the gateway's

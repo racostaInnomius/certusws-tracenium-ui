@@ -42,8 +42,8 @@ export const CONFIG_SECTIONS = [
   },
   {
     key: "post-patch-checks",
-    label: "Post-patch checks",
-    blurb: "What has to still work after a patch and its restart.",
+    label: "Post-change checks",
+    blurb: "What has to still work after a patch, a deployment, a fix or a restart.",
   },
   {
     key: "third-party-catalog",

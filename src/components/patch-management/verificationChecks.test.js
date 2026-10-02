@@ -1,6 +1,6 @@
 // src/components/patch-management/verificationChecks.test.js
 import { describe, expect, it } from "vitest";
-import { checksPerGroup, describeCheck, emptyForm, formFromCheck, payloadFromForm } from "./verificationChecks";
+import { checksPerGroup, describeCheck, emptyForm, formFromCheck, payloadFromForm, suggestionScopeText, suggestionWhy } from "./verificationChecks";
 
 const form = (over) => ({ ...emptyForm(), name: "ERP", ...over });
 
@@ -47,5 +47,14 @@ describe("checksPerGroup", () => {
     expect(r.everywhere).toBe(2);
     expect(r.byGroup.get(5)).toBe(3);
     expect(r.byGroup.get(6)).toBe(3);
+  });
+});
+
+describe("suggestions copy", () => {
+  it("says how much of the scope the suggestions stand on", () => {
+    expect(suggestionScopeText({ devicesReported: 3, devicesInScope: 5, oldestObservation: "2026-10-01T00:00:00Z", items: [{}] })).toBe("Based on 3 of 5 devices that reported, oldest from 2026-10-01.");
+    expect(suggestionScopeText({ devicesReported: 2, devicesInScope: null, items: [] })).toMatch(/Nothing to suggest/);
+    expect(suggestionScopeText({ devicesReported: 0, items: [] })).toMatch(/No device here has reported/);
+    expect(suggestionWhy({ devices: 1, reported: 1 })).toBe("On 1 of 1 device that reported");
   });
 });

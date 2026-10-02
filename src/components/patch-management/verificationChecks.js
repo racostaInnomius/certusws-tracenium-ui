@@ -139,3 +139,26 @@ export function checksPerGroup(checks = []) {
   }
   return { everywhere, byGroup: out };
 }
+
+// ── ADR-0038 F2 (D4): suggestions ───────────────────────────────────────────
+
+/** "4 of 5 devices", with what opens it when known. */
+export function suggestionWhy(sg) {
+  const owner = [sg?.process, sg?.service].filter(Boolean).join(" · ");
+  const share = `On ${sg?.devices ?? 0} of ${sg?.reported ?? 0} device${sg?.reported === 1 ? "" : "s"} that reported`;
+  return owner ? `${share} (${owner})` : share;
+}
+
+/** Above the list: how much of the scope these suggestions stand on. */
+export function suggestionScopeText(res) {
+  if (!res) return "Suggestions could not be loaded.";
+  const reported = res.devicesReported ?? 0;
+  const scope = res.devicesInScope;
+  if (reported === 0) {
+    return "No device here has reported what it listens on yet. It is recorded right before each change, or now with “Ask the devices now”.";
+  }
+  const of = scope != null ? ` of ${scope}` : "";
+  const when = res.oldestObservation ? `, oldest from ${String(res.oldestObservation).slice(0, 10)}` : "";
+  const none = (res.items ?? []).length === 0 ? " Nothing to suggest: what they have in common is already checked, or is part of the operating system." : "";
+  return `Based on ${reported}${of} device${(scope ?? reported) === 1 ? "" : "s"} that reported${when}.${none}`;
+}

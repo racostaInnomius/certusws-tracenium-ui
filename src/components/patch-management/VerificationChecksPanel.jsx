@@ -42,6 +42,8 @@ import {
   createVerificationCheck,
   updateVerificationCheck,
   deleteVerificationCheck,
+  listVerificationSuggestions,
+  discoverListeners,
 } from "../../api/patchManagement";
 import { listAssetGroups } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
@@ -54,6 +56,8 @@ import {
   emptyForm,
   formFromCheck,
   payloadFromForm,
+  suggestionScopeText,
+  suggestionWhy,
 } from "./verificationChecks";
 
 function errMsg(err, fallback) {
@@ -205,6 +209,118 @@ function TemplateDialog({ open, templates, groups, submitting, onClose, onSubmit
   );
 }
 
+/**
+ * ADR-0038 F2 (D4) — what the devices listen on, as checks to add. Nothing is
+ * created on its own: each suggestion is one click, for the scope picked here.
+ */
+function SuggestionsSection({ groups, canManage, notify, onAdded }) {
+  const [scope, setScope] = React.useState("");
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [busy, setBusy] = React.useState(null); // suggestion key | "discover"
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await listVerificationSuggestions(scope === "" ? null : Number(scope)));
+    } catch (err) {
+      setData(null);
+      notify?.("error", errMsg(err, "Could not load suggestions"));
+    } finally {
+      setLoading(false);
+    }
+  }, [scope, notify]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const ask = async () => {
+    setBusy("discover");
+    try {
+      const r = await discoverListeners(scope === "" ? null : Number(scope));
+      const old = r?.agentTooOld ? ` ${r.agentTooOld} device(s) run an agent too old to answer.` : "";
+      const over = r?.overLimit ? ` ${r.overLimit} more were not asked (limit ${r.asked} at a time).` : "";
+      notify?.(
+        r?.asked ? "success" : "warning",
+        r?.asked
+          ? `Asked ${r.asked} device(s). Answers arrive within a minute or two — refresh to see them.${old}${over}`
+          : `No device here can answer yet.${old}`
+      );
+    } catch (err) {
+      notify?.("error", errMsg(err, "Could not ask the devices"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const add = async (sg) => {
+    setBusy(sg.key);
+    try {
+      await createVerificationCheck({ name: sg.name, kind: sg.kind, params: sg.params, assetGroupId: scope === "" ? null : Number(scope), enabled: true });
+      notify?.("success", `Added “${sg.name}”.`);
+      await Promise.all([onAdded?.(), load()]);
+    } catch (err) {
+      notify?.("error", errMsg(err, "Could not add the check"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const items = data?.items ?? [];
+  return (
+    <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${BRAND.border}` }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" }}>
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 800, color: BRAND.dark }}>Suggested from what the devices listen on</Typography>
+        <Box sx={{ flex: 1 }} />
+        <Box sx={{ minWidth: 220 }}>
+          <GroupField value={scope} groups={groups} onChange={setScope} />
+        </Box>
+        <Button onClick={load} startIcon={<RefreshOutlinedIcon />} sx={{ textTransform: "none", color: BRAND.gray }}>
+          Refresh
+        </Button>
+        {canManage ? (
+          <Button onClick={ask} disabled={busy === "discover"} sx={{ textTransform: "none", fontWeight: 700, color: BRAND.teal }}>
+            {busy === "discover" ? "Asking…" : "Ask the devices now"}
+          </Button>
+        ) : null}
+      </Box>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1 }}>{loading ? "Loading…" : suggestionScopeText(data)}</Typography>
+      {!loading && items.length > 0 ? (
+        <Table size="small" aria-label="Suggested checks">
+          <TableBody>
+            {items.map((sg) => (
+              <TableRow key={sg.key} hover>
+                <TableCell>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{sg.name}</Typography>
+                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{describeCheck(sg.kind, sg.params)}</Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>{suggestionWhy(sg)}</Typography>
+                </TableCell>
+                {canManage ? (
+                  <TableCell align="right">
+                    <Button
+                      size="small"
+                      aria-label={`Add ${sg.name}`}
+                      onClick={() => add(sg)}
+                      disabled={busy != null}
+                      startIcon={<AddOutlinedIcon />}
+                      sx={{ textTransform: "none", fontWeight: 700, color: BRAND.tealText }}
+                    >
+                      Add
+                    </Button>
+                  </TableCell>
+                ) : null}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : null}
+    </Box>
+  );
+}
+
 export default function VerificationChecksPanel({ canManage, notify }) {
   const [items, setItems] = React.useState([]);
   const [groups, setGroups] = React.useState([]);
@@ -297,9 +413,10 @@ export default function VerificationChecksPanel({ canManage, notify }) {
     <Box>
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 2, flexWrap: "wrap" }}>
         <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, flex: "1 1 320px" }}>
-          What has to still work after a patch. Each check is measured right before installing and again after the restart; one
-          that passed before and fails after raises an alert and keeps the snapshot. Running services are always compared — add
-          here what matters on top of that.
+          What has to still work after a change. Each check is measured right before the change and again once the device has
+          settled; one that passed before and fails after raises an alert (and keeps a patch’s snapshot). Patches are always
+          verified, comparing running services; software deployments, configuration fixes and restarts are verified on the
+          devices these checks apply to.
         </Typography>
         <Button onClick={load} startIcon={<RefreshOutlinedIcon />} sx={{ textTransform: "none", color: BRAND.gray }}>
           Refresh
@@ -333,8 +450,8 @@ export default function VerificationChecksPanel({ canManage, notify }) {
         </Box>
       ) : items.length === 0 ? (
         <Box sx={{ p: 4, textAlign: "center", color: BRAND.gray }}>
-          No post-patch checks yet — after a patch, only running services are compared. Add the ports, addresses and processes your
-          servers need.
+          No checks yet — after a patch, only running services are compared, and other changes are not verified. Add the ports,
+          addresses and processes your servers need, or pick from the suggestions below.
         </Box>
       ) : (
         <Table size="small">
@@ -391,6 +508,8 @@ export default function VerificationChecksPanel({ canManage, notify }) {
           </TableBody>
         </Table>
       )}
+
+      <SuggestionsSection groups={groups} canManage={canManage} notify={notify} onAdded={load} />
 
       <CheckDialog
         open={Boolean(dialog) && !dialog.template}

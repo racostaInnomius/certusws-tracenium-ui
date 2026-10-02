@@ -41,8 +41,9 @@ export const SOURCE_LABEL = {
   // ADR-0038: Tracenium pidió un reinicio (parche u «on demand») y el equipo no
   // ha vuelto a arrancar pasado el margen.
   patch_reboot_not_returned: "Did not come back from restart",
-  // ADR-0038 F1: la verificación tras el parche encontró algo que no volvió.
-  patch_verification_failed: "Something did not come back after a patch",
+  // ADR-0038 F1/F2: la verificación tras un cambio (parche, despliegue,
+  // remediación o reinicio) encontró algo que no volvió.
+  patch_verification_failed: "Something did not come back after a change",
   // ADR-0031 F3: un ajuste de seguridad cambió sin acción nuestra. El rótulo
   // dice lo que consta —que el cambio no salió de aquí— y no quién lo hizo.
   security_setting_drift: "Setting changed outside Tracenium",
