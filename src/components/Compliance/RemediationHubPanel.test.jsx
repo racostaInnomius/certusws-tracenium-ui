@@ -1,6 +1,6 @@
 // src/components/Compliance/RemediationHubPanel.test.jsx
 //
-// La pestaña "Fix". Lo que se fija aquí es lo que hace que alguien pulse
+// La pestaña "Remediation" (?scpTab=fix). Lo que se fija aquí es lo que hace que alguien pulse
 // sabiendo qué va a pasar:
 //
 //   · un botón muerto siempre viene con su motivo escrito (sin PMP no hay

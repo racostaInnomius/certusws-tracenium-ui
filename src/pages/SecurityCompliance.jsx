@@ -1141,7 +1141,12 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           // paso siguiente a mirar la postura: de "qué está mal" a "qué hago".
           // NO se gatea con `canManage`: ver qué habría que arreglar es parte
           // del diagnóstico; lo que exige permiso (y PMP) es pulsar.
-          { value: "fix", label: "Fix", icon: <BuildOutlinedIcon /> },
+          //
+          // «Remediation», no «Fix» (1-oct): sin PMP la pestaña GUÍA (qué
+          // arreglar, cómo, objetivos) pero no arregla, y «Fix» prometía lo
+          // que ese tenant no tiene. «Remediation» vale para los dos planes.
+          // El `value` se queda en "fix": vive en enlaces (?scpTab=fix).
+          { value: "fix", label: "Remediation", icon: <BuildOutlinedIcon /> },
           // P1-7 — solicitudes de excepción: se piden desde el hallazgo y se
           // deciden aquí. Sólo quien gestiona compliance las ve.
           canManage ? { value: "exceptions", label: "Exceptions", icon: <GppMaybeOutlinedIcon /> } : null,

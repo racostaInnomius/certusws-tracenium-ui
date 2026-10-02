@@ -864,7 +864,7 @@ describe("SecurityCompliance — familias de frameworks", () => {
   });
 });
 
-// ── La pestaña «Fix» y su aviso ───────────────────────────────────────
+// ── La pestaña «Remediation» (?scpTab=fix) y su aviso ───────────────────────────────────────
 //
 // El 22-sep el operador pulsó «Simulate» dos veces y no vio NADA: ni una
 // remediación en la base (cero `dry_run` desde el 17-sep) ni un mensaje en
@@ -902,7 +902,7 @@ describe("SecurityCompliance — el aviso de la pestaña Fix se lee", () => {
     const putCalls = respond("put", `${BASE}/settings`, { ok: false, error: "COMPLIANCE_TARGET_INVALID" }, { status: 400 });
     await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("tab", { name: /^Fix/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Remediation/ }));
     await screen.findByText("Remediation targets");
     fireEvent.click(await screen.findByRole("button", { name: /edit targets/i }));
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));

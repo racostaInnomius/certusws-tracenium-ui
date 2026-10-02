@@ -42,7 +42,7 @@ export const SOURCE_LABEL = {
   // dice lo que consta —que el cambio no salió de aquí— y no quién lo hizo.
   security_setting_drift: "Setting changed outside Tracenium",
   // El compromiso de remediación: checks por vencer o vencidos contra el
-  // objetivo de su severidad (Security Compliance → Fix → Remediation targets).
+  // objetivo de su severidad (Security Compliance → Remediation → Remediation targets).
   compliance_sla: "Remediation target",
   // Gobierno de SCP: excepciones que caducan o esperan aprobador, y arreglos
   // marcados «remediated» que el escaneo siguiente desmiente.
