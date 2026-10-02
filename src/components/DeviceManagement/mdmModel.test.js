@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ACTION_UNAVAILABLE,
+  LOST_PERSONAL_DEVICE,
+  describeRemoval,
   describeDeviceCommand,
   describeDeviceInformation,
   describeCommandsDelivery,
@@ -370,5 +372,71 @@ describe("acciones sobre el equipo (2-oct-2026)", () => {
   it("❗ un equipo personal dice POR QUÉ no se puede bloquear ni borrar", () => {
     expect(ACTION_UNAVAILABLE.personal_device).toMatch(/enrolled as personal/);
     expect(ACTION_UNAVAILABLE.needs_supervision).toMatch(/supervised/);
+  });
+});
+
+describe("Remove from management (2-oct-2026)", () => {
+  const rel = (d) => `@${d}`;
+
+  it("⭐ una baja pedida por TI no es una alarma; un perfil quitado a mano, sí", () => {
+    const removal = { requestedAt: "T", requestedBy: "auth0|a", reason: "Se va" };
+    expect(mdmDeviceStatus({ enrollmentState: "checked_out", removal })).toEqual({ key: "retired", label: "Removed from management", tone: "muted" });
+    expect(mdmDeviceStatus({ enrollmentState: "checked_out", removal: null })).toEqual({ key: "removed", label: "Profile removed", tone: "critical" });
+    expect(mdmDeviceStatus({ enrollmentState: "enrolled", removal, lastSeenAt: new Date(NOW).toISOString() }, NOW)).toEqual({
+      key: "leaving", label: "Leaving management", tone: "info",
+    });
+    // Lo mismo en la pestaña de altas.
+    expect(enrollmentStatus({ device: { state: "checked_out", removalRequestedAt: "T" } }, NOW)).toMatchObject({ key: "retired", tone: "muted" });
+    expect(enrollmentStatus({ device: { state: "checked_out", removalRequestedAt: null } }, NOW)).toMatchObject({ key: "removed", tone: "critical" });
+  });
+
+  it("❗ el Overview: «Profile removed» cuenta sólo los quitados a mano; uno saliendo sigue gestionado", () => {
+    const seen = new Date(NOW).toISOString();
+    const counts = mdmOverview({
+      now: NOW,
+      devices: [
+        { enrollmentState: "checked_out", removal: { requestedAt: "T" } },
+        { enrollmentState: "checked_out", removal: null },
+        { enrollmentState: "enrolled", removal: { requestedAt: "T" }, lastSeenAt: seen },
+        { enrollmentState: "enrolled", removal: null, lastSeenAt: seen },
+      ],
+    });
+    expect(counts).toMatchObject({ removed: 1, mdmManaged: 2 });
+  });
+
+  it("en qué punto está, en palabras; quién y por qué", () => {
+    const base = { requestedAt: "T1", requestedBy: "auth0|a", reason: " Devuelto ", error: null, canCancel: true, canRetry: false };
+    expect(describeRemoval({ ...base, state: "waiting" }, rel)).toEqual({
+      tone: "info",
+      title: "Removal requested",
+      detail: "It leaves management the next time it connects. If it's off or lost, the request waits up to 30 days.",
+      requested: "Requested by an admin · @T1 · “Devuelto”",
+      canCancel: true,
+      canRetry: false,
+    });
+    expect(describeRemoval({ ...base, state: "refused", error: "Nope", canRetry: true }, rel)).toMatchObject({ tone: "critical", detail: "Nope", canRetry: true });
+    expect(describeRemoval({ ...base, state: "refused" }, rel).detail).toBe("The device didn't say why.");
+    expect(describeRemoval({ ...base, state: "expired", reason: null }, rel)).toMatchObject({ tone: "caution", requested: "Requested by an admin · @T1" });
+    expect(describeRemoval(null)).toBeNull();
+  });
+
+  it("el historial: los dos pasos de la baja se llaman así; el RemoveProfile del sistema sigue siendo el perfil de la organización", () => {
+    expect(describeDeviceCommand({ requestType: "ProfileList", status: "acknowledged", issuedBy: "auth0|a" }, rel).label).toBe("Removal: find the management profile");
+    expect(describeDeviceCommand({ requestType: "RemoveProfile", status: "pending", issuedBy: "auth0|a" }, rel)).toMatchObject({
+      label: "Removal: remove the management profile",
+      cancellable: false, // se deshace con «Keep it managed», no orden a orden
+    });
+    expect(describeDeviceCommand({ requestType: "RemoveProfile", status: "pending", issuedBy: "system:mdm-profile" }, rel).label).toBe("Organization profile removal");
+  });
+
+  it("❗ textos: por qué no hay acciones mientras sale, por qué no hay lista de apps en un Mac con agente, y qué hacer con uno personal perdido", () => {
+    expect(ACTION_UNAVAILABLE.removal_pending).toMatch(/being removed from management/);
+    expect(ACTION_UNAVAILABLE.agent_inventory).toMatch(/Tracenium agent/);
+    expect(LOST_PERSONAL_DEVICE).toMatch(/Find My/);
+    expect(LOST_PERSONAL_DEVICE).toMatch(/remove it from management/);
+  });
+
+  it("un equipo que ya salió no «espera registrarse para push»: dice que salió", () => {
+    expect(describeDevicePush({ enrollmentState: "checked_out", pushReady: false }, "macos", null).text).toMatch(/^It left management/);
   });
 });

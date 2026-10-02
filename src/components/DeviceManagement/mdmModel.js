@@ -22,7 +22,11 @@ const time = (value) => {
  */
 export function enrollmentStatus(enrollment, now = Date.now()) {
   const device = enrollment?.device ?? null;
-  if (device?.state === "checked_out") return { key: "removed", label: "Profile removed", tone: "critical" };
+  if (device?.state === "checked_out") {
+    // Baja pedida desde el portal: no es una alarma, a diferencia de un perfil quitado a mano.
+    if (device.removalRequestedAt) return { key: "retired", label: "Removed from management", tone: "muted" };
+    return { key: "removed", label: "Profile removed", tone: "critical" };
+  }
   if (device?.state === "enrolled") return { key: "enrolled", label: "Enrolled", tone: "positive" };
   if (device?.state === "authenticated") return { key: "enrolling", label: "Enrolling", tone: "info" };
   if (enrollment?.revokedAt) return { key: "revoked", label: "Revoked", tone: "muted" };
@@ -52,9 +56,13 @@ export function canRevokeEnrollment(enrollment, now = Date.now()) {
 /** Estado de un equipo MDM. */
 export function mdmDeviceStatus(device, now = Date.now()) {
   if (device?.enrollmentState === "checked_out") {
+    // «Remove from management» (2-oct): la baja la pidió TI. Sin ella, alguien
+    // quitó el perfil en el equipo, y eso sí es una alarma.
+    if (device?.removal) return { key: "retired", label: "Removed from management", tone: "muted" };
     return { key: "removed", label: "Profile removed", tone: "critical" };
   }
   if (device?.enrollmentState === "authenticated") return { key: "enrolling", label: "Enrolling", tone: "info" };
+  if (device?.removal) return { key: "leaving", label: "Leaving management", tone: "info" };
   // Enrolado con otro Topic que el del certificado de la organización (el
   // provisional, o el de un certificado anterior): no se le puede despertar.
   // Lo decide el servidor (`needsReEnrollment`); `null` = no se sabe todavía.
@@ -101,7 +109,8 @@ export function appDeviceView(row) {
 export function mdmOverview({ devices = [], enrollments = [], appDevices = [], now = Date.now() } = {}) {
   const statuses = devices.map((d) => mdmDeviceStatus(d, now).key);
   return {
-    mdmManaged: statuses.filter((k) => ["enrolled", "stale", "enrolling", "reenroll"].includes(k)).length,
+    // Sale cuando se conecte: hasta entonces sigue gestionado.
+    mdmManaged: statuses.filter((k) => ["enrolled", "stale", "enrolling", "reenroll", "leaving"].includes(k)).length,
     app: appDevices.length,
     pendingEnrollments: enrollments.filter((e) => isEnrollmentActive(e, now)).length,
     removed: statuses.filter((k) => k === "removed").length,
@@ -515,6 +524,10 @@ export function describeDevicePush(device, platform, commands, relative = (d) =>
     ? "An iPhone or iPad doesn't check in on its own"
     : "It picks commands up on its automatic check-in, about every 4 hours";
   const push = device?.push || {};
+  // Ya no está gestionado (baja de TI o perfil quitado): no hay a quién mandar nada.
+  if (device?.enrollmentState === "checked_out") {
+    return { text: "It left management: Tracenium no longer sends it commands. To manage it again it needs a new enrollment link.", error: false };
+  }
   if (device?.needsReEnrollment === true || push.error === "topic_mismatch") {
     return {
       text: `${own}. It enrolled with a different push topic than your organization's Apple push certificate, so Tracenium can't wake it — enroll it again with a new link for that.`,
@@ -572,7 +585,17 @@ export const ACTION_UNAVAILABLE = {
   needs_supervision: "Restarting an iPhone or iPad needs a supervised device (Apple Business Manager).",
   not_enrolled: "The device isn't enrolled.",
   unsupported_device: "Only Macs, iPhones and iPads.",
+  removal_pending: "This device is being removed from management, so no new actions are sent to it.",
+  agent_inventory: "This Mac reports its software through the Tracenium agent: the app list lives on its device page.",
 };
+
+/**
+ * Un equipo personal perdido: el perfil no deja bloquearlo ni borrarlo desde
+ * aquí, y está bien — lo protege su dueño con Buscar, que es suyo y funciona
+ * sin nosotros. Lo nuestro es sacarlo de la gestión.
+ */
+export const LOST_PERSONAL_DEVICE =
+  "Lost or stolen? The owner can lock or erase it with Find My (icloud.com/find): that protects their data and works without Tracenium. From here, remove it from management so the organization's settings leave the device the next time it connects.";
 
 const COMMAND_LABELS = {
   DeviceInformation: "Inventory refresh",
@@ -584,6 +607,7 @@ const COMMAND_LABELS = {
   RemoveProfile: "Organization profile removal",
   DeclarativeManagement: "Declarations sync",
   InstallApplication: "Tracenium app management",
+  ProfileList: "Removal: find the management profile",
 };
 
 const COMMAND_STATES = {
@@ -602,8 +626,10 @@ const DRAWER_ACTIONS = new Set(["DeviceInformation", "InstalledApplicationList",
 export function describeDeviceCommand(c, relative = (d) => String(d)) {
   const by = !c?.issuedBy ? "Tracenium" : String(c.issuedBy).startsWith("system:") ? "Tracenium" : "an admin";
   const when = c?.completedAt || c?.sentAt || c?.issuedAt;
+  // RemoveProfile del sistema = el perfil de la organización; de una persona = «Remove from management».
+  const removal = c?.requestType === "RemoveProfile" && by === "an admin";
   return {
-    label: COMMAND_LABELS[c?.requestType] || c?.requestType || "—",
+    label: removal ? "Removal: remove the management profile" : COMMAND_LABELS[c?.requestType] || c?.requestType || "—",
     chip: COMMAND_STATES[c?.status] || { label: c?.status || "Unknown", tone: "muted" },
     detail: `By ${by} · ${relative(when)}`,
     error: c?.status === "error" ? c?.error || "The device didn't say why." : null,
@@ -611,10 +637,40 @@ export function describeDeviceCommand(c, relative = (d) => String(d)) {
   };
 }
 
+const REMOVAL_STATES = {
+  waiting: {
+    tone: "info",
+    title: "Removal requested",
+    detail: "It leaves management the next time it connects. If it's off or lost, the request waits up to 30 days.",
+  },
+  sent: { tone: "info", title: "Removing", detail: "The device has the request and is removing its management profile." },
+  refused: { tone: "critical", title: "The device refused the removal", detail: null },
+  expired: { tone: "caution", title: "The removal request expired", detail: "The device didn't connect in 30 days." },
+  removed: { tone: "muted", title: "Removed from management", detail: "To manage it again it needs a new enrollment link." },
+};
+
+/** En qué punto está «Remove from management», para el cajón. PURO. */
+export function describeRemoval(removal, relative = (d) => String(d)) {
+  if (!removal) return null;
+  const s = REMOVAL_STATES[removal.state] || REMOVAL_STATES.waiting;
+  const reason = typeof removal.reason === "string" && removal.reason.trim() ? removal.reason.trim() : null;
+  return {
+    tone: s.tone,
+    title: s.title,
+    detail: removal.state === "refused" ? removal.error || "The device didn't say why." : s.detail,
+    requested: `Requested by an admin · ${relative(removal.requestedAt)}${reason ? ` · “${reason}”` : ""}`,
+    canCancel: removal.canCancel === true,
+    canRetry: removal.canRetry === true,
+  };
+}
+
 const gb = (v) => (typeof v === "number" && Number.isFinite(v) ? `${v >= 100 ? Math.round(v) : v.toFixed(1)} GB` : null);
 const yesNo = (v) => (v === true ? "Yes" : v === false ? "No" : null);
 
-/** Lo que contó el equipo en su último DeviceInformation, en filas. PURO. */
+/**
+ * Lo que contó el equipo en su último DeviceInformation, en filas. PURO.
+ * (En un Mac con agente el servidor ya sólo manda lo que el agente no sabe.)
+ */
 export function describeDeviceInformation(values) {
   if (!values || typeof values !== "object") return [];
   const v = values;

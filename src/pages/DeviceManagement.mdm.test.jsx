@@ -66,6 +66,8 @@ beforeEach(() => {
     wakes: [],
     actionPosts: [],
     cancels: [],
+    removalPosts: [],
+    removalDeletes: 0,
     actions: {
       platform: "macos", ownership: "corporate", supervised: true,
       actions: ["refresh_inventory", "installed_apps", "lock", "restart", "erase"].map((action) => ({ action, available: true, reason: null })),
@@ -139,6 +141,23 @@ function mount(search = "", extra = []) {
       state.cancels.push(uuid);
       state.actions = { ...state.actions, commands: state.actions.commands.map((c) => (c.commandUuid === uuid ? { ...c, status: "expired" } : c)) };
       return HttpResponse.json({ cancelled: true, requestType: "DeviceLock" });
+    }),
+    http.post(/\/api\/v1\/mdm\/devices\/[^/]+\/removal$/, async ({ request }) => {
+      const body = await request.json();
+      state.removalPosts.push(body);
+      state.actions = {
+        ...state.actions,
+        actions: state.actions.actions.map((a) => ({ ...a, available: false, reason: "removal_pending" })),
+        removal: { state: "waiting", requestedAt: new Date().toISOString(), requestedBy: "admin-1", reason: body.reason, error: null, canCancel: true, canRetry: false },
+      };
+      state.devices = state.devices.map((d) => ({ ...d, removal: { requestedAt: new Date().toISOString(), requestedBy: "admin-1", reason: body.reason } }));
+      return HttpResponse.json({ requested: true, commandUuid: "cmd-pl" });
+    }),
+    http.delete(/\/api\/v1\/mdm\/devices\/[^/]+\/removal$/, () => {
+      state.removalDeletes += 1;
+      state.actions = { ...state.actions, removal: null };
+      state.devices = state.devices.map((d) => ({ ...d, removal: null }));
+      return HttpResponse.json({ cancelled: true });
     }),
     http.post(/\/api\/v1\/mdm\/devices\/[^/]+\/wake$/, ({ request }) => {
       state.wakes.push(new URL(request.url).pathname);
@@ -864,5 +883,91 @@ describe("MDM / MAM — acciones sobre el equipo (2-oct-2026)", () => {
     const panel = await openMacActions();
     expect(await within(panel).findByText(/Only tenant admins and owners/)).toBeTruthy();
     expect(within(panel).queryByRole("button", { name: "Lock…" })).toBeNull();
+    expect(within(panel).queryByRole("button", { name: "Remove from management…" })).toBeNull();
+  });
+
+  it("❗ un equipo personal perdido: el cajón dice que su dueño lo bloquee con Buscar, y ofrece sacarlo de la gestión", async () => {
+    state.actions = {
+      ...state.actions,
+      ownership: "byod",
+      actions: state.actions.actions.map((a) => (["lock", "restart", "erase"].includes(a.action) ? { ...a, available: false, reason: "personal_device" } : a)),
+    };
+    const panel = await openMacActions();
+    expect(await within(panel).findByText(/Find My \(icloud\.com\/find\)/)).toBeTruthy();
+    expect(within(panel).getByRole("button", { name: "Remove from management…" })).toBeEnabled();
+  });
+
+  it("⭐ un Mac con agente: sin segunda lista de apps — el enlace lleva a su ficha", async () => {
+    state.actions = {
+      ...state.actions,
+      agent: { agentId: "agent-9" },
+      actions: state.actions.actions.map((a) => (a.action === "installed_apps" ? { ...a, available: false, reason: "agent_inventory" } : a)),
+      information: { at: new Date().toISOString(), values: { IsSupervised: true, IsActivationLockEnabled: false } },
+    };
+    const panel = await openMacActions();
+    const link = await within(panel).findByRole("link", { name: "Software (Tracenium agent)" });
+    expect(link.getAttribute("href")).toMatch(/[?&]device=agent-9/);
+    expect(within(panel).queryByRole("button", { name: "List installed apps" })).toBeNull();
+    expect(within(panel).getByText(/Hardware and software come from the Tracenium agent/)).toBeTruthy();
+    expect(within(panel).getByText("Activation Lock")).toBeTruthy();
+  });
+});
+
+describe("MDM / MAM — Remove from management (2-oct-2026)", () => {
+  async function openMacActions() {
+    mount("&mdmTab=devices");
+    await userEvent.click((await screen.findByText("JPR-MacBookPro")).closest("tr"));
+    return screen.findByLabelText("Device actions");
+  }
+
+  it("⭐ explica qué se va y qué se queda, pide el motivo, y se puede deshacer mientras no llegue", async () => {
+    const user = userEvent.setup();
+    const panel = await openMacActions();
+    await user.click(await within(panel).findByRole("button", { name: "Remove from management…" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/the Tracenium agent — uninstall it separately/)).toBeTruthy();
+    expect(within(dialog).getByText(/waits up to 30 days/)).toBeTruthy();
+    const go = within(dialog).getByRole("button", { name: "Remove from management" });
+    expect(go).toBeDisabled();
+    await user.type(within(dialog).getByLabelText(/Why \(goes in the audit log\)/), "Deja la empresa");
+    await user.click(go);
+    await waitFor(() => expect(state.removalPosts).toEqual([{ reason: "Deja la empresa" }]));
+    expect(await screen.findByText(/leaves management the next time it connects/)).toBeTruthy();
+
+    const banner = await within(panel).findByRole("status", { name: "Removal from management" });
+    expect(within(banner).getByText("Removal requested")).toBeTruthy();
+    expect(within(banner).getByText(/“Deja la empresa”/)).toBeTruthy();
+    // La lista (y el cajón abierto) lo dicen sin esperar al refresco automático.
+    const detail = screen.getByLabelText("Device detail");
+    expect(await within(detail).findByText("Leaving management")).toBeTruthy();
+    // Las acciones quedan quietas, sin repetir el motivo de cada una.
+    expect(within(panel).getByRole("button", { name: "Lock…" })).toBeDisabled();
+    expect(within(panel).queryByRole("button", { name: "Remove from management…" })).toBeNull();
+
+    await user.click(within(banner).getByRole("button", { name: "Keep it managed" }));
+    await user.click(await screen.findByRole("button", { name: "Keep it managed" }));
+    await waitFor(() => expect(state.removalDeletes).toBe(1));
+    expect(await within(panel).findByRole("button", { name: "Remove from management…" })).toBeTruthy();
+    await waitFor(() => expect(within(detail).queryByText("Leaving management")).toBeNull());
+  });
+
+  it("❗ si el equipo se negó: el motivo de Apple y «Try again» con el mismo motivo", async () => {
+    const user = userEvent.setup();
+    state.actions = {
+      ...state.actions,
+      removal: {
+        state: "refused", requestedAt: new Date().toISOString(), requestedBy: "admin-1", reason: "Devuelto",
+        error: "The MDM payload can't be removed.", canCancel: true, canRetry: true,
+      },
+    };
+    const panel = await openMacActions();
+    const banner = await within(panel).findByRole("status", { name: "Removal from management" });
+    expect(within(banner).getByText("The device refused the removal")).toBeTruthy();
+    expect(within(banner).getByText("The MDM payload can't be removed.")).toBeTruthy();
+    await user.click(within(banner).getByRole("button", { name: "Try again…" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText(/Why \(goes in the audit log\)/)).toHaveValue("Devuelto");
+    await user.click(within(dialog).getByRole("button", { name: "Remove from management" }));
+    await waitFor(() => expect(state.removalPosts).toEqual([{ reason: "Devuelto" }]));
   });
 });

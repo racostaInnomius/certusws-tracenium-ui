@@ -512,6 +512,7 @@ export default function DeviceManagement({ onNavigate }) {
           onOpenTab={setTab}
           canConfigure={canConfigurePush}
           notify={(message, severity) => showSnack(message, severity)}
+          onChanged={reloadMdm}
         />
       </TabPanel>
 

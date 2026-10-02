@@ -85,7 +85,10 @@ export function resendMdmOrganizationProfile(udid) {
 
 // ── Acciones sobre el equipo (2-oct, device-actions) ──────────────────────
 
-/** → { platform, ownership, supervised, actions: [{action, available, reason}], commands: [...], information, apps } */
+/**
+ * → { platform, ownership, supervised, agent: { agentId } | null, actions: [{action, available, reason}],
+ *     removal: null | { state, requestedAt, reason, error, canCancel, canRetry }, commands: [...], information, apps }
+ */
 export function getMdmDeviceActions(udid, { fresh = false } = {}) {
   return httpGetJson(`/api/v1/mdm/devices/${encodeURIComponent(udid)}/actions`, opts(fresh));
 }
@@ -98,6 +101,20 @@ export function requestMdmDeviceAction(udid, action, body = {}) {
 /** Sólo lo que aún no ha salido hacia el equipo. → { cancelled, requestType } */
 export function cancelMdmDeviceCommand(udid, commandUuid) {
   return httpDeleteJson(`/api/v1/mdm/devices/${encodeURIComponent(udid)}/commands/${encodeURIComponent(commandUuid)}`);
+}
+
+/**
+ * «Remove from management» (2-oct): el equipo deja el MDM la próxima vez que se
+ * conecte. `reason` es obligatorio (va a Audit). → { requested, commandUuid }
+ * El estado de la baja viene en getMdmDeviceActions (`removal`).
+ */
+export function requestMdmDeviceRemoval(udid, reason) {
+  return httpPostJson(`/api/v1/mdm/devices/${encodeURIComponent(udid)}/removal`, { reason });
+}
+
+/** Deshace la baja mientras no haya llegado al equipo. → { cancelled } */
+export function cancelMdmDeviceRemoval(udid) {
+  return httpDeleteJson(`/api/v1/mdm/devices/${encodeURIComponent(udid)}/removal`);
 }
 
 /**

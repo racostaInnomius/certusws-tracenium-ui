@@ -81,12 +81,15 @@ function rowsFrom(mdmDevices, appDevices) {
   return [...mdm, ...app];
 }
 
-export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, canConfigure = false, notify }) {
+export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, canConfigure = false, notify, onChanged }) {
   const [channel, setChannel] = React.useState("all");
   const [query, setQuery] = React.useState("");
   const [selected, setSelected] = React.useState(null);
 
   const all = React.useMemo(() => rowsFrom(mdm.devices, appDevices), [mdm.devices, appDevices]);
+  // El cajón enseña la fila de ESTA carga: tras recargar (p. ej. al pedir la
+  // baja) su estado cambia sin cerrarlo.
+  const current = selected ? all.find((r) => r.key === selected.key) ?? selected : null;
   const rows = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     return all.filter((r) => {
@@ -210,15 +213,16 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, 
         // Como los demás cajones de detalle: a 380 px se veía encimado (1-oct).
         PaperProps={{ sx: { width: { xs: "100%", sm: 600, lg: 720 }, maxWidth: "100%", p: { xs: 2, sm: 3 } } }}
       >
-        {selected ? (
+        {current ? (
           <DeviceDetail
-            row={selected}
+            row={current}
             commands={mdm.status?.commands ?? null}
             onClose={() => setSelected(null)}
             onNavigate={onNavigate}
             onOpenTab={onOpenTab}
             canConfigure={canConfigure}
             notify={notify}
+            onChanged={onChanged}
           />
         ) : null}
       </Drawer>
@@ -226,7 +230,7 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, 
   );
 }
 
-function DeviceDetail({ row, commands, onClose, onNavigate, onOpenTab, canConfigure, notify }) {
+function DeviceDetail({ row, commands, onClose, onNavigate, onOpenTab, canConfigure, notify, onChanged }) {
   const d = row.device;
   const [waking, setWaking] = React.useState(false);
   // Cómo le llegan las órdenes: con Apple push en segundos; sin él, un Mac en
@@ -280,6 +284,13 @@ function DeviceDetail({ row, commands, onClose, onNavigate, onOpenTab, canConfig
             ) : null}
           </FieldGrid>
           <Field label="UDID" mono>{d.udid}</Field>
+          {d.enrollmentState === "checked_out" && d.removal ? (
+            // «Remove from management»: lo pidió TI, no es un perfil quitado a mano.
+            <Typography variant="body2" sx={{ color: "text.secondary" }} aria-label="Removed from management">
+              Removed from management {formatRelative(d.checkedOutAt)} · requested by an admin
+              {d.removal.reason ? `: “${d.removal.reason}”` : ""}.
+            </Typography>
+          ) : null}
           <Divider sx={{ borderColor: BRAND.border }} />
           <Box>
             <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 700 }}>
@@ -319,6 +330,7 @@ function DeviceDetail({ row, commands, onClose, onNavigate, onOpenTab, canConfig
               platform={row.platform}
               canConfigure={canConfigure}
               notify={notify}
+              onDeviceChanged={onChanged}
             />
           ) : null}
           {d.enrollmentState === "enrolled" ? <MdmDeclarativePanel udid={d.udid} platform={row.platform} /> : null}
