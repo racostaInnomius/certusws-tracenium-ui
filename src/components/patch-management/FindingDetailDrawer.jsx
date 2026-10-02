@@ -316,6 +316,15 @@ export default function FindingDetailDrawer({
           `${skipped.length} ${skipped.length === 1 ? "device was" : "devices were"} left out: this fix is already on its way to ${skipped.length === 1 ? "it" : "them"}.`
         );
       }
+      // Equipos con una excepción aprobada (riesgo aceptado, won't fix,
+      // reconocido): el backend no les escribe el ajuste (ADR-0037 F0).
+      const excepted = res?.remediation?.skippedException ?? [];
+      if (excepted.length > 0) {
+        notify?.(
+          "info",
+          `${excepted.length} ${excepted.length === 1 ? "device was" : "devices were"} left out: ${excepted.length === 1 ? "it has" : "they have"} an approved exception for this check. Revoke it first if the decision changed.`
+        );
+      }
       // Equipos que se quedaron fuera por no tener auditd: se dice y se dice
       // cómo mandárselo instalándolo antes.
       const missing = res?.remediation?.missingPrerequisite;

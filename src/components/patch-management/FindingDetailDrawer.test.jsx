@@ -228,6 +228,16 @@ describe("equipos a los que el fix ya les está llegando", () => {
     fireEvent.click(await screen.findByRole("button", { name: /^Apply on 2/ }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith("info", expect.stringMatching(/1 device was left out/)));
   });
+
+  it("⭐ si el backend quitó a alguien por una excepción aprobada, lo dice y dice qué hacer (ADR-0037 F0)", async () => {
+    const notify = vi.fn();
+    remediate.mockResolvedValue({ remediation: { id: 7, skippedException: ["d2"] } });
+    open({ notify });
+    fireEvent.click(await screen.findByRole("button", { name: /^Apply on 2/ }));
+    await waitFor(() =>
+      expect(notify).toHaveBeenCalledWith("info", expect.stringMatching(/1 device was left out: it has an approved exception.*Revoke it first/))
+    );
+  });
 });
 
 // 🔴 25-sep: «No nonstandard root CAs» (sin handler) enseñaba casillas, «9 of 9
