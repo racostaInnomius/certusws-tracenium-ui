@@ -5,7 +5,7 @@
 // so callers can check `res.ok` before touching `res.items` etc.
 // The SCP page unwraps uniformly via a shared helper.
 
-import { httpDeleteJson, httpGetJson, httpPostJson, httpPutJson } from "./http";
+import { httpDeleteJson, httpGetJson, httpPatchJson, httpPostJson, httpPutJson } from "./http";
 import { buildQuery } from "./query";
 
 const BASE = "/api/v1/security/compliance";
@@ -395,6 +395,20 @@ export async function addBaselineEntries(id, checkIds, source = "manual") {
 }
 export async function removeBaselineEntry(id, checkId) {
   return httpDeleteJson(`${BASELINES}/${encodeURIComponent(id)}/entries/${encodeURIComponent(checkId)}`);
+}
+// ADR-0037 F2 — modo y cola de aprobación.
+export async function updateBaseline(id, patch) {
+  return httpPatchJson(`${BASELINES}/${encodeURIComponent(id)}`, patch);
+}
+export async function getBaselinePending(id) {
+  return httpGetJson(`${BASELINES}/${encodeURIComponent(id)}/pending`, fresh);
+}
+/** `ids` null = todo lo pendiente. */
+export async function approveBaselinePending(id, ids = null) {
+  return httpPostJson(`${BASELINES}/${encodeURIComponent(id)}/pending/approve`, ids ? { ids } : {});
+}
+export async function dismissBaselinePending(id, ids, note = null) {
+  return httpPostJson(`${BASELINES}/${encodeURIComponent(id)}/pending/dismiss`, { ids, note });
 }
 export async function getDeviceBaselines(agentId) {
   return httpGetJson(`${BASELINES}/device/${encodeURIComponent(agentId)}`, fresh);

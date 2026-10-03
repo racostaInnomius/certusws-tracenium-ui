@@ -7,9 +7,13 @@
 // sección los crea, los rellena con lo que la flota ya tiene arreglado
 // («Propose from fleet») y enseña quién está fuera de línea.
 //
-// F1 sólo MIDE. Aplicar el baseline a los equipos (con aprobación o solo)
-// llega después; la cabecera lo dice para que nadie espere que un equipo
-// nuevo se alinee solo todavía.
+// Dos modos (F2):
+//   Report   sólo mide: quién está fuera de línea.
+//   Approve  además, cada desvío que Tracenium sabe arreglar (el equipo nuevo
+//            de la renovación tecnológica, un ajuste que volvió atrás) espera
+//            en una COLA a que alguien lo apruebe. Aprobar simula primero y
+//            aplica sólo donde cambiaría algo. «Auto» (sin persona) no existe
+//            todavía; la cabecera no lo promete.
 
 import * as React from "react";
 import {
@@ -37,6 +41,8 @@ import {
   TableHead,
   TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -49,8 +55,13 @@ import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
 import { useConfirm } from "../common/ConfirmDialog";
 import { SeverityChip } from "./complianceChips";
+import { formatRelativeTime } from "./PatchLevel";
 import {
   addBaselineEntries,
+  approveBaselinePending,
+  dismissBaselinePending,
+  getBaselinePending,
+  updateBaseline,
   createBaseline,
   deleteBaseline,
   getBaselineAlignment,
@@ -408,6 +419,237 @@ function AddChecksDialog({ baseline, open, existing, onClose, onAdded, onToast }
   );
 }
 
+// ── Cola de aprobación (F2) ────────────────────────────────────────────
+
+export const REASON_LABEL = {
+  new_device: ["New device", "Joined the baseline's scope after the baseline was created."],
+  drift: ["Drifted", "This setting passed on this device before and is failing again."],
+  existing: ["Already failing", "It was failing when the baseline first looked at this device."],
+};
+
+/** «Sent 2 fixes (5 devices)…» y lo que no salió, para el aviso tras aprobar. PURO. */
+export function approveSummary(res) {
+  const launched = res?.launched ?? [];
+  const failed = res?.failed ?? [];
+  const devices = launched.reduce((n, l) => n + Number(l.devices || 0), 0);
+  const parts = [];
+  if (launched.length) {
+    parts.push(
+      `Sent ${launched.length} fix${launched.length === 1 ? "" : "es"} to ${devices} device${devices === 1 ? "" : "s"}: each is simulated first and applied only where it would change something.`
+    );
+  }
+  if (failed.length) {
+    parts.push(`${failed.length} not sent: ${failed.map((f) => f.message || f.error).join("; ")}`);
+  }
+  return {
+    severity: failed.length ? (launched.length ? "warning" : "error") : "success",
+    message: parts.join(" ") || "Nothing to approve.",
+  };
+}
+
+function DismissDialog({ open, count, onClose, onConfirm }) {
+  const [note, setNote] = React.useState("");
+  React.useEffect(() => {
+    if (open) setNote("");
+  }, [open]);
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{`Dismiss ${count} item${count === 1 ? "" : "s"}?`}</DialogTitle>
+      <DialogContent>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
+          They stay out of line and leave the queue. They come back only if the device is fixed and drifts again. To accept the risk
+          formally, request an exception instead.
+        </Typography>
+        <TextField label="Why (optional)" value={note} onChange={(e) => setNote(e.target.value)} fullWidth size="small" inputProps={{ maxLength: 500 }} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} sx={{ textTransform: "none" }}>Cancel</Button>
+        <Button variant="contained" onClick={() => onConfirm(note.trim() || null)} sx={{ textTransform: "none" }}>
+          Dismiss
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function PendingQueue({ baseline, canManage, onChanged, onToast }) {
+  const confirm = useConfirm();
+  const [data, setData] = React.useState(null);
+  const [selected, setSelected] = React.useState(() => new Set());
+  const [busy, setBusy] = React.useState(false);
+  const [dismissOpen, setDismissOpen] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      const res = await getBaselinePending(baseline.id);
+      setData(Array.isArray(res?.items) ? res.items : []);
+      setSelected(new Set());
+    } catch (e) {
+      setData([]);
+      onToast?.({ severity: "error", message: errorText(e, "Could not load the approval queue.") });
+    }
+  }, [baseline.id, onToast]);
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const pending = (data ?? []).filter((i) => i.status === "pending");
+  const decided = (data ?? []).filter((i) => i.status !== "pending");
+  const pendingDevices = new Set(pending.map((i) => i.deviceId)).size;
+  const chosen = selected.size ? [...selected] : null;
+  const chosenCount = chosen ? chosen.length : pending.length;
+
+  const toggle = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const approve = async () => {
+    const ok = await confirm({
+      title: `Approve ${chosenCount} fix${chosenCount === 1 ? "" : "es"}?`,
+      body:
+        "Tracenium simulates each fix first and applies it only on the devices where the simulation shows a change. It goes out now, signed by you — approving is a person deciding, so maintenance windows are not waited for. Compliance fixes do not restart the device, and each can be reverted from the device's applied fixes.",
+      confirmText: "Approve",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      onToast?.(approveSummary(await approveBaselinePending(baseline.id, chosen)));
+      await load();
+      onChanged?.();
+    } catch (e) {
+      onToast?.({ severity: "error", message: errorText(e, "Could not approve.") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const dismiss = async (note) => {
+    setDismissOpen(false);
+    setBusy(true);
+    try {
+      const res = await dismissBaselinePending(baseline.id, chosen ?? pending.map((i) => i.id), note);
+      onToast?.({ severity: "success", message: `Dismissed ${res?.dismissed ?? 0}.` });
+      await load();
+    } catch (e) {
+      onToast?.({ severity: "error", message: errorText(e, "Could not dismiss.") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (data === null) return <LinearProgress sx={{ mb: 2 }} />;
+
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>
+          {pending.length
+            ? `Waiting for approval: ${pending.length} fix${pending.length === 1 ? "" : "es"} on ${pendingDevices} device${pendingDevices === 1 ? "" : "s"}`
+            : "Nothing waiting for approval"}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        {canManage && pending.length ? (
+          <>
+            <Button size="small" disabled={busy} onClick={() => setDismissOpen(true)} sx={{ textTransform: "none" }}>
+              {selected.size ? `Dismiss ${selected.size}` : "Dismiss all"}
+            </Button>
+            <Button size="small" variant="contained" disabled={busy} onClick={approve} sx={{ textTransform: "none" }}>
+              {selected.size ? `Approve ${selected.size}` : "Approve all"}
+            </Button>
+          </>
+        ) : null}
+      </Stack>
+      {!pending.length && !decided.length ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+          When a device falls out of line on a check Tracenium can fix — a new device joining, a setting drifting back — it shows up here.
+        </Typography>
+      ) : null}
+      {pending.length || decided.length ? (
+        <Table size="small">
+          <TableBody>
+            {[...pending, ...decided].slice(0, 50).map((i) => {
+              const [label, why] = REASON_LABEL[i.reason] ?? [i.reason, ""];
+              return (
+                <TableRow key={i.id}>
+                  {canManage ? (
+                    <TableCell padding="checkbox">
+                      {i.status === "pending" ? (
+                        <Checkbox
+                          size="small"
+                          checked={selected.has(i.id)}
+                          onChange={() => toggle(i.id)}
+                          inputProps={{ "aria-label": `Select ${i.title || i.checkId} on ${i.hostname || i.deviceId}` }}
+                        />
+                      ) : null}
+                    </TableCell>
+                  ) : null}
+                  <TableCell sx={{ width: 200, fontWeight: 600 }}>{i.hostname || i.deviceId}</TableCell>
+                  <TableCell>
+                    <Typography component="span" sx={{ fontSize: TEXT.sm }}>{i.title || i.checkId}</Typography>
+                    {i.note ? (
+                      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{i.note}</Typography>
+                    ) : null}
+                  </TableCell>
+                  <TableCell sx={{ width: 140 }}>
+                    <Tooltip title={why} arrow>
+                      <Chip size="small" variant="outlined" label={label} sx={{ height: 20, fontSize: TEXT.xs }} />
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell sx={{ width: 170, fontSize: TEXT.xs, color: BRAND.gray }}>
+                    {i.status === "approved"
+                      ? `Approved · fix #${i.remediationId}`
+                      : i.status === "dismissed"
+                        ? "Dismissed"
+                        : `Found ${formatRelativeTime(i.detectedAt)}`}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      ) : null}
+      {pending.length + decided.length > 50 ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>{`+${pending.length + decided.length - 50} more`}</Typography>
+      ) : null}
+      <DismissDialog open={dismissOpen} count={chosenCount} onClose={() => setDismissOpen(false)} onConfirm={dismiss} />
+    </Box>
+  );
+}
+
+const MODE_HELP = {
+  report: "Shows who is out of line. Nothing is fixed from here.",
+  approve: "Devices that fall out of line on a check Tracenium can fix wait in a queue until someone approves or dismisses them.",
+};
+
+function ModeSelector({ baseline, canManage, onChanged, onToast }) {
+  const [busy, setBusy] = React.useState(false);
+  const change = async (_e, mode) => {
+    if (!mode || mode === baseline.mode) return;
+    setBusy(true);
+    try {
+      await updateBaseline(baseline.id, { mode });
+      onChanged?.();
+    } catch (e) {
+      onToast?.({ severity: "error", message: errorText(e, "Could not change the mode.") });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+      <ToggleButtonGroup size="small" exclusive value={baseline.mode} onChange={change} disabled={!canManage || busy} aria-label="Baseline mode">
+        <ToggleButton value="report" sx={{ textTransform: "none", py: 0.25 }}>Report</ToggleButton>
+        <ToggleButton value="approve" sx={{ textTransform: "none", py: 0.25 }}>Approve</ToggleButton>
+      </ToggleButtonGroup>
+      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{MODE_HELP[baseline.mode] ?? ""}</Typography>
+    </Stack>
+  );
+}
+
 /** Lo que dice una entrada además de su nombre. */
 function EntryFlags({ entry }) {
   const flags = [];
@@ -492,6 +734,11 @@ function BaselineDetail({ baseline, alignment, canManage, onChanged, onToast }) 
             Delete baseline
           </Button>
         </Stack>
+      ) : null}
+
+      <ModeSelector baseline={baseline} canManage={canManage} onChanged={onChanged} onToast={onToast} />
+      {baseline.mode === "approve" ? (
+        <PendingQueue baseline={baseline} canManage={canManage} onChanged={onChanged} onToast={onToast} />
       ) : null}
 
       {!detail ? <LinearProgress /> : null}
@@ -643,8 +890,8 @@ export default function BaselinesPanel({ reloadKey, onToast, canManage = false }
         ) : null}
       </Stack>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
-        Your standard configuration, written down: the checks a group of devices must pass, and which devices are out of line. For now
-        a baseline shows alignment only; applying it to new or drifted devices comes in a later release.
+        Your standard configuration, written down: the checks a group of devices must pass, and which devices are out of line. In
+        Approve mode, a device that falls out of line — a new PC joining, a setting drifting back — waits for someone to approve the fix.
       </Typography>
 
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -682,7 +929,12 @@ export default function BaselinesPanel({ reloadKey, onToast, canManage = false }
                         <ExpandMoreIcon sx={{ fontSize: ICON.sm, transform: open ? "rotate(180deg)" : "none", transition: "transform 150ms" }} />
                       </IconButton>
                     </TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{b.name}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>
+                      {b.name}
+                      {b.mode === "approve" ? (
+                        <Chip size="small" variant="outlined" label="Approve" sx={{ ml: 1, height: 20, fontSize: TEXT.xs, fontWeight: 600 }} />
+                      ) : null}
+                    </TableCell>
                     <TableCell sx={{ color: BRAND.gray }}>{scopeLabel(b)}</TableCell>
                     <TableCell align="right" sx={{ fontVariantNumeric: "tabular-nums" }}>{b.entryCount}</TableCell>
                     <TableCell>

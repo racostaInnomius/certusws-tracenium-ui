@@ -19,11 +19,15 @@ const api = vi.hoisted(() => ({
   addBaselineEntries: vi.fn(),
   removeBaselineEntry: vi.fn(),
   getComplianceCatalog: vi.fn(),
+  updateBaseline: vi.fn(),
+  getBaselinePending: vi.fn(),
+  approveBaselinePending: vi.fn(),
+  dismissBaselinePending: vi.fn(),
 }));
 vi.mock("../../api/compliance", () => api);
 vi.mock("../../api/assetGroups", () => ({ listAssetGroups: vi.fn(async () => ({ items: [{ id: 4, name: "PCI scope" }] })) }));
 
-import BaselinesPanel, { scopeLabel, pickableChecks } from "./BaselinesPanel";
+import BaselinesPanel, { scopeLabel, pickableChecks, approveSummary } from "./BaselinesPanel";
 
 const WIN = { id: "b1", name: "Windows workstations", scopeKind: "platform", platform: "windows", assetGroupId: null, assetGroupName: null, mode: "report", entryCount: 2 };
 const ALIGN = {
@@ -61,9 +65,10 @@ beforeEach(() => {
 });
 
 describe("BaselinesPanel", () => {
-  it("dice que F1 sólo mide, y lista cada baseline con su alcance y su alineación", async () => {
+  it("dice qué hace cada modo (sin prometer «auto»), y lista cada baseline con su alcance y su alineación", async () => {
     mount();
-    expect(screen.getByText(/shows alignment only; applying it to new or drifted devices comes in a later release/)).toBeInTheDocument();
+    expect(screen.getByText(/In\s+Approve mode, a device that falls out of line/)).toBeInTheDocument();
+    expect(screen.queryByText(/later release/)).not.toBeInTheDocument();
     expect(await screen.findByText("Windows workstations")).toBeInTheDocument();
     expect(screen.getByText("All Windows devices")).toBeInTheDocument();
     expect(await screen.findByText("48 of 55 aligned · 2 not measured yet")).toBeInTheDocument();
@@ -161,5 +166,77 @@ describe("BaselinesPanel", () => {
   it("scopeLabel: grupo o plataforma", () => {
     expect(scopeLabel({ scopeKind: "asset_group", assetGroupName: "PCI scope" })).toBe("Group: PCI scope");
     expect(scopeLabel({ scopeKind: "platform", platform: "macos" })).toBe("All macOS devices");
+  });
+
+  describe("modo y cola de aprobación (F2)", () => {
+    const APPROVE = { ...WIN, mode: "approve" };
+    const ITEMS = [
+      { id: 11, deviceId: "d20", hostname: "PC-NEW-01", checkId: "c.smb", title: "SMB signing required", severity: "high", reason: "new_device", status: "pending", detectedAt: "2026-10-02T08:00:00Z", note: null, remediationId: null },
+      { id: 12, deviceId: "d9", hostname: "MSIG-FIN-BERTHA", checkId: "c.smb", title: "SMB signing required", severity: "high", reason: "drift", status: "pending", detectedAt: "2026-10-01T08:00:00Z", note: null, remediationId: null },
+      { id: 9, deviceId: "d3", hostname: "PC-3", checkId: "c.smb", title: "SMB signing required", severity: "high", reason: "existing", status: "approved", detectedAt: "2026-09-30T08:00:00Z", note: null, remediationId: 901 },
+    ];
+
+    it("⭐ cambiar a Approve manda PATCH { mode } y recarga; un 403 PMP_REQUIRED se dice con el motivo del backend", async () => {
+      const onToast = vi.fn();
+      api.updateBaseline.mockResolvedValueOnce({ baseline: APPROVE });
+      mount({ onToast });
+      fireEvent.click(await screen.findByText("Windows workstations"));
+      expect(screen.getByText("Shows who is out of line. Nothing is fixed from here.")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+      await waitFor(() => expect(api.updateBaseline).toHaveBeenCalledWith("b1", { mode: "approve" }));
+      await waitFor(() => expect(api.listBaselines).toHaveBeenCalledTimes(2));
+
+      api.updateBaseline.mockRejectedValueOnce({ body: { error: "PMP_REQUIRED", message: "Queuing fixes for approval needs Patch Management, which is not enabled for this tenant." } });
+      fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+      await waitFor(() =>
+        expect(onToast).toHaveBeenCalledWith({ severity: "error", message: "Queuing fixes for approval needs Patch Management, which is not enabled for this tenant." })
+      );
+    });
+
+    it("⭐ en Approve: la cola con motivo por fila; «Approve all» confirma y manda todo (ids null)", async () => {
+      const onToast = vi.fn();
+      api.listBaselines.mockResolvedValue({ baselines: [APPROVE] });
+      api.getBaselinePending.mockResolvedValue({ mode: "approve", items: ITEMS });
+      api.approveBaselinePending.mockResolvedValue({ approved: 2, launched: [{ checkId: "c.smb", remediationId: 950, devices: 2 }], failed: [] });
+      mount({ onToast });
+      fireEvent.click(await screen.findByText("Windows workstations"));
+      expect(await screen.findByText("Waiting for approval: 2 fixes on 2 devices")).toBeInTheDocument();
+      expect(screen.getByText("New device")).toBeInTheDocument();
+      expect(screen.getByText("Drifted")).toBeInTheDocument();
+      expect(screen.getByText("Approved · fix #901")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Approve all" }));
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/simulates each fix first/)).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Approve" }));
+      await waitFor(() => expect(api.approveBaselinePending).toHaveBeenCalledWith("b1", null));
+      await waitFor(() => expect(onToast).toHaveBeenCalledWith(expect.objectContaining({ severity: "success" })));
+    });
+
+    it("seleccionar filas aprueba o descarta SÓLO esas; descartar lleva la nota", async () => {
+      api.listBaselines.mockResolvedValue({ baselines: [APPROVE] });
+      api.getBaselinePending.mockResolvedValue({ mode: "approve", items: ITEMS });
+      api.dismissBaselinePending.mockResolvedValue({ dismissed: 1 });
+      mount();
+      fireEvent.click(await screen.findByText("Windows workstations"));
+      fireEvent.click(await screen.findByRole("checkbox", { name: "Select SMB signing required on PC-NEW-01" }));
+      expect(screen.getByRole("button", { name: "Approve 1" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss 1" }));
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.change(within(dialog).getByLabelText("Why (optional)"), { target: { value: "kiosk" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Dismiss" }));
+      await waitFor(() => expect(api.dismissBaselinePending).toHaveBeenCalledWith("b1", [11], "kiosk"));
+    });
+
+    it("approveSummary: lo enviado y lo que no salió, con su motivo", () => {
+      expect(approveSummary({ launched: [{ checkId: "a", remediationId: 1, devices: 3 }], failed: [] })).toEqual({
+        severity: "success",
+        message: "Sent 1 fix to 3 devices: each is simulated first and applied only where it would change something.",
+      });
+      expect(approveSummary({ launched: [], failed: [{ checkId: "a", error: "PATCH_REMEDIATION_EXCEPTED", message: "approved exception" }] })).toEqual({
+        severity: "error",
+        message: "1 not sent: approved exception",
+      });
+    });
   });
 });
