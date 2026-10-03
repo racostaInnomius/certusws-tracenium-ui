@@ -174,6 +174,8 @@ function AgentDetailWorkbench({
   canCaptureEvidence = false,
   canReadEvidence = false,
   onOpenJob,
+  /** Abre un móvil con la app en MDM / MAM › Devices (sus órdenes viven allí). */
+  onOpenInMdm,
 }) {
   // ⚠️ Nunca el id como nombre: va en su propia línea debajo. Ver
   // deviceDetailLoad.js — con el detalle caído, la ficha era UUID de título y
@@ -330,6 +332,7 @@ function AgentDetailWorkbench({
               platformKey={platformKey}
               softwareCount={softwareAllTotal}
               onOpenTab={(next) => onTabChange?.(null, next)}
+              onOpenInMdm={onOpenInMdm}
             />
           ) : null}
 
@@ -1930,6 +1933,11 @@ const osVersionItems = React.useMemo(() => {
             {selectedAgent ? (
               <AgentDetailWorkbench
                 onOpenJob={onNavigate ? openJob : undefined}
+                onOpenInMdm={
+                  onNavigate
+                    ? (deviceId) => onNavigate("device-management", { mdmTab: "devices", mdmDevice: `app:${deviceId}` })
+                    : undefined
+                }
                 selectedHost={selectedAgent}
                 hostRow={selectedHostRow}
                 connected={connectedIds.has(String(selectedAgent.agent_id || selectedAgent.agentId))}

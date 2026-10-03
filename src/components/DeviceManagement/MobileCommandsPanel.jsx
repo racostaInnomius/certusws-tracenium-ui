@@ -53,8 +53,13 @@ function formatWhen(value) {
  * Operator console for MDM-lite native commands on a single mobile
  * device. Issues lock / selectiveWipe / alert / locate and shows recent
  * command history with live status. Read-only when `disabled`.
+ *
+ * Lives in MDM / MAM › Devices (moved from Asset Management, 3-oct-2026).
+ * `allowLocate`: locating a person's phone needs `device_management`; the
+ * app-only actions also go with `enrollment`, the MDM / MAM capability —
+ * same split as the backend route.
  */
-export default function MobileCommandsPanel({ deviceId, platform, disabled = false }) {
+export default function MobileCommandsPanel({ deviceId, platform, disabled = false, allowLocate = true }) {
   const [history, setHistory] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [busyType, setBusyType] = React.useState(null);
@@ -146,23 +151,30 @@ export default function MobileCommandsPanel({ deviceId, platform, disabled = fal
       </Typography>
 
       <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-        {MOBILE_COMMANDS.map((cmd) => (
-          <Tooltip key={cmd.type} title={cmd.description} arrow>
-            <span>
-              <Button
-                size="small"
-                variant="outlined"
-                color={cmd.destructive ? "error" : "primary"}
-                disabled={disabled || busyType !== null}
-                onClick={() => handleClick(cmd)}
-                sx={{ textTransform: "none", fontWeight: 700 }}
-              >
-                {busyType === cmd.type ? <CircularProgress size={14} sx={{ mr: 0.75 }} /> : null}
-                {cmd.label}
-              </Button>
-            </span>
-          </Tooltip>
-        ))}
+        {MOBILE_COMMANDS.map((cmd) => {
+          const locked = cmd.type === "locate" && !allowLocate;
+          return (
+            <Tooltip
+              key={cmd.type}
+              title={locked ? "Locating a phone needs the Device management permission." : cmd.description}
+              arrow
+            >
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color={cmd.destructive ? "error" : "primary"}
+                  disabled={disabled || locked || busyType !== null}
+                  onClick={() => handleClick(cmd)}
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                >
+                  {busyType === cmd.type ? <CircularProgress size={14} sx={{ mr: 0.75 }} /> : null}
+                  {cmd.label}
+                </Button>
+              </span>
+            </Tooltip>
+          );
+        })}
       </Stack>
 
       {error ? (

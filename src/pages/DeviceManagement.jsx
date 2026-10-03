@@ -213,7 +213,12 @@ export default function DeviceManagement({ onNavigate }) {
   // OTRA, o tras un 409). Devuelve las que no se pudieron conservar porque
   // en el servidor habían cambiado — ver keepEditsAfterReload.
   const load = React.useCallback(async ({ keep = [] } = {}) => {
-    if (!canManage || !tenantId) return { replaced: [] };
+    // ⚠️ Con `enrollment` también: antes salía aquí sin `device_management` y
+    // `loadMdm` —que sólo se llama desde aquí— no corría nunca. Un rol con la
+    // capacidad de esta página (App Review, 3-oct-2026) la veía vacía. Leer la
+    // política y los equipos no pide capacidad en el servidor; cambiarla sí,
+    // y Policies queda de sólo lectura sin `device_management`.
+    if ((!canManage && !canEnroll) || !tenantId) return { replaced: [] };
     try {
       setLoading(true);
       const [policyRes, devicesRes] = await Promise.all([
@@ -254,7 +259,7 @@ export default function DeviceManagement({ onNavigate }) {
     } finally {
       setLoading(false);
     }
-  }, [canManage, tenantId, showSnack, loadMdm]);
+  }, [canManage, canEnroll, tenantId, showSnack, loadMdm]);
 
   React.useEffect(() => {
     load();
@@ -438,11 +443,15 @@ export default function DeviceManagement({ onNavigate }) {
     );
   }
 
-  if (!canManage) {
+  // `enrollment` también abre la página: es la capacidad de toda su API MDM
+  // (3-oct-2026, App Review). Sin `device_management` las políticas se ven
+  // pero no se cambian, y no se localiza un teléfono.
+  if (!canManage && !canEnroll) {
     return (
       <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
         <Alert severity="warning" sx={{ borderRadius: 3 }}>
-          You don't have permission to view device management. Ask a tenant admin to grant the Device Management capability.
+          You don't have permission to view device management. Ask a tenant admin to grant the Device Management or
+          Device Enrollment capability.
         </Alert>
       </Box>
     );
@@ -508,9 +517,10 @@ export default function DeviceManagement({ onNavigate }) {
         <MdmDevicesTab
           mdm={mdm}
           appDevices={mobileDevices}
-          onNavigate={onNavigate}
           onOpenTab={setTab}
           canConfigure={canConfigurePush}
+          canCommandApp={canManage || canEnroll}
+          canLocateApp={canManage}
           notify={(message, severity) => showSnack(message, severity)}
           onChanged={reloadMdm}
         />
@@ -550,6 +560,7 @@ export default function DeviceManagement({ onNavigate }) {
           pushing={pushing}
           onDownloadProfile={handleDownloadProfile}
           envelope={env}
+          canEdit={canManage}
         />
       </TabPanel>
 

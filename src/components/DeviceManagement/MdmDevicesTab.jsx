@@ -5,9 +5,15 @@
 //   - App (MAM): la app de Tracenium en iPhone o Android, que reporta como un
 //     cliente más (Asset Management).
 //
-// El cajón enseña lo que el servidor sabe del equipo. Las acciones MDM
-// (bloquear, borrar) no existen todavía y no se pintan; las de la app viven
-// en Asset Management y se enlazan.
+// El cajón enseña lo que el servidor sabe del equipo y sus acciones: las MDM
+// (MdmDeviceActionsPanel) y, en un equipo con la app, las de la app —bloquearla,
+// borrado selectivo, mensaje— (MobileCommandsPanel). Éstas vivían en Asset
+// Management y se enlazaban desde aquí con un botón que no abría el equipo; se
+// mudaron el 3-oct-2026 para que MDM / MAM sea un sitio completo (App Review
+// entra sólo aquí, con la capacidad `enrollment`).
+//
+// `?mdmDevice=<clave de fila>` abre ese equipo al llegar (Asset Management
+// manda aquí los móviles con la app).
 
 import * as React from "react";
 import {
@@ -51,6 +57,8 @@ import MdmOsUpdatePanel from "./MdmOsUpdatePanel";
 import MdmOrgProfilePanel from "./MdmOrgProfilePanel";
 import MdmDeclarativePanel from "./MdmDeclarativePanel";
 import MdmDeviceActionsPanel from "./MdmDeviceActionsPanel";
+import MobileCommandsPanel from "./MobileCommandsPanel";
+import { getSearchParam, updateSearchParams } from "../../utils/browserState";
 
 function rowsFrom(mdmDevices, appDevices) {
   const mdm = mdmDevices.map((d) => ({
@@ -81,12 +89,36 @@ function rowsFrom(mdmDevices, appDevices) {
   return [...mdm, ...app];
 }
 
-export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, canConfigure = false, notify, onChanged }) {
+export default function MdmDevicesTab({
+  mdm,
+  appDevices,
+  onOpenTab,
+  canConfigure = false,
+  /** Órdenes a la app (bloquear, borrado selectivo, mensaje): `enrollment` o `device_management`. */
+  canCommandApp = false,
+  /** Localizar el teléfono: sólo `device_management`. */
+  canLocateApp = false,
+  notify,
+  onChanged,
+}) {
   const [channel, setChannel] = React.useState("all");
   const [query, setQuery] = React.useState("");
   const [selected, setSelected] = React.useState(null);
 
   const all = React.useMemo(() => rowsFrom(mdm.devices, appDevices), [mdm.devices, appDevices]);
+
+  // Abrir el equipo que pide la URL en cuanto su fila exista (las dos fuentes
+  // llegan por separado), y olvidar el parámetro: si no, cerrar el cajón y
+  // recargar lo volvería a abrir.
+  const [requestedKey, setRequestedKey] = React.useState(() => getSearchParam("mdmDevice", "") || null);
+  React.useEffect(() => {
+    if (!requestedKey) return;
+    const row = all.find((r) => r.key === requestedKey);
+    if (!row) return;
+    setSelected(row);
+    setRequestedKey(null);
+    updateSearchParams({ mdmDevice: null });
+  }, [requestedKey, all]);
   // El cajón enseña la fila de ESTA carga: tras recargar (p. ej. al pedir la
   // baja) su estado cambia sin cerrarlo.
   const current = selected ? all.find((r) => r.key === selected.key) ?? selected : null;
@@ -218,9 +250,10 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, 
             row={current}
             commands={mdm.status?.commands ?? null}
             onClose={() => setSelected(null)}
-            onNavigate={onNavigate}
             onOpenTab={onOpenTab}
             canConfigure={canConfigure}
+            canCommandApp={canCommandApp}
+            canLocateApp={canLocateApp}
             notify={notify}
             onChanged={onChanged}
           />
@@ -230,7 +263,7 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab, 
   );
 }
 
-function DeviceDetail({ row, commands, onClose, onNavigate, onOpenTab, canConfigure, notify, onChanged }) {
+function DeviceDetail({ row, commands, onClose, onOpenTab, canConfigure, canCommandApp, canLocateApp, notify, onChanged }) {
   const d = row.device;
   const [waking, setWaking] = React.useState(false);
   // Cómo le llegan las órdenes: con Apple push en segundos; sin él, un Mac en
@@ -349,19 +382,13 @@ function DeviceDetail({ row, commands, onClose, onNavigate, onOpenTab, canConfig
             <Field label="Platform"><PlatformChip platform={d.platform} /></Field>
             <Field label="Last check-in">{formatRelative(d.lastSeenAt)}</Field>
           </FieldGrid>
-          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            App actions — lock the app, selective wipe, send a message — are on the device in Asset
-            Management.
-          </Typography>
-          <Box>
-            <Button
-              variant="outlined"
-              onClick={() => onNavigate?.("assets")}
-              sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.tealText }}
-            >
-              Open in Asset Management
-            </Button>
-          </Box>
+          <Divider sx={{ borderColor: BRAND.border }} />
+          <MobileCommandsPanel
+            deviceId={d.id || null}
+            platform={d.platform}
+            disabled={!canCommandApp}
+            allowLocate={canLocateApp}
+          />
         </>
       )}
     </Box>

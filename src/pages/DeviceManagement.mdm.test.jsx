@@ -971,3 +971,98 @@ describe("MDM / MAM — Remove from management (2-oct-2026)", () => {
     await waitFor(() => expect(state.removalPosts).toEqual([{ reason: "Devuelto" }]));
   });
 });
+
+// 3-oct-2026: App Review entra con un rol de sólo `enrollment`. La página
+// salía en blanco —`load()` exigía `device_management` y era la única que
+// llamaba a la API de MDM— y las órdenes al app vivían en Asset Management,
+// enlazadas con un botón que no abría el equipo.
+describe("MDM / MAM — rol con sólo Enrollment (App Review, 3-oct-2026)", () => {
+  const appReview = () => {
+    capabilities = { role: "App Review", permissions: ["enrollment"] };
+  };
+  const mobileCommands = (calls = []) => [
+    http.get(/\/api\/v1\/mobile-commands\/devices\/[^/]+$/, () => HttpResponse.json({ ok: true, commands: [] })),
+    http.post(/\/api\/v1\/mobile-commands\/devices\/[^/]+$/, async ({ request }) => {
+      calls.push({ path: new URL(request.url).pathname, body: await request.json() });
+      return HttpResponse.json({ ok: true, command: { command_id: "c1" } }, { status: 201 });
+    }),
+  ];
+  const openApp = async () => {
+    await userEvent.click((await screen.findByText("iPhone")).closest("tr"));
+    return screen.findByLabelText("Device detail");
+  };
+
+  it("❗ ve los equipos MDM y los del app: la página no sale vacía", async () => {
+    appReview();
+    mount("&mdmTab=devices", [knownDevices([IPHONE_APP])]);
+    expect(await screen.findByText("JPR-MacBookPro")).toBeTruthy();
+    expect(await screen.findByText("iPhone")).toBeTruthy();
+    expect(state.mdmCalls).toBeGreaterThan(0);
+  });
+
+  it("⭐ el cajón de un equipo con el app trae sus órdenes: «Lock app» va a ESE equipo", async () => {
+    appReview();
+    const calls = [];
+    mount("&mdmTab=devices", [knownDevices([IPHONE_APP]), ...mobileCommands(calls)]);
+    const detail = await openApp();
+    expect(within(detail).queryByText(/Open in Asset Management/)).toBeNull();
+    await userEvent.click(within(detail).getByRole("button", { name: "Lock app" }));
+    await waitFor(() =>
+      expect(calls).toEqual([{ path: `/api/v1/mobile-commands/devices/${IPHONE_APP.deviceId}`, body: { type: "lock" } }])
+    );
+  });
+
+  it("❗ localizar no: pide Device management (el resto sí)", async () => {
+    appReview();
+    mount("&mdmTab=devices", [knownDevices([IPHONE_APP]), ...mobileCommands()]);
+    const detail = await openApp();
+    await waitFor(() => expect(within(detail).getByRole("button", { name: "Send message" })).toBeEnabled());
+    expect(within(detail).getByRole("button", { name: "Locate" })).toBeDisabled();
+  });
+
+  it("con Device management, localizar sí", async () => {
+    mount("&mdmTab=devices", [knownDevices([IPHONE_APP]), ...mobileCommands()]);
+    const detail = await openApp();
+    await waitFor(() => expect(within(detail).getByRole("button", { name: "Locate" })).toBeEnabled());
+  });
+
+  it("❗ Policies se ve pero no se cambia: editores, guardar y «Push to all devices» deshabilitados", async () => {
+    appReview();
+    mount("&mdmTab=policies&mdmPolicy=app");
+    expect(await screen.findByText(/View only\. Changing these policies needs the Device management permission/)).toBeTruthy();
+    // Mientras carga, los editores están deshabilitados igual: hay que esperar
+    // a la política, o el test pasaría sin la guarda.
+    expect(await screen.findByText(/Tenant policy version 1/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Save app policy/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Push to all devices/ })).toBeDisabled();
+    // MUI marca el botón de un ToggleButtonGroup deshabilitado con la clase (pointer-events: none), sin el atributo.
+    for (const b of screen.getAllByRole("button", { name: "Require" })) expect(b).toHaveClass("Mui-disabled");
+  });
+
+  it("con Device management, la política del app se edita", async () => {
+    mount("&mdmTab=policies&mdmPolicy=app");
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Require" })[0]).not.toHaveClass("Mui-disabled"));
+    expect(screen.queryByText(/View only\./)).toBeNull();
+  });
+
+  it("⭐ ?mdmDevice=app:<id> abre ese equipo y se olvida el parámetro (lo usa Asset Management)", async () => {
+    mount(`&mdmTab=devices&mdmDevice=app:${IPHONE_APP.deviceId}`, [knownDevices([IPHONE_APP]), ...mobileCommands()]);
+    const detail = await screen.findByLabelText("Device detail");
+    expect(within(detail).getByRole("button", { name: "Lock app" })).toBeTruthy();
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("mdmDevice")).toBeNull());
+  });
+
+  it("❗ sin Enrollment ni Device management sigue sin cargar nada", async () => {
+    capabilities = { role: "USER", permissions: ["assets_view", "reports"] };
+    let known = 0;
+    mount("&mdmTab=devices", [
+      http.get(/\/api\/v1\/orchestrator\/known-devices/, () => {
+        known += 1;
+        return HttpResponse.json({ ok: true, items: [IPHONE_APP], total: 1 });
+      }),
+    ]);
+    expect(await screen.findByText(/don't have permission to view device management/i)).toBeTruthy();
+    expect(state.mdmCalls).toBe(0);
+    expect(known).toBe(0);
+  });
+});

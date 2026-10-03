@@ -93,7 +93,6 @@ import {
   meterValue,
   versionTone,
 } from "./deviceVisuals";
-import MobileCommandsPanel from "../AssetManagement/MobileCommandsPanel";
 
 // Own chunk: Leaflet plus its CSS is dead weight on the overwhelming majority
 // of drawer opens, where nobody touches the map.
@@ -153,7 +152,9 @@ export function AgentTab({
   platformKey,
   softwareCount = null,
   /** Abre otra pestaña de la ficha; la tarjeta de software lleva a la suya. */
-  onOpenTab
+  onOpenTab,
+  /** Abre este móvil en MDM / MAM › Devices, donde están las órdenes a la app. */
+  onOpenInMdm
 }) {
   const lifecycle = getOsLifecycle(profile);
   const osHint = getOsLifecycleHint(profile);
@@ -285,9 +286,26 @@ export function AgentTab({
               </Box>
             </FieldGrid>
           </SectionCard>
-          <Box>
-            <MobileCommandsPanel deviceId={commandDeviceId} platform={platformKey} />
-          </Box>
+          {/* Las órdenes a la app (bloquearla, borrado selectivo, mensaje) se
+              mudaron a MDM / MAM › Devices el 3-oct-2026: allí está todo lo de
+              la gestión del móvil, y allí entra quien sólo tiene `enrollment`. */}
+          <SectionCard title="App actions">
+            <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
+              Lock the app, selective wipe and messages to this {platformKey === "android" ? "Android device" : "iPhone"} are
+              in MDM / MAM › Devices.
+            </Typography>
+            {onOpenInMdm && commandDeviceId ? (
+              <Box sx={{ mt: 1.5 }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => onOpenInMdm(commandDeviceId)}
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                >
+                  Open in MDM / MAM
+                </Button>
+              </Box>
+            ) : null}
+          </SectionCard>
         </>
       ) : null}
     </Stack>

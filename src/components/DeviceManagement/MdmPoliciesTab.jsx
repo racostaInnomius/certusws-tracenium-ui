@@ -162,6 +162,8 @@ export default function MdmPoliciesTab({
   pushing = false,
   onDownloadProfile,
   envelope = {},
+  /** Cambiar políticas pide `device_management`; con `enrollment` sólo se ven. */
+  canEdit = true,
 }) {
   const [kind, setKind] = React.useState(() => {
     const requested = getSearchParam("mdmPolicy", "");
@@ -197,7 +199,7 @@ export default function MdmPoliciesTab({
   const unsaved = unsavedOf(kind);
   const issues = s.issues;
   const saving = savingKind === kind;
-  const saveDisabled = Boolean(loadError) || loading || savingKind !== null || !dirty[kind] || issues.length > 0;
+  const saveDisabled = !canEdit || Boolean(loadError) || loading || savingKind !== null || !dirty[kind] || issues.length > 0;
 
   let status;
   if (issues.length) {
@@ -297,7 +299,7 @@ export default function MdmPoliciesTab({
                       variant="outlined"
                       startIcon={<SendOutlinedIcon />}
                       onClick={onPush}
-                      disabled={pushing || loading}
+                      disabled={!canEdit || pushing || loading}
                       sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.tealText }}
                     >
                       {pushing ? "Pushing…" : "Push to all devices…"}
@@ -308,10 +310,15 @@ export default function MdmPoliciesTab({
             </Box>
           </Box>
           <EditorIntro kind={kind} pushDeliverable={Boolean(mdm?.status?.commands?.deliverable)} />
+          {!canEdit ? (
+            <Alert severity="info" sx={{ borderRadius: 2 }}>
+              View only. Changing these policies needs the Device management permission.
+            </Alert>
+          ) : null}
         </Box>
 
         {kind === "app" ? (
-          <ManagedAppSection value={edits.app} loaded={baseline?.app} onChange={(v) => onEdit("app", v)} readOnly={loading} />
+          <ManagedAppSection value={edits.app} loaded={baseline?.app} onChange={(v) => onEdit("app", v)} readOnly={loading || !canEdit} />
         ) : catalogLoading ? (
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
             Loading settings…
@@ -324,7 +331,7 @@ export default function MdmPoliciesTab({
             block={edits[kind] || {}}
             loadedBlock={baseline?.[kind] || {}}
             onChangeBlock={(next) => onEdit(kind, next)}
-            readOnly={loading}
+            readOnly={loading || !canEdit}
             unsupervisedCount={unsupervised[kind] ?? null}
           />
         )}

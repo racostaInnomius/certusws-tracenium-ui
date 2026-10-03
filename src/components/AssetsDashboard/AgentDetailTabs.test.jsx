@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
-// MobileCommandsPanel owns its own fetches; stub it so the AgentTab tests stay
-// focused on the tab's own rendering.
-vi.mock("../AssetManagement/MobileCommandsPanel", () => ({
-  default: ({ deviceId }) => <div data-testid="mobile-commands">{deviceId}</div>,
-}));
-
 // El mapa del historial arrastra Leaflet, que en jsdom no pinta nada util. Se
 // sustituye por un doble que expone lo que la pestana le pasa: que reciba las
 // entradas y la seleccion ES el contrato entre lista y mapa, y es lo unico de
@@ -124,7 +118,7 @@ describe("AgentTab", () => {
     expect(screen.queryByText("Location")).not.toBeInTheDocument();
   });
 
-  it("shows the managed-device panel + commands for mobile devices", () => {
+  it("shows the managed-device panel for mobile devices", () => {
     render(
       <AgentTab
         {...base}
@@ -136,7 +130,26 @@ describe("AgentTab", () => {
     expect(screen.getByText("Managed device")).toBeInTheDocument();
     expect(screen.getByText(/fully managed/i)).toBeInTheDocument();
     expect(screen.getByText("ok")).toBeInTheDocument();
-    expect(screen.getByTestId("mobile-commands")).toHaveTextContent("dev-uuid");
+  });
+
+  // 3-oct-2026: las órdenes a la app se mudaron a MDM / MAM › Devices. Aquí
+  // queda la indicación y el botón que abre ESE equipo allí, no un panel
+  // duplicado ni un enlace a la página sin el equipo.
+  it("❗ app actions now live in MDM / MAM: no commands here, a button opens this phone there", () => {
+    const onOpenInMdm = vi.fn();
+    render(<AgentTab {...base} isMobileDevice platformKey="ios" onOpenInMdm={onOpenInMdm} />);
+    expect(screen.queryByText("Lock app")).not.toBeInTheDocument();
+    expect(screen.getByText(/are in MDM \/ MAM › Devices/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open in MDM / MAM" }));
+    expect(onOpenInMdm).toHaveBeenCalledWith("dev-uuid");
+  });
+
+  it("without navigation or a device id there is no dead button", () => {
+    render(<AgentTab {...base} isMobileDevice platformKey="ios" />);
+    expect(screen.queryByRole("button", { name: "Open in MDM / MAM" })).not.toBeInTheDocument();
+    cleanup();
+    render(<AgentTab {...base} isMobileDevice platformKey="ios" commandDeviceId={null} onOpenInMdm={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Open in MDM / MAM" })).not.toBeInTheDocument();
   });
 });
 
