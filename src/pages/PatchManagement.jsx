@@ -33,6 +33,7 @@ import RadioButtonUncheckedOutlinedIcon from "@mui/icons-material/RadioButtonUnc
 import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined";
 import RestoreOutlinedIcon from "@mui/icons-material/RestoreOutlined";
 import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
+import EventRepeatOutlinedIcon from "@mui/icons-material/EventRepeatOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 
@@ -81,6 +82,9 @@ import MissingBySeverityChart from "../components/patch-management/MissingBySeve
 import RollbackPointsPanel from "../components/patch-management/RollbackPointsPanel";
 import SnapshotHistoryPanel from "../components/patch-management/SnapshotHistoryPanel";
 import PatchCatalogPanel from "../components/patch-management/PatchCatalogPanel";
+import PatchPoliciesPanel from "../components/patch-management/PatchPoliciesPanel";
+import EmergencyInstallChoice from "../components/patch-management/EmergencyInstallChoice";
+import { emergencyField, emergencyReady } from "../components/patch-management/emergencyInstall";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
 import { explainScanFailure } from "../components/patch-management/scanFailure";
 import {
@@ -203,6 +207,15 @@ const CATEGORIES = [
         impact: "none",
       },
     ],
+  },
+  {
+    // ADR-0038 F4 (D5): recurring patching in rings; a ring moves on only when
+    // what it installed checked healthy. No `actions`.
+    key: "policies",
+    label: "Policies",
+    icon: <EventRepeatOutlinedIcon />,
+    blurb: "Recurring patching in rings — pilot first; a ring moves on only when what it installed checked healthy afterwards.",
+    actions: [],
   },
   {
     // ADR-0038 F3 (D7): every patch the fleet has reported missing, since
@@ -911,6 +924,8 @@ export default function PatchManagement({ onNavigate }) {
   // Restart after patching. Opt-in and reset on every dialog open — a choice
   // this consequential must be made for THIS run, never inherited from the last.
   const [bulkReboot, setBulkReboot] = React.useState(false);
+  // ADR-0038 D6: instalar ya, fuera de ventana, con motivo (auditado).
+  const [bulkEmergency, setBulkEmergency] = React.useState({ checked: false, reason: "" });
   const [bulkHold, setBulkHold] = React.useState(false);
   const [bulkOutlook, setBulkOutlook] = React.useState(undefined);
 
@@ -955,6 +970,7 @@ export default function PatchManagement({ onNavigate }) {
 
     // bulk-install: dry-run first to show preview, then real dispatch on confirm.
     setBulkReboot(false); // never inherited from the previous run
+    setBulkEmergency({ checked: false, reason: "" });
     setBulkHold(false);
     setBulkOutlook(undefined);
     setBulkDialog({ action, cfg, plan: null, loading: true, dispatching: false });
@@ -981,7 +997,8 @@ export default function PatchManagement({ onNavigate }) {
         mode: "install",
         dryRun: false,
         rebootIfRequired: bulkReboot,
-        ...snapshotHoldField(bulkHold && offersSnapshotHold(bulkOutlook))
+        ...snapshotHoldField(bulkHold && offersSnapshotHold(bulkOutlook)),
+        ...emergencyField(bulkEmergency.checked, bulkEmergency.reason)
       });
       // A patch install now passes the maintenance-window and vCenter-snapshot
       // gates, so "dispatched" no longer means "on its way". Only follow the
@@ -1005,7 +1022,7 @@ export default function PatchManagement({ onNavigate }) {
       notify("error", `Dispatch failed: ${err?.message || "unknown error"}`);
       setBulkDialog((prev) => prev ? { ...prev, dispatching: false } : null);
     }
-  }, [bulkDialog, bulkReboot, bulkHold, bulkOutlook, notify]);
+  }, [bulkDialog, bulkReboot, bulkHold, bulkOutlook, bulkEmergency, notify]);
 
   const openDrawer = React.useCallback(async (device) => {
     setDrawerDevice(device);
@@ -1790,6 +1807,8 @@ export default function PatchManagement({ onNavigate }) {
             openCveId={pendingCveId}
             onOpened={() => setPendingCveId(null)}
           />
+        ) : tab === "policies" ? (
+          <PatchPoliciesPanel canManage={canManage} notify={notify} refreshNonce={refreshNonce} />
         ) : tab === "catalog" ? (
           <PatchCatalogPanel canManage={canManage} notify={notify} refreshNonce={refreshNonce} />
         ) : tab === "rollback-points" ? (
@@ -2211,6 +2230,8 @@ export default function PatchManagement({ onNavigate }) {
                   {offersSnapshotHold(bulkOutlook) ? (
                     <SnapshotHoldChoice checked={bulkHold} onChange={setBulkHold} />
                   ) : null}
+
+                  <EmergencyInstallChoice checked={bulkEmergency.checked} reason={bulkEmergency.reason} onChange={setBulkEmergency} />
                 </>
               ) : (
                 <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
@@ -2231,7 +2252,7 @@ export default function PatchManagement({ onNavigate }) {
           <Button
             variant="contained"
             onClick={confirmBulkInstall}
-            disabled={!bulkDialog || bulkDialog.loading || bulkDialog.dispatching || !bulkDialog.plan || bulkDialog.plan.length === 0}
+            disabled={!bulkDialog || bulkDialog.loading || bulkDialog.dispatching || !bulkDialog.plan || bulkDialog.plan.length === 0 || !emergencyReady(bulkEmergency.checked, bulkEmergency.reason)}
             startIcon={bulkDialog?.dispatching ? <CircularProgress size={14} sx={{ color: BRAND.surface }} /> : null}
             sx={{ textTransform: "none", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
           >

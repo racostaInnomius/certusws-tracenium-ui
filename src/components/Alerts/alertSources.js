@@ -44,6 +44,9 @@ export const SOURCE_LABEL = {
   // ADR-0038 F1/F2: la verificación tras un cambio (parche, despliegue,
   // remediación o reinicio) encontró algo que no volvió.
   patch_verification_failed: "Something did not come back after a change",
+  // ADR-0038 F4: políticas de parcheo — un anillo frenado y un plazo vencido.
+  patch_policy_halted: "Patch ring halted",
+  patch_deadline_missed: "Patches past their deadline",
   // ADR-0031 F3: un ajuste de seguridad cambió sin acción nuestra. El rótulo
   // dice lo que consta —que el cambio no salió de aquí— y no quién lo hizo.
   security_setting_drift: "Setting changed outside Tracenium",

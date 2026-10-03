@@ -22,6 +22,7 @@ import {
   ToggleButtonGroup,
   Typography,
   Autocomplete,
+  MenuItem,
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import BrandTimeField from "../common/BrandTimeField";
@@ -36,7 +37,7 @@ const DAYS = [
 const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 function defaults() {
-  return { name: "", days: [1, 2, 3, 4, 5], startTime: "02:00", endTime: "04:00", timezone: BROWSER_TZ, enabled: true };
+  return { name: "", days: [1, 2, 3, 4, 5], startTime: "02:00", endTime: "04:00", timezone: BROWSER_TZ, enabled: true, assetGroupId: "" };
 }
 function fromEntry(e) {
   return {
@@ -46,10 +47,11 @@ function fromEntry(e) {
     endTime: minutesToHHMM((e.startMinute ?? 120) + (e.durationMinutes ?? 120)),
     timezone: e.timezone ?? BROWSER_TZ,
     enabled: e.enabled !== false,
+    assetGroupId: e.assetGroupId == null ? "" : String(e.assetGroupId),
   };
 }
 
-export default function MaintenanceWindowDialog({ open, mode, window: entry, submitting, onClose, onSubmit }) {
+export default function MaintenanceWindowDialog({ open, mode, window: entry, submitting, onClose, onSubmit, groups = [] }) {
   const [form, setForm] = React.useState(defaults);
   // Built once per open: the offsets shown are today's (DST changes them).
   const tzOptionList = React.useMemo(() => buildTimezoneOptions({ extra: entry?.timezone }), [entry?.timezone]);
@@ -77,6 +79,8 @@ export default function MaintenanceWindowDialog({ open, mode, window: entry, sub
       durationMinutes,
       timezone: form.timezone,
       enabled: form.enabled,
+      // ADR-0038 D6: sin grupo = la del tenant (por defecto).
+      assetGroupId: form.assetGroupId === "" ? null : Number(form.assetGroupId),
     });
   };
 
@@ -88,6 +92,23 @@ export default function MaintenanceWindowDialog({ open, mode, window: entry, sub
       <DialogContent dividers>
         <Stack spacing={2.5}>
           <TextField size="small" label="Name" placeholder="Overnight (weekdays)" value={form.name} onChange={(e) => update({ name: e.target.value })} required />
+          {/* ADR-0038 D6: a window can belong to a group. A device uses its groups'
+              windows; one whose groups have none uses the tenant's. */}
+          <TextField
+            select
+            size="small"
+            label="Applies to"
+            value={form.assetGroupId}
+            onChange={(e) => update({ assetGroupId: e.target.value })}
+            helperText={form.assetGroupId === "" ? "The default: every device whose groups have no window of their own." : "Only devices in this group — they stop using the default windows."}
+          >
+            <MenuItem value="">Every device (default)</MenuItem>
+            {groups.map((g) => (
+              <MenuItem key={g.id} value={String(g.id)}>
+                {g.name}
+              </MenuItem>
+            ))}
+          </TextField>
 
           <Box>
             <Typography variant="caption" sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>

@@ -4,7 +4,7 @@
 // envelope convention as compliance.js: callers should check
 // `res.ok` before touching the payload.
 
-import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson, httpGetBlob, httpPostBinaryWithProgress } from "./http";
+import { httpGetJson, httpPostJson, httpPatchJson, httpPutJson, httpDeleteJson, httpGetBlob, httpPostBinaryWithProgress } from "./http";
 import { saveBlob } from "../utils/browserState";
 import { buildQuery } from "./query";
 
@@ -384,6 +384,42 @@ export async function registerOutOfBandPatch(body) {
 
 export async function installOutOfBandPatch(patchId, { rebootIfRequired = false, deviceIds } = {}) {
   return httpPostJson(`${BASE}/out-of-band/${encodeURIComponent(patchId)}/install`, { rebootIfRequired, ...(deviceIds ? { deviceIds } : {}) });
+}
+
+// ── Patch policies (ADR-0038 F4) ──────────────────────────────────────────
+// Recurring patching in rings (pilot → broad → the rest); a ring moves on only
+// when what it installed checked healthy afterwards.
+
+export async function listPatchPolicies() {
+  return httpGetJson(`${BASE}/policies`);
+}
+
+export async function listPatchPolicyRuns(id) {
+  return httpGetJson(`${BASE}/policies/${encodeURIComponent(id)}/runs`);
+}
+
+export async function createPatchPolicy(body) {
+  return httpPostJson(`${BASE}/policies`, body);
+}
+
+export async function updatePatchPolicy(id, body) {
+  return httpPutJson(`${BASE}/policies/${encodeURIComponent(id)}`, body);
+}
+
+export async function deletePatchPolicy(id) {
+  return httpDeleteJson(`${BASE}/policies/${encodeURIComponent(id)}`);
+}
+
+export async function runPatchPolicyNow(id) {
+  return httpPostJson(`${BASE}/policies/${encodeURIComponent(id)}/run`, {});
+}
+
+export async function promotePatchPolicyRun(runId) {
+  return httpPostJson(`${BASE}/policies/runs/${encodeURIComponent(runId)}/promote`, {});
+}
+
+export async function cancelPatchPolicyRun(runId) {
+  return httpPostJson(`${BASE}/policies/runs/${encodeURIComponent(runId)}/cancel`, {});
 }
 
 // ── Infrastructure Gateway (ADR-0001) ────────────────────────────────────────

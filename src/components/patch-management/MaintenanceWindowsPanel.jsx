@@ -31,6 +31,7 @@ import {
 import MaintenanceWindowDialog from "./MaintenanceWindowDialog";
 import { minutesToHHMM } from "./maintenanceWindowTime";
 import { listFrom } from "../../api/shape";
+import { listAssetGroups } from "../../api/assetGroups";
 import { useConfirm } from "../common/ConfirmDialog";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -61,6 +62,13 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
   const [dialog, setDialog] = React.useState(null); // { mode, entry }
   const [submitting, setSubmitting] = React.useState(false);
   const confirm = useConfirm();
+  const [groups, setGroups] = React.useState([]);
+  React.useEffect(() => {
+    listAssetGroups()
+      .then((res) => setGroups(listFrom(res, { context: "assetGroups" })))
+      .catch(() => setGroups([]));
+  }, []);
+  const groupName = (id) => (id == null ? "Every device" : groups.find((g) => Number(g.id) === Number(id))?.name ?? `Group #${id}`);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -179,6 +187,7 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
               <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Days</TableCell>
               <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Time</TableCell>
               <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Timezone</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Applies to</TableCell>
               <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Status</TableCell>
               {canManage ? <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Actions</TableCell> : null}
             </TableRow>
@@ -190,6 +199,7 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
                 <TableCell><Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>{formatDays(it.daysOfWeek)}</Typography></TableCell>
                 <TableCell><Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace", color: BRAND.dark }}>{formatTimeRange(it.startMinute, it.durationMinutes)}</Typography></TableCell>
                 <TableCell><Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>{it.timezone}</Typography></TableCell>
+                <TableCell><Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>{groupName(it.assetGroupId)}</Typography></TableCell>
                 <TableCell>
                   <Chip
                     size="small"
@@ -224,6 +234,7 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
         submitting={submitting}
         onClose={() => (submitting ? null : setDialog(null))}
         onSubmit={handleSubmit}
+        groups={groups}
       />
     </Box>
   );
