@@ -27,11 +27,11 @@ export async function getDashboardSummary() {
   return httpGetJson("/api/v1/dashboard/summary");
 }
 
-export async function getExpiringCertificates(days = 30) {
+export async function getExpiringCertificates(days = 30, options) {
   // `days`, no `withinDays`: es lo que lee el controlador
   // (certificates.controller.ts). Con el nombre equivocado la ventana se
   // ignoraba y siempre valía el defecto — hoy 30, así que no se notaba.
-  return httpGetJson(`/api/v1/security/certificates/expiring?days=${days}`);
+  return httpGetJson(`/api/v1/security/certificates/expiring?days=${days}`, options);
 }
 
 export async function getConnectedDevices() {
@@ -59,12 +59,12 @@ export async function getPluginCoverageSummary() {
 import { getComplianceSummary, getFleetComplianceTimeseries } from "./compliance";
 export { getComplianceSummary, getFleetComplianceTimeseries };
 
-export async function getAuditTimeseries(windowDays = 7, lane) {
+export async function getAuditTimeseries(windowDays = 7, lane, options) {
   // `lane` es opcional: Overview no lo manda y sigue viendo toda la
   // actividad, la página de Audit sí para que la gráfica enseñe lo mismo
   // que la tabla de debajo.
   const laneQs = lane ? `&lane=${encodeURIComponent(lane)}` : "";
-  return httpGetJson(`/api/v1/security/audit/timeseries?window=${windowDays}d${laneQs}`);
+  return httpGetJson(`/api/v1/security/audit/timeseries?window=${windowDays}d${laneQs}`, options);
 }
 
 export async function getJobsTimeseries(windowDays = 7) {
@@ -173,8 +173,54 @@ async function settle(entries) {
   return Object.fromEntries(live.map(([key], idx) => [key, settled[idx]]));
 }
 
+// ---- qué capacidad exige cada petición ---------------------------------
+//
+// La capacidad que pide la RUTA del backend (`requireCapability`), leída de
+// cada *.routes.ts — no la del área que la card resume. Una ruta sin
+// capacidad no está aquí y se pide siempre: dashboard/summary,
+// devices-connected, agent-versions, binaries/agent/metadata,
+// jobs/timeseries, compliance summary/fleet-timeseries/devices,
+// patch-management/summary y las lecturas de SDP (detrás de
+// requireEntitlement, que responde 402 y no abre el diálogo de permisos).
+//
+// Sin la capacidad, el slot no se pide y queda AUSENTE, que la card lee como
+// "no aplica" — igual que un plugin fuera del plan. Antes se pedía igual, el
+// 403 abría el diálogo "Insufficient permissions" al aterrizar, y con varios
+// a la vez el diálogo sólo enseñaba el último ("Remote Control").
+export const OVERVIEW_GATES = {
+  hardwareSummary: "assets_view", // dashboard.routes.ts /hardware-inventory/summary
+  signalCoverage: "assets_view", // dashboard.routes.ts /signal-coverage
+  auditTimeseries: "audit_log", // audit.routes.ts /timeseries
+  expiringCerts: "pki", // certificates.routes.ts /expiring
+  reportRuns: "reports", // reports.routes.ts /runs
+  // + requireRole(ADMIN, OWNER): a un rol personalizado le responde
+  // FORBIDDEN, que no es PERMISSION_DENIED y no abre el diálogo.
+  reportSchedules: "reports", // reports.routes.ts /schedules
+  rcpSummary: "remote_control", // remote-control.routes.ts, router.use()
+  cdpSummary: "crypto_discovery", // crypto-discovery.routes.ts /summary
+};
+
+// Las cargas del Overview no las pidió nadie con un clic: un 403 se queda en
+// su card y no abre el diálogo. Hace falta aunque se filtre por capacidad:
+// requireCapability también deniega cuando el plugin está en el plan pero no
+// activado en la política guardada del tenant (roles-gate.ts), y eso le pasa
+// a un ADMIN. Sólo en las peticiones con capacidad; las demás no pueden
+// responder PERMISSION_DENIED.
+export const BACKGROUND = { notifyOnPermissionDenied: false };
+
+const ALLOW_ALL = () => true;
+
+/**
+ * `can(capability)` dice si el rol la tiene. Por defecto todo: sin saber las
+ * capacidades se pide como antes, y BACKGROUND evita el diálogo.
+ */
+function gate(can, slot) {
+  const capability = OVERVIEW_GATES[slot];
+  return !capability || can(capability);
+}
+
 /** Bloque 1 — todos los planes: AMP + SDP + alertas, jobs, informes, auditoría. */
-export async function fetchOverviewCore({ sdp = false } = {}) {
+export async function fetchOverviewCore({ sdp = false, can = ALLOW_ALL } = {}) {
   return settle([
     ["dashboardSummary", getDashboardSummary()],
     // connectedDevices is the authoritative source for "online now". The
@@ -185,20 +231,19 @@ export async function fetchOverviewCore({ sdp = false } = {}) {
     // `fleet.composition` (laptops/desktops/servers + virtuales) para la dona
     // de composición — la misma que Hardware Inventory. Capacidad
     // `assets_view`, que el rol USER también trae.
-    ["hardwareSummary", getHardwareInventorySummary()],
+    gate(can, "hardwareSummary") && ["hardwareSummary", getHardwareInventorySummary(BACKGROUND)],
     ["jobsTimeseries", getJobsTimeseries(7)],
     // Carril admin, el que abre la página de Audit (ver Overview.jsx).
-    ["auditTimeseries", getAuditTimeseries(7, "admin")],
+    gate(can, "auditTimeseries") && ["auditTimeseries", getAuditTimeseries(7, "admin", BACKGROUND)],
     // Certificados mTLS de los propios agentes (PKI de Tracenium, no CDP).
-    // Exige la capacidad `pki`: un USER recibe 403 y la fila de Attention
-    // simplemente no aparece.
-    ["expiringCerts", getExpiringCertificates(30)],
+    // Exige la capacidad `pki`: sin ella la fila de Attention no aparece.
+    gate(can, "expiringCerts") && ["expiringCerts", getExpiringCertificates(30, BACKGROUND)],
     // 3 y no 5: la card comparte fila con Attention y Reports y tiene que
     // medir lo mismo que ellas. Es un vistazo; la lista está en Alerts. El
     // feed ya trae `hostname` desde el servidor.
     // `limit: 1` da la última corrida y, por `COUNT(*) OVER()`, el total.
-    ["reportRuns", getReportRuns({ limit: 1 })],
-    ["reportSchedules", listReportSchedules()],
+    gate(can, "reportRuns") && ["reportRuns", getReportRuns({ limit: 1 }, BACKGROUND)],
+    gate(can, "reportSchedules") && ["reportSchedules", listReportSchedules(BACKGROUND)],
     sdp && ["sdpTimeseries", getDeploymentTimeseries("30d")],
     // Dos estados y no "todas las recientes": el listado se corta en `limit`
     // y una campaña larga en marcha podía quedar fuera de las 100 últimas.
@@ -208,7 +253,7 @@ export async function fetchOverviewCore({ sdp = false } = {}) {
 }
 
 /** Bloque 2 — Professional: SCP + RCP. */
-export async function fetchOverviewSecurity({ scp = false, rcp = false } = {}) {
+export async function fetchOverviewSecurity({ scp = false, rcp = false, can = ALLOW_ALL } = {}) {
   return settle([
     scp && ["complianceSummary", getComplianceSummary()],
     // 30 días: el periodo de tendencia que se mira, y por debajo del suelo
@@ -218,17 +263,17 @@ export async function fetchOverviewSecurity({ scp = false, rcp = false } = {}) {
     // Una fila por equipo con `overallScore` y `patchSummary`: alimenta la
     // distribución de salud y la antigüedad de parches sin otra petición.
     scp && ["devicePosture", getDevicePosture().catch(() => ({ items: [] }))],
-    // ⚠️ ADMIN/OWNER + capacidad `remote_control`. Un USER con plan
-    // Professional recibe 403 y las KPIs de RCP no se pintan.
-    rcp && ["rcpSummary", getRemoteControlSummary()],
+    // Capacidad `remote_control`, que el USER no trae: sin ella las KPIs de
+    // RCP no se pintan.
+    rcp && gate(can, "rcpSummary") && ["rcpSummary", getRemoteControlSummary(BACKGROUND)],
   ]);
 }
 
 /** Bloque 3 — Business: PMP + CDP. */
-export async function fetchOverviewOperations({ pmp = false, cdp = false } = {}) {
+export async function fetchOverviewOperations({ pmp = false, cdp = false, can = ALLOW_ALL } = {}) {
   return settle([
     pmp && ["patchSummary", getPatchSummary()],
-    cdp && ["cdpSummary", getCdpSummary()],
+    cdp && gate(can, "cdpSummary") && ["cdpSummary", getCdpSummary(BACKGROUND)],
   ]);
 }
 

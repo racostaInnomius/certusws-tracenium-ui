@@ -18,8 +18,13 @@
 // Each block loads its own slice (api/overview.js) with allSettled — any
 // failing endpoint leaves its card in a quiet empty state instead of blanking
 // the page.
+//
+// The ROLE gates on top of the plan (components/Overview/overviewAccess.js):
+// a request whose backend route needs a capability the role lacks is not
+// made, and its card is not drawn. A role with none of the areas this page
+// summarizes gets the pages it can use instead (RoleScopePanel).
 
-import { useCallback, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
 import GoToReportButton from "../components/common/GoToReportButton";
 
 // La clave del catálogo de reportes (`REPORT_REGISTRY`) que corresponde a
@@ -36,11 +41,15 @@ import { Box, Grid, Stack, Typography } from "@mui/material";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import {
+  BACKGROUND,
+  OVERVIEW_GATES,
   fetchOverviewCore,
   fetchOverviewOperations,
   fetchOverviewSecurity,
 } from "../api/overview";
+import { getMyCapabilities } from "../api/roles";
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import HeroKpis from "../components/Overview/HeroKpis";
 import SecurityKpis from "../components/Overview/SecurityKpis";
@@ -55,6 +64,8 @@ import {
 } from "../components/Overview/PluginSummaryCards";
 import { OverviewBlock, PlanScopeNotice } from "../components/Overview/OverviewBlock";
 import { resolveOverviewPlan } from "../components/Overview/overviewPlan";
+import { canFrom, pagesForRole, seesNothingOnOverview } from "../components/Overview/overviewAccess";
+import RoleScopePanel from "../components/Overview/RoleScopePanel";
 import SignalCoverageTile from "../components/Overview/SignalCoverageTile";
 import SignalGapDrawer from "../components/Overview/SignalGapDrawer";
 import { coverageKpiCard } from "../components/Overview/coverageKpi";
@@ -148,7 +159,7 @@ function ChartSlot({ height = 280 }) {
 // entry was always evicted by the time anyone came back. Painting a stale
 // slice is only honest because the header stamps the capture time.
 const CACHE_OPTIONS = { storageMaxAgeMs: 24 * 60 * 60 * 1000 };
-const loadSignalCoverage = () => dashboardApi.getSignalCoverage();
+const loadSignalCoverage = () => dashboardApi.getSignalCoverage(BACKGROUND);
 
 export default function Overview({ onNavigate } = {}) {
   // ── Plan ──────────────────────────────────────────────────────────
@@ -164,36 +175,98 @@ export default function Overview({ onNavigate } = {}) {
   const hasPmp = Boolean(operations?.has("pmp"));
   const hasCdp = Boolean(operations?.has("cdp"));
 
+  // ── Role ──────────────────────────────────────────────────────────
+  //
+  // undefined while asking, null when it can't be known, a Set otherwise —
+  // see overviewAccess.js. Stored with the tenant it answers for, so an MSP
+  // client switch never applies the previous client's role for a render.
+  const tenantId = useEffectiveTenantId();
+  const [access, setAccess] = useState(null);
+  useEffect(() => {
+    if (!tenantId) return undefined;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setAccess({
+          tenantId,
+          permissions: Array.isArray(resp?.permissions) ? new Set(resp.permissions) : null,
+          role: resp?.role ?? null,
+        });
+      })
+      .catch(() => {
+        if (alive) setAccess({ tenantId, permissions: null, role: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+  const permissions = !tenantId ? null : access?.tenantId === tenantId ? access.permissions : undefined;
+  const accessPending = permissions === undefined;
+  const can = useMemo(() => canFrom(permissions), [permissions]);
+  const roleSeesNothing = seesNothingOnOverview(permissions);
+  // Nothing is requested until the role is known (the cache still paints), and
+  // nothing at all for a role the page has nothing for.
+  const loadBlocks = !accessPending && !roleSeesNothing;
+
+  // Cards whose request needs a capability: without it the slot is absent,
+  // and absent reads as "nothing yet" ("No reports generated yet", "No device
+  // has reported certificates") — so the card is not drawn either.
+  const canFleetComposition = can(OVERVIEW_GATES.hardwareSummary);
+  const canCoverage = can(OVERVIEW_GATES.signalCoverage);
+  const canAudit = can(OVERVIEW_GATES.auditTimeseries);
+  const canReports = can(OVERVIEW_GATES.reportRuns);
+  const showRcp = hasRcp && can(OVERVIEW_GATES.rcpSummary);
+  const showCdp = hasCdp && can(OVERVIEW_GATES.cdpSummary);
+
   // ── Data, one slice per block ─────────────────────────────────────
   //
   // The cache key carries what the loader asks for: a plan change must not
   // paint the previous plan's slice (or skip a request the new one needs).
-  const coreLoader = useCallback(() => fetchOverviewCore({ sdp: hasSdp }), [hasSdp]);
+  //
+  // The role is NOT in the key, on purpose: the key has to be known on the
+  // first render for the 24 h cache to paint, and the capabilities arrive a
+  // round-trip later. The cache is already per identity and tenant, so what it
+  // paints is a slice this same user was served. A capability lost since is
+  // covered by the render gates above; one GAINED since shows its card empty
+  // until the slice is revalidated — on the next mount once the entry is over
+  // a minute old (staleMs), or on refresh.
+  const coreLoader = useCallback(() => fetchOverviewCore({ sdp: hasSdp, can }), [hasSdp, can]);
   const securityLoader = useCallback(
-    () => fetchOverviewSecurity({ scp: hasScp, rcp: hasRcp }),
-    [hasScp, hasRcp]
+    () => fetchOverviewSecurity({ scp: hasScp, rcp: hasRcp, can }),
+    [hasScp, hasRcp, can]
   );
   const operationsLoader = useCallback(
-    () => fetchOverviewOperations({ pmp: hasPmp, cdp: hasCdp }),
-    [hasPmp, hasCdp]
+    () => fetchOverviewOperations({ pmp: hasPmp, cdp: hasCdp, can }),
+    [hasPmp, hasCdp, can]
   );
 
-  const coreFetch = useCachedFetch(`overview:core:${hasSdp ? "sdp" : "base"}`, coreLoader, CACHE_OPTIONS);
+  const coreFetch = useCachedFetch(`overview:core:${hasSdp ? "sdp" : "base"}`, coreLoader, {
+    ...CACHE_OPTIONS,
+    enabled: loadBlocks,
+  });
   const securityFetch = useCachedFetch(
     `overview:security:${hasScp ? "scp" : ""}${hasRcp ? "rcp" : ""}`,
     securityLoader,
-    { ...CACHE_OPTIONS, enabled: Boolean(security) }
+    { ...CACHE_OPTIONS, enabled: loadBlocks && Boolean(security) }
   );
   const operationsFetch = useCachedFetch(
     `overview:operations:${hasPmp ? "pmp" : ""}${hasCdp ? "cdp" : ""}`,
     operationsLoader,
-    { ...CACHE_OPTIONS, enabled: Boolean(operations) }
+    { ...CACHE_OPTIONS, enabled: loadBlocks && Boolean(operations) }
   );
 
   // Quién reporta cada señal (lo que era "Blind spots" de Asset Management),
   // repartido por bloques. Una sola petición para la página. Exige
-  // `assets_view`: sin él responde 403 y simplemente no hay franjas.
-  const coverageFetch = useCachedFetch("overview:signal-coverage", loadSignalCoverage, CACHE_OPTIONS);
+  // `assets_view`: sin él no se pide y no hay franjas.
+  const coverageFetch = useCachedFetch("overview:signal-coverage", loadSignalCoverage, {
+    ...CACHE_OPTIONS,
+    enabled: loadBlocks && canCoverage,
+  });
+
+  // A disabled fetch reports `loading: false`; while the role is still being
+  // asked that would draw empty cards instead of skeletons.
+  const pendingOr = (fetch) => fetch.loading || (accessPending && fetch.data == null);
 
   const coreRefetch = coreFetch.refetch;
   const securityRefetch = securityFetch.refetch;
@@ -210,7 +283,8 @@ export default function Overview({ onNavigate } = {}) {
     [coreRefetch, coverageRefetch, securityRefetch, operationsRefetch, security, operations]
   );
 
-  const coverage = coverageFetch.error ? null : coverageFetch.data;
+  // Gated here too: a disabled fetch still paints its cached entry.
+  const coverage = canCoverage && !coverageFetch.error ? coverageFetch.data : null;
   const coverageTitle = coverageHeadline(coverage);
   const coverageFleet = Number(coverage?.fleet) || 0;
   // Cada señal en el bloque de su plugin (ver signalCoverageModel). Null si el
@@ -223,7 +297,9 @@ export default function Overview({ onNavigate } = {}) {
   const [gapSignal, setGapSignal] = useState(null);
 
   const results = coreFetch.data;
-  const loading = coreFetch.loading;
+  const loading = pendingOr(coreFetch);
+  const securityLoading = pendingOr(securityFetch);
+  const operationsLoading = pendingOr(operationsFetch);
   const refreshing =
     coreFetch.refreshing || securityFetch.refreshing || operationsFetch.refreshing;
 
@@ -248,6 +324,15 @@ export default function Overview({ onNavigate } = {}) {
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
   const isOwner = isActiveMember && tenantRole === "OWNER";
+
+  if (roleSeesNothing) {
+    return (
+      <Box sx={{ pb: 4 }}>
+        <PageHeader title="Overview" icon={<DashboardOutlinedIcon />} />
+        <RoleScopePanel role={access?.role} pages={pagesForRole(permissions)} onNavigate={navigateWithQuery} />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ pb: 4 }}>
@@ -323,7 +408,12 @@ export default function Overview({ onNavigate } = {}) {
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, md: hasSdp ? 7 : 12 }}>
             <Suspense fallback={<ChartSlot height={360} />}>
-              <FleetComposition results={results} loading={loading} onNavigate={navigateWithQuery} />
+              <FleetComposition
+                results={results}
+                loading={loading}
+                onNavigate={navigateWithQuery}
+                showComposition={canFleetComposition}
+              />
             </Suspense>
           </Grid>
           {hasSdp ? (
@@ -343,34 +433,40 @@ export default function Overview({ onNavigate } = {}) {
             left (the unread bell in the top bar already says it), and the
             coverage gap is a KPI above, next to the numbers it qualifies. */}
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid size={{ xs: 12, md: canReports ? 6 : 12 }}>
             <AttentionPanel results={results} onNavigate={navigateWithQuery} />
           </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <ReportsCard results={results} loading={loading} onNavigate={navigateWithQuery} />
-          </Grid>
+          {canReports ? (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <ReportsCard results={results} loading={loading} onNavigate={navigateWithQuery} />
+            </Grid>
+          ) : null}
         </Grid>
 
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid size={{ xs: 12, md: canAudit ? 6 : 12 }}>
             <Suspense fallback={<ChartSlot height={320} />}>
               <JobsTimeseriesChart result={results?.jobsTimeseries} loading={loading} onNavigate={navigateWithQuery} />
             </Suspense>
           </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Suspense fallback={<ChartSlot height={320} />}>
-              {/* Carril admin: el mismo que abre la página de Audit. Con los dos
-                  carriles la gráfica llegaba a ~600 eventos/día (el bucle de
-                  política) y el clic aterrizaba en una página que enseñaba 983
-                  en 30 días: dos números para la misma tarjeta. */}
-              <AuditTimeseriesChart
-                result={results?.auditTimeseries}
-                loading={loading}
-                onNavigate={navigateWithQuery}
-                lane="admin"
-              />
-            </Suspense>
-          </Grid>
+          {/* Sin `audit_log` no se pide, y la tarjeta leería el hueco como
+              "couldn't load". */}
+          {canAudit ? (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Suspense fallback={<ChartSlot height={320} />}>
+                {/* Carril admin: el mismo que abre la página de Audit. Con los dos
+                    carriles la gráfica llegaba a ~600 eventos/día (el bucle de
+                    política) y el clic aterrizaba en una página que enseñaba 983
+                    en 30 días: dos números para la misma tarjeta. */}
+                <AuditTimeseriesChart
+                  result={results?.auditTimeseries}
+                  loading={loading}
+                  onNavigate={navigateWithQuery}
+                  lane="admin"
+                />
+              </Suspense>
+            </Grid>
+          ) : null}
         </Grid>
       </OverviewBlock>
 
@@ -379,9 +475,11 @@ export default function Overview({ onNavigate } = {}) {
         <OverviewBlock block={security}>
           <SecurityKpis
             results={securityFetch.data}
-            loading={securityFetch.loading}
+            loading={securityLoading}
             onNavigate={navigateWithQuery}
-            has={security.has}
+            // RCP's KPIs read a gated slot; without `remote_control` they'd
+            // draw "—" as if the summary had failed.
+            has={(key) => (key === "rcp" ? showRcp : security.has(key))}
             // Quinto KPI: cuántos equipos reportan postura (el hueco de SCP).
             extraCards={hasScp && complianceSignal ? [coverageKpiCard(complianceSignal, coverageFleet, setGapSignal)] : []}
           />
@@ -394,7 +492,7 @@ export default function Overview({ onNavigate } = {}) {
                 <Suspense fallback={<ChartSlot />}>
                   <ComplianceTrendCard
                     result={securityFetch.data?.fleetComplianceTimeseries}
-                    loading={securityFetch.loading}
+                    loading={securityLoading}
                     onNavigate={navigateWithQuery}
                   />
                 </Suspense>
@@ -402,7 +500,7 @@ export default function Overview({ onNavigate } = {}) {
               <Grid size={{ xs: 12, md: 4 }}>
                 <HealthDistributionCard
                   result={securityFetch.data?.devicePosture}
-                  loading={securityFetch.loading}
+                  loading={securityLoading}
                   onNavigate={navigateWithQuery}
                 />
               </Grid>
@@ -410,7 +508,7 @@ export default function Overview({ onNavigate } = {}) {
                 <Suspense fallback={<ChartSlot />}>
                   <PatchCoverageCard
                     result={securityFetch.data?.devicePosture}
-                    loading={securityFetch.loading}
+                    loading={securityLoading}
                     onNavigate={navigateWithQuery}
                     fleetDevices={fleetDevices}
                   />
@@ -427,16 +525,16 @@ export default function Overview({ onNavigate } = {}) {
           {/* Una pieza por señal, con las MISMAS columnas que las cards de
               abajo: parches sobre Patch Management, certificados sobre
               Crypto Discovery, y los bordes casan. */}
-          {(hasPmp && patchesSignal) || (hasCdp && certificatesSignal) ? (
+          {(hasPmp && patchesSignal) || (showCdp && certificatesSignal) ? (
             <Grid container spacing={2} alignItems="stretch">
               {hasPmp ? (
-                <Grid size={{ xs: 12, md: hasCdp ? 6 : 12 }}>
+                <Grid size={{ xs: 12, md: showCdp ? 6 : 12 }}>
                   {patchesSignal ? (
                     <SignalCoverageTile signal={patchesSignal} fleet={coverageFleet} onOpenDevices={setGapSignal} />
                   ) : null}
                 </Grid>
               ) : null}
-              {hasCdp ? (
+              {showCdp ? (
                 <Grid size={{ xs: 12, md: hasPmp ? 6 : 12 }}>
                   {certificatesSignal ? (
                     <SignalCoverageTile signal={certificatesSignal} fleet={coverageFleet} onOpenDevices={setGapSignal} />
@@ -447,19 +545,19 @@ export default function Overview({ onNavigate } = {}) {
           ) : null}
           <Grid container spacing={2} alignItems="stretch">
             {hasPmp ? (
-              <Grid size={{ xs: 12, md: hasCdp ? 6 : 12 }}>
+              <Grid size={{ xs: 12, md: showCdp ? 6 : 12 }}>
                 <PatchManagementCard
                   results={operationsFetch.data}
-                  loading={operationsFetch.loading}
+                  loading={operationsLoading}
                   onNavigate={navigateWithQuery}
                 />
               </Grid>
             ) : null}
-            {hasCdp ? (
+            {showCdp ? (
               <Grid size={{ xs: 12, md: hasPmp ? 6 : 12 }}>
                 <CryptoDiscoveryCard
                   results={operationsFetch.data}
-                  loading={operationsFetch.loading}
+                  loading={operationsLoading}
                   onNavigate={navigateWithQuery}
                 />
               </Grid>

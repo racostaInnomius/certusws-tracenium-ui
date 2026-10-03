@@ -197,4 +197,20 @@ describe("FleetComposition (Overview)", () => {
 
     expect(screen.queryByText("No devices to classify")).toBeNull();
   });
+
+  it("⚠️ sin `assets_view` no hay dona de composición: el resumen no se pidió y 'No devices to classify' mentiría", () => {
+    render(
+      <FleetComposition
+        showComposition={false}
+        results={{
+          agentVersions: fulfilled({ total: 6, byVersion: [{ version: "1.1.70", count: 6 }] }),
+        }}
+      />
+    );
+
+    expect(screen.queryByText("Fleet composition")).toBeNull();
+    expect(screen.queryByText("No devices to classify")).toBeNull();
+    // La de versiones no depende de esa capacidad y se queda.
+    expect(screen.getByText("Agent versions")).toBeTruthy();
+  });
 });

@@ -8,8 +8,8 @@ export async function getInactiveAssets(params = {}) {
   return httpGetJson(`${BASE}/inactive-assets${buildQuery(params)}`);
 }
 
-export async function getHardwareInventorySummary() {
-  return httpGetJson(`${BASE}/hardware-inventory/summary`);
+export async function getHardwareInventorySummary(options) {
+  return httpGetJson(`${BASE}/hardware-inventory/summary`, options);
 }
 
 export async function getHardwareInventoryRankings() {

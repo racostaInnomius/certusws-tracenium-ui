@@ -15,8 +15,8 @@ const BASE = "/api/v1/remote-control";
 // Tenant-wide KPIs for the Hero strip. Shape:
 //   { ok, summary: { connectableDevices, activeSessions,
 //                    sessionsLast7d, avgDurationSec } }
-export async function getRemoteControlSummary() {
-  return httpGetJson(`${BASE}/summary`);
+export async function getRemoteControlSummary(options) {
+  return httpGetJson(`${BASE}/summary`, options);
 }
 
 // One PAGE of connectable devices, filtered server-side.

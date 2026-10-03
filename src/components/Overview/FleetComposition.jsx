@@ -182,7 +182,10 @@ export function DonutCard({
   );
 }
 
-export default function FleetComposition({ results, loading, onNavigate, patchCoverageSlot = null }) {
+// `showComposition={false}`: el rol no tiene `assets_view` y el resumen de
+// hardware no se pidió. Sin la dona, en vez de "No devices to classify", que
+// afirmaría una flota vacía.
+export default function FleetComposition({ results, loading, onNavigate, patchCoverageSlot = null, showComposition = true }) {
   const dashboard = getValue(results?.dashboardSummary);
   const latest = getValue(results?.latestVersions);
   const agentVersions = getValue(results?.agentVersions);
@@ -229,27 +232,31 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
   const navToAssets = (query) => onNavigate?.("assets", query);
 
   // Sin tercer donut (el de parches es de SCP y vive en el bloque 2), los dos
-  // que quedan reparten la fila en vez de dejar un tercio vacío.
-  const cell = patchCoverageSlot ? { xs: 12, sm: 6, md: 4 } : { xs: 12, sm: 6 };
+  // que quedan reparten la fila en vez de dejar un tercio vacío; y si sólo
+  // queda una, ocupa la fila.
+  const donuts = 1 + (showComposition ? 1 : 0) + (patchCoverageSlot ? 1 : 0);
+  const cell = donuts === 3 ? { xs: 12, sm: 6, md: 4 } : donuts === 2 ? { xs: 12, sm: 6 } : { xs: 12 };
 
   return (
     // `height: 100%`: la fila del Overview estira sus celdas y esta rejilla
     // tiene que llenar la suya, o las donas quedan más bajas que la card de
     // Software delivery de al lado.
     <Grid container spacing={2} sx={{ height: "100%" }}>
-      <Grid size={cell} sx={{ display: "flex" }}>
-        <Box sx={{ width: "100%" }}>
-          <FleetCompositionDonut
-            composition={fleet?.composition}
-            total={fleet?.total}
-            loading={loading}
-            sx={{ borderRadius: 2, boxShadow: "none", minHeight: 0 }}
-            // A Hardware Inventory, donde vive la MISMA dona (mismo endpoint),
-            // con el segmento ya filtrado: la cifra pulsada es la que se ve.
-            onSelect={(key) => onNavigate?.("assets", { assetsTab: "hardware", hwFleet: key })}
-          />
-        </Box>
-      </Grid>
+      {showComposition ? (
+        <Grid size={cell} sx={{ display: "flex" }}>
+          <Box sx={{ width: "100%" }}>
+            <FleetCompositionDonut
+              composition={fleet?.composition}
+              total={fleet?.total}
+              loading={loading}
+              sx={{ borderRadius: 2, boxShadow: "none", minHeight: 0 }}
+              // A Hardware Inventory, donde vive la MISMA dona (mismo endpoint),
+              // con el segmento ya filtrado: la cifra pulsada es la que se ve.
+              onSelect={(key) => onNavigate?.("assets", { assetsTab: "hardware", hwFleet: key })}
+            />
+          </Box>
+        </Grid>
+      ) : null}
       <Grid size={cell} sx={{ display: "flex" }}>
         <Box sx={{ width: "100%" }}>
         <AgentVersionDonut

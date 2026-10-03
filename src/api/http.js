@@ -384,6 +384,14 @@ function normalizeGetOptions(url, options = {}) {
         DEFAULT_STORAGE_MAX_AGE_MS
     ),
     notifyOnTemporaryError: options.notifyOnTemporaryError !== false,
+    // `false` only for loads nobody clicked — a widget filling itself in the
+    // background. The dialog explains a denial to whoever just tried something;
+    // fired from a background load it lands on a user who did nothing, and
+    // several of them collapse into one popup naming whichever came last.
+    // The 403 still rejects the call: the caller decides what to show instead.
+    // ⚠️ A GET that joins one already in flight for the same URL inherits that
+    // request's choice.
+    notifyOnPermissionDenied: options.notifyOnPermissionDenied !== false,
   };
 }
 
@@ -618,7 +626,7 @@ function emitTemporaryError(err, { url, cacheKey, hasCachedData } = {}) {
   window.dispatchEvent(new CustomEvent(TEMPORARY_ERROR_EVENT, { detail }));
 }
 
-async function handleResponse(res, url = "") {
+async function handleResponse(res, url = "", { notifyOnPermissionDenied = true } = {}) {
   if (res.ok) {
     // A 204 (or any empty 2xx body) has nothing to parse, and res.json()
     // rejects on an empty stream. Without this, a successful DELETE — which
@@ -659,7 +667,7 @@ async function handleResponse(res, url = "") {
       code: "PERMISSION_DENIED",
     });
 
-    emitPermissionDenied(err, { url });
+    if (notifyOnPermissionDenied) emitPermissionDenied(err, { url });
     throw err;
   }
 
@@ -748,7 +756,7 @@ async function fetchGetJson(url, options) {
       signal: timeout.signal,
     });
 
-    return await handleResponse(res, url);
+    return await handleResponse(res, url, options);
   } catch (err) {
     throw toHumanError(err, url);
   } finally {

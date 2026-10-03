@@ -11,8 +11,8 @@ import { buildQuery } from "./query";
 
 const BASE = "/api/v1/cdp";
 
-export async function getCdpSummary() {
-  return httpGetJson(`${BASE}/summary`);
+export async function getCdpSummary(options) {
+  return httpGetJson(`${BASE}/summary`, options);
 }
 
 // Aggregate panels for the Dashboard tab (expiry horizon, hygiene

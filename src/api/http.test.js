@@ -182,6 +182,27 @@ describe("httpGetJson — error taxonomy", () => {
     expect(events.map((e) => e.message)).toEqual(["no jobs", "no alerts"]);
   });
 
+  it("notifyOnPermissionDenied: false — a background load rejects the same way but does NOT dispatch the event", async () => {
+    // The dialog explains a denial to whoever just tried something. A widget
+    // filling itself in on landing (Overview) is nobody's action: with the
+    // event, a role without `remote_control` landed on "You don't have
+    // permission to use Remote Control" without having touched anything.
+    respond(
+      "get",
+      "/api/v1/remote-control/summary",
+      { error: "PERMISSION_DENIED", message: "You don't have permission to use Remote Control. Ask a tenant admin to grant it." },
+      { status: 403 }
+    );
+
+    const events = await captureEvents(PERMISSION_DENIED_EVENT, async () => {
+      const err = await httpGetJson("/api/v1/remote-control/summary", { notifyOnPermissionDenied: false }).catch((e) => e);
+      expect(err).toBeInstanceOf(PermissionDeniedError);
+      expect(isPermissionDeniedError(err)).toBe(true);
+    });
+
+    expect(events).toHaveLength(0);
+  });
+
   it("a plain 403 FORBIDDEN does NOT dispatch PERMISSION_DENIED_EVENT", async () => {
     respond("get", "/api/v1/forbidden-plain", { error: "FORBIDDEN" }, { status: 403 });
 

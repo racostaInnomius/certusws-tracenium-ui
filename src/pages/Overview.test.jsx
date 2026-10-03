@@ -15,16 +15,29 @@ vi.mock("../hooks/usePluginCatalog", () => ({
   usePluginCatalog: () => catalog,
 }));
 
-const auth = { tenantMember: { isActive: true, role: "OWNER" } };
+const auth = { tenantId: 1, tenantMember: { isActive: true, role: "OWNER" } };
 vi.mock("../auth/AuthContext", () => ({
   useAuthContext: () => ({ auth }),
+}));
+
+// El rol con todo: lo que pide cada rol está en Overview.access.test.jsx.
+vi.mock("../api/roles", () => ({
+  getMyCapabilities: () =>
+    Promise.resolve({
+      role: "OWNER",
+      permissions: [
+        "assets_view", "software_delivery", "reports", "jobs", "audit_log", "pki",
+        "security_compliance", "remote_control", "patch_management", "crypto_discovery",
+      ],
+    }),
 }));
 
 vi.mock("../api/dashboard", () => ({
   dashboardApi: { getSignalCoverage: vi.fn(), getSignalGapDevices: vi.fn() },
 }));
 
-vi.mock("../api/overview", () => ({
+vi.mock("../api/overview", async (importOriginal) => ({
+  ...(await importOriginal()),
   fetchOverviewCore: vi.fn(),
   fetchOverviewSecurity: vi.fn(),
   fetchOverviewOperations: vi.fn(),
@@ -110,7 +123,7 @@ describe("Overview por plan", () => {
     renderWith(STARTER);
 
     expect(await screen.findByRole("heading", { name: "Fleet & operations" })).toBeTruthy();
-    await waitFor(() => expect(fetchOverviewCore).toHaveBeenCalledWith({ sdp: true }));
+    await waitFor(() => expect(fetchOverviewCore).toHaveBeenCalledWith(expect.objectContaining({ sdp: true })));
 
     expect(section("Security & access")).toBeNull();
     expect(section("Patching & crypto")).toBeNull();
@@ -155,8 +168,8 @@ describe("Overview por plan", () => {
     expect(await screen.findByRole("heading", { name: "Security & access" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Patching & crypto" })).toBeTruthy();
     await waitFor(() => {
-      expect(fetchOverviewSecurity).toHaveBeenCalledWith({ scp: true, rcp: true });
-      expect(fetchOverviewOperations).toHaveBeenCalledWith({ pmp: true, cdp: true });
+      expect(fetchOverviewSecurity).toHaveBeenCalledWith(expect.objectContaining({ scp: true, rcp: true }));
+      expect(fetchOverviewOperations).toHaveBeenCalledWith(expect.objectContaining({ pmp: true, cdp: true }));
     });
     expect(await screen.findByRole("region", { name: "Patch management" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Crypto discovery" })).toBeTruthy();
@@ -168,7 +181,7 @@ describe("Overview por plan", () => {
     renderWith(null, { loading: true });
 
     expect(await screen.findByRole("heading", { name: "Fleet & operations" })).toBeTruthy();
-    await waitFor(() => expect(fetchOverviewCore).toHaveBeenCalledWith({ sdp: false }));
+    await waitFor(() => expect(fetchOverviewCore).toHaveBeenCalledWith(expect.objectContaining({ sdp: false })));
     expect(fetchOverviewSecurity).not.toHaveBeenCalled();
     expect(fetchOverviewOperations).not.toHaveBeenCalled();
     // Y tampoco se anuncia nada como "no incluido": aún no se sabe.

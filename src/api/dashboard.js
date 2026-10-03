@@ -5,7 +5,7 @@ export const dashboardApi = {
   // De cuántos equipos NO podemos afirmar nada: por cada señal, quién reporta,
   // quién lleva demasiado callado y quién no reportó nunca. Complementa al
   // descubrimiento de AD, que cuenta los equipos del dominio SIN agente.
-  getSignalCoverage: () => httpGetJson("/api/v1/dashboard/signal-coverage"),
+  getSignalCoverage: (options) => httpGetJson("/api/v1/dashboard/signal-coverage", options),
   // Último check-in + "Needs attention" del Dashboard de Asset Management.
   getAssetHealth: () => httpGetJson("/api/v1/dashboard/asset-health"),
   // Quiénes son los equipos del hueco de UNA señal (never/stale), para que
