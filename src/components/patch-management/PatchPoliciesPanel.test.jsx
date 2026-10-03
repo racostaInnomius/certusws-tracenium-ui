@@ -82,6 +82,11 @@ describe("PatchPoliciesPanel", () => {
     await user.click(await screen.findByRole("button", { name: "New policy" }));
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByLabelText("Name"), "Workstations");
+    // "" es una elección real y se ve (3-oct: salían en blanco).
+    expect(within(dialog).getByLabelText("Scope")).toHaveTextContent("Every device");
+    const ringSelects = within(dialog).getAllByLabelText("Devices");
+    expect(ringSelects[0]).toHaveTextContent("Pick a group");
+    expect(ringSelects[1]).toHaveTextContent("Everyone else in scope");
     // El piloto necesita grupo: sin él, lo dice.
     await user.click(within(dialog).getByRole("button", { name: "Create policy" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(/Ring 1 needs a group/);

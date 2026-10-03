@@ -101,6 +101,7 @@ export default function MaintenanceWindowDialog({ open, mode, window: entry, sub
             value={form.assetGroupId}
             onChange={(e) => update({ assetGroupId: e.target.value })}
             helperText={form.assetGroupId === "" ? "The default: every device whose groups have no window of their own." : "Only devices in this group — they stop using the default windows."}
+            slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
           >
             <MenuItem value="">Every device (default)</MenuItem>
             {groups.map((g) => (

@@ -36,6 +36,8 @@ describe("MaintenanceWindowDialog", () => {
     const { onSubmit } = renderDialog();
 
     await user.type(screen.getByRole("textbox", { name: /^Name/ }), "Overnight");
+    // The tenant default is a real choice and reads as one (3-oct: it was blank).
+    expect(screen.getByLabelText("Applies to")).toHaveTextContent("Every device (default)");
     // Defaults: days Mon–Fri, 02:00–04:00. Submit as-is.
     await user.click(screen.getByRole("button", { name: /Create/i }));
 

@@ -75,7 +75,17 @@ const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frida
 
 function GroupSelect({ label, value, onChange, groups, emptyLabel, helperText }) {
   return (
-    <TextField select size="small" label={label} value={value} onChange={(e) => onChange(e.target.value)} helperText={helperText} fullWidth>
+    <TextField
+      select
+      size="small"
+      label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      helperText={helperText}
+      fullWidth
+      // "" is a real choice here (every device / everyone else): show it.
+      slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+    >
       <MenuItem value="">{emptyLabel}</MenuItem>
       {groups.map((g) => (
         <MenuItem key={g.id} value={String(g.id)}>
@@ -235,14 +245,15 @@ function PolicyDialog({ entry, groups, onClose, onSaved, notify }) {
             <TextField size="small" label="Minimum devices" value={form.promoteMinDevices} onChange={(e) => update({ promoteMinDevices: e.target.value })} sx={{ maxWidth: 160 }} />
           </Stack>
           <FormControlLabel control={<Switch checked={form.enabled} onChange={(e) => update({ enabled: e.target.checked })} />} label="Enabled" />
-          {error ? (
-            <Typography role="alert" sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText }}>
-              {error}
-            </Typography>
-          ) : null}
         </Stack>
       </DialogContent>
+      {/* Beside the buttons, not at the end of the scrolled content, where it fell below the fold. */}
       <DialogActions>
+        {error ? (
+          <Typography role="alert" sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText, mr: "auto", pl: 1 }}>
+            {error}
+          </Typography>
+        ) : null}
         <Button onClick={onClose} disabled={saving} sx={{ textTransform: "none", color: BRAND.gray }}>
           Cancel
         </Button>
