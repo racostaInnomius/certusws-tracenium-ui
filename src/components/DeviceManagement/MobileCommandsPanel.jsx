@@ -31,6 +31,8 @@ const STATUS_COLORS = {
   canceled: { bg: BRAND.surfaceMuted, fg: BRAND.gray },
 };
 
+const PLATFORM_LABELS = { ios: "iOS", android: "Android" };
+
 function StatusChip({ status }) {
   const s = STATUS_COLORS[status] || { bg: BRAND.surfaceMuted, fg: BRAND.gray };
   return (
@@ -146,8 +148,8 @@ export default function MobileCommandsPanel({ deviceId, platform, disabled = fal
         Remote commands
       </Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
-        App-scoped actions delivered by push to this {platform || "mobile"} device.
-        The device drains and acknowledges commands on wake or next check-in.
+        Actions on the Tracenium app on this {PLATFORM_LABELS[platform] || "mobile"} device, delivered by push. They
+        never affect the rest of the device; the app applies them and reports back.
       </Typography>
 
       <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
