@@ -31,8 +31,8 @@ const POLICY = {
   rings: [{ name: "Pilot", assetGroupId: 11, soakHours: 24 }, { name: "Everyone else", assetGroupId: null, soakHours: 0 }], lastRun: RUN,
 };
 
-function mount({ canManage = true } = {}) {
-  const posts = { create: [], promote: [] };
+function mount({ canManage = true, notify = vi.fn() } = {}) {
+  const posts = { create: [], promote: [], cancel: [] };
   server.use(
     http.get(/.*\/asset-groups.*/, () => HttpResponse.json({ ok: true, items: [{ id: 11, name: "Pilot servers" }] })),
     http.get(/.*\/patch-management\/policies$/, () => HttpResponse.json({ ok: true, items: [POLICY] })),
@@ -44,11 +44,15 @@ function mount({ canManage = true } = {}) {
     http.post(/.*\/patch-management\/policies\/runs\/9\/promote$/, () => {
       posts.promote.push(9);
       return HttpResponse.json({ ok: true });
+    }),
+    http.post(/.*\/patch-management\/policies\/runs\/9\/cancel$/, () => {
+      posts.cancel.push(9);
+      return HttpResponse.json({ ok: true, jobsCancelled: 3 });
     })
   );
   render(
     <ConfirmProvider>
-      <PatchPoliciesPanel canManage={canManage} notify={vi.fn()} />
+      <PatchPoliciesPanel canManage={canManage} notify={notify} />
     </ConfirmProvider>
   );
   return posts;
@@ -74,6 +78,20 @@ describe("PatchPoliciesPanel", () => {
     const confirm = (await screen.findAllByRole("dialog")).at(-1);
     await user.click(within(confirm).getByRole("button", { name: "Promote anyway" }));
     await waitFor(() => expect(posts.promote).toEqual([9]));
+  });
+
+  it("⭐ cancelling a run says how many jobs that had not gone out it stopped", async () => {
+    const user = userEvent.setup();
+    const notify = vi.fn();
+    const posts = mount({ notify });
+    await user.click(await screen.findByText("Halted at Pilot"));
+    const runs = await screen.findByRole("dialog");
+    await user.click(await within(runs).findByRole("button", { name: "Cancel run" }));
+    const confirm = (await screen.findAllByRole("dialog")).at(-1);
+    expect(confirm).toHaveTextContent(/still waiting for a window or a snapshot are cancelled/);
+    await user.click(within(confirm).getByRole("button", { name: "Cancel run" }));
+    await waitFor(() => expect(posts.cancel).toEqual([9]));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("success", "Run cancelled — 3 job(s) that had not gone out were cancelled."));
   });
 
   it("creates a policy from the editor", async () => {

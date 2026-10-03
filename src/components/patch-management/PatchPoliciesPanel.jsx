@@ -288,14 +288,19 @@ function RunsDialog({ policy, canManage, onClose, notify, onChanged }) {
     const ok = await confirm(
       kind === "promote"
         ? { title: `Go on to the next ring of “${policy.name}”?`, body: `You take responsibility for the current ring's result (${run.rings[run.currentRing]?.reason ?? "no decision yet"}). Recorded in the audit log.`, confirmText: "Promote anyway", danger: true }
-        : { title: "Cancel this run?", body: "Rings not yet sent will not be. Jobs already created are not cancelled here (do that from Jobs).", confirmText: "Cancel run", danger: true }
+        : { title: "Cancel this run?", body: "Rings not yet sent will not be, and its jobs still waiting for a window or a snapshot are cancelled. Installs already on a device finish.", confirmText: "Cancel run", danger: true }
     );
     if (!ok) return;
     setBusy(true);
     try {
-      if (kind === "promote") await promotePatchPolicyRun(run.id);
-      else await cancelPatchPolicyRun(run.id);
-      notify?.("success", kind === "promote" ? "Next ring sent." : "Run cancelled.");
+      if (kind === "promote") {
+        await promotePatchPolicyRun(run.id);
+        notify?.("success", "Next ring sent.");
+      } else {
+        const r = await cancelPatchPolicyRun(run.id);
+        const n = Number(r?.jobsCancelled ?? 0);
+        notify?.("success", n ? `Run cancelled — ${n} job(s) that had not gone out were cancelled.` : "Run cancelled.");
+      }
       await load();
       onChanged?.();
     } catch (err) {
