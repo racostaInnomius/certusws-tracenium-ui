@@ -467,7 +467,9 @@ export default function DeploymentDetailDrawer({
             </Typography>
             <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, mt: 0.25 }}>
               {deployment.targetKind === "asset_group"
-                ? `Asset group #${deployment.assetGroupId ?? "?"}`
+                ? deployment.assetGroupId == null
+                  ? "Asset group (deleted)"
+                  : `Asset group #${deployment.assetGroupId}`
                 : `Device list (${(deployment.deviceIds || []).length})`}
             </Typography>
           </Box>

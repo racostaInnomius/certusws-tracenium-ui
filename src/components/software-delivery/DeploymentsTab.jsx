@@ -139,7 +139,9 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
         if (p.row.targetKind === "asset_group") {
           return (
             <Typography sx={{ fontSize: TEXT.sm }}>
-              Group #{p.row.assetGroupId ?? "?"}
+              {/* Sin id: el grupo se borró después (migración 20261209); el
+                  despliegue se queda como historial. */}
+              {p.row.assetGroupId == null ? "Deleted group" : `Group #${p.row.assetGroupId}`}
             </Typography>
           );
         }
